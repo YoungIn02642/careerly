@@ -15,7 +15,7 @@ const ONE_DAY = 24 * 60 * 60 * 1000;
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
-app.use(express.static(path.join(__dirname, '..', '..', 'frontend', 'public')));
+app.use(express.static(path.join(__dirname, '..', '..', 'frontend')));
 
 function publicUser(user) {
   return {
