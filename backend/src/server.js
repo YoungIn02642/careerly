@@ -6,6 +6,7 @@ const cookieParser = require('cookie-parser');
 const bcrypt = require('bcryptjs');
 const { nanoid } = require('nanoid');
 const { readDb, writeDb } = require('./store');
+const recommendationsRouter = require("./routes/recommendations");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -16,6 +17,7 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, '..', '..', 'frontend')));
+app.use("/api/recommendations", recommendationsRouter);
 
 function publicUser(user) {
   return {
