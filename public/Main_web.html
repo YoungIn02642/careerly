@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>커리얼리 (Careerly) - 대학생 커리어 빌딩 플랫폼</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #f7f6f1;
+      --surface:     #ffffff;
+      --border:      rgba(0,0,0,0.10);
+      --text-p:      #1a1a18;
+      --text-s:      #5f5e5a;
+      --text-m:      #9c9a92;
+      --brand:       #534AB7;
+      --brand-dark:  #3C3489;
+      --font:        'Noto Sans KR', -apple-system, 'Malgun Gothic', sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text-p);
+      font-family: var(--font);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── 내비게이션 바 ── */
+    .navbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 48px;
+      height: 56px;
+      background: var(--surface);
+      border-bottom: 0.5px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+
+    .logo-area {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--brand);
+      letter-spacing: -0.5px;
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    .auth-area {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .btn-login {
+      padding: 7px 16px;
+      border-radius: 8px;
+      border: 0.5px solid var(--border);
+      background: transparent;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: var(--font);
+      transition: background 0.2s;
+      text-decoration: none;
+      color: var(--text-p);
+    }
+    .btn-login:hover { background: #f0f0f0; }
+
+    .btn-signup {
+      padding: 7px 16px;
+      border-radius: 8px;
+      background: var(--text-p);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      font-family: var(--font);
+      text-decoration: none;
+      transition: background 0.2s;
+    }
+    .btn-signup:hover { background: #333; }
+
+    .user-area {
+      display: none;
+      gap: 10px;
+      align-items: center;
+    }
+    .user-name {
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--text-p);
+      text-decoration: none;
+    }
+    .user-name:hover { color: var(--brand); }
+    .btn-logout {
+      padding: 7px 16px;
+      border-radius: 8px;
+      border: 0.5px solid var(--border);
+      background: transparent;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: var(--font);
+      transition: background 0.2s;
+    }
+    .btn-logout:hover { background: #f0f0f0; }
+
+    /* ── 히어로 섹션 ── */
+    .hero {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 24px 60px;
+      text-align: center;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #ede9ff;
+      color: var(--brand);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 5px 14px;
+      border-radius: 999px;
+      margin-bottom: 28px;
+      letter-spacing: 0.02em;
+    }
+    .hero-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--brand); }
+
+    .hero h1 {
+      font-size: 48px;
+      font-weight: 800;
+      line-height: 1.2;
+      letter-spacing: -1.5px;
+      color: var(--text-p);
+      margin-bottom: 20px;
+    }
+    .hero h1 span { color: var(--brand); }
+
+    .hero p {
+      font-size: 17px;
+      color: var(--text-s);
+      line-height: 1.7;
+      max-width: 500px;
+      margin-bottom: 40px;
+    }
+
+    .hero-cta {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 28px;
+      background: var(--brand);
+      color: #fff;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      text-decoration: none;
+      font-family: var(--font);
+      border: none;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.15s;
+    }
+    .btn-primary:hover { background: var(--brand-dark); transform: translateY(-1px); }
+
+    .btn-outline {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 28px;
+      background: var(--surface);
+      color: var(--text-p);
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      text-decoration: none;
+      font-family: var(--font);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-outline:hover { border-color: var(--text-s); transform: translateY(-1px); }
+
+    /* ── 기능 카드 섹션 ── */
+    .features {
+      padding: 0 24px 80px;
+      max-width: 1000px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .features-title {
+      text-align: center;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-m);
+      margin-bottom: 28px;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    .feat-card {
+      background: var(--surface);
+      border: 0.5px solid var(--border);
+      border-radius: 14px;
+      padding: 28px 24px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .feat-card:hover { transform: translateY(-3px); box-shadow: 0 8px 28px rgba(0,0,0,0.08); }
+
+    .feat-icon {
+      font-size: 28px;
+      margin-bottom: 14px;
+    }
+    .feat-name {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: var(--text-p);
+    }
+    .feat-desc {
+      font-size: 13px;
+      color: var(--text-s);
+      line-height: 1.7;
+    }
+
+    /* ── 통계 배너 ── */
+    .stats-bar {
+      background: var(--text-p);
+      color: #fff;
+      padding: 36px 48px;
+      display: flex;
+      justify-content: center;
+      gap: 80px;
+      flex-wrap: wrap;
+    }
+    .stat-item { text-align: center; }
+    .stat-num {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      margin-bottom: 4px;
+    }
+    .stat-label {
+      font-size: 13px;
+      color: rgba(255,255,255,0.6);
+      font-weight: 500;
+    }
+
+    /* ── 실시간 동문 현황 ── */
+    .alumni-section {
+      padding: 60px 24px 80px;
+      max-width: 860px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+
+    .section-title {
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .view-all {
+      font-size: 13px;
+      color: var(--brand);
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .view-all:hover { text-decoration: underline; }
+
+    .filter-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .filter-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-s);
+      white-space: nowrap;
+    }
+    .filter-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+    .chip {
+      padding: 6px 16px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 500;
+      border: none;
+      cursor: pointer;
+      font-family: var(--font);
+      background: #e8e8e8;
+      color: var(--text-s);
+      transition: all 0.2s;
+    }
+    .chip.on { background: var(--brand); color: #fff; }
+    .chip:hover:not(.on) { background: #d8d8d8; }
+
+    .alumni-list { display: flex; flex-direction: column; gap: 10px; }
+    .alumni-card {
+      background: var(--surface);
+      border: 0.5px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 22px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .alumni-card:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,0,0,0.08); }
+    .alumni-avatar {
+      width: 44px; height: 44px;
+      border-radius: 12px;
+      background: var(--brand);
+      color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+    .alumni-info { flex: 1; }
+    .alumni-name { font-size: 14px; font-weight: 700; margin-bottom: 3px; }
+    .alumni-dept { font-size: 12px; color: var(--text-m); }
+    .alumni-company {
+      text-align: right;
+    }
+    .alumni-company-name { font-size: 14px; font-weight: 700; color: var(--text-p); }
+    .alumni-role { font-size: 12px; color: var(--text-m); margin-top: 2px; }
+    .alumni-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 5px;
+      background: #ede9ff;
+      color: var(--brand);
+      margin-left: 12px;
+      white-space: nowrap;
+    }
+
+    /* ── 푸터 ── */
+    footer {
+      border-top: 0.5px solid var(--border);
+      padding: 24px 48px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: var(--text-m);
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .footer-logo { font-size: 14px; font-weight: 800; color: var(--brand); }
+
+    @media (max-width: 680px) {
+      .hero h1 { font-size: 32px; }
+      .features-grid { grid-template-columns: 1fr; }
+      .stats-bar { gap: 40px; }
+      .navbar { padding: 0 20px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 내비게이션 -->
+  <header class="navbar">
+    <a href="Main_web.html" class="logo-area">CAREERLY</a>
+    <div class="auth-area" id="auth-area">
+      <a href="login.html" class="btn-login">로그인</a>
+      <a href="signup.html" class="btn-signup">회원가입</a>
+    </div>
+    <div class="user-area" id="user-area">
+      <a href="mypage.html" class="user-name" id="user-name-display">홍길동님</a>
+      <button class="btn-logout" onclick="handleLogout()">로그아웃</button>
+    </div>
+  </header>
+
+  <!-- 히어로 -->
+  <section class="hero">
+    <div class="hero-badge">
+      <span class="dot"></span>
+      실제 선배들의 데이터 기반
+    </div>
+    <h1>당신의 커리어를<br><span>데이터로 설계</span>하세요</h1>
+    <p>졸업생들의 실제 스펙·취업 경로 데이터를 분석해<br>학과별 맞춤형 취업 로드맵을 제공합니다.</p>
+    <div class="hero-cta">
+      <a href="career.html" class="btn-primary">🗺️ 커리어 로드맵 탐색하기</a>
+      <a href="signup.html" class="btn-outline">무료로 시작하기 →</a>
+    </div>
+  </section>
+
+  <!-- 통계 배너 -->
+  <div class="stats-bar">
+    <div class="stat-item">
+      <div class="stat-num">4,200+</div>
+      <div class="stat-label">동문 취업 데이터</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num">38</div>
+      <div class="stat-label">학과 커버리지</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num">92%</div>
+      <div class="stat-label">로드맵 활용 만족도</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num">1,800+</div>
+      <div class="stat-label">기업 합격 사례</div>
+    </div>
+  </div>
+
+  <!-- 기능 소개 -->
+  <div class="features">
+    <div class="features-title">주요 기능</div>
+    <div class="features-grid">
+      <div class="feat-card">
+        <div class="feat-icon">📊</div>
+        <div class="feat-name">실제 스펙 데이터</div>
+        <div class="feat-desc">학점·자격증·어학 성적 등 실제 합격자 스펙 분포를 학과·직무별로 확인하세요.</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">🗺️</div>
+        <div class="feat-name">학년별 로드맵</div>
+        <div class="feat-desc">1학년부터 취업까지, 시기별로 무엇을 준비해야 하는지 구체적인 로드맵을 제공합니다.</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">🏢</div>
+        <div class="feat-name">합격 기업 사례</div>
+        <div class="feat-desc">실제 선배들이 합격한 기업 목록과 직무, 전형 경로를 투명하게 공개합니다.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 실시간 동문 현황 -->
+  <div class="alumni-section">
+    <div class="section-header">
+      <div class="section-title">실시간 동문 진출 현황</div>
+      <a href="career.html" class="view-all">전체 보기 →</a>
+    </div>
+    <div class="filter-row">
+      <span class="filter-label">학과</span>
+      <div class="filter-chips">
+        <button class="chip on" onclick="filterAlumni('all', this)">전체</button>
+        <button class="chip" onclick="filterAlumni('cs', this)">컴퓨터공학</button>
+        <button class="chip" onclick="filterAlumni('business', this)">경영학</button>
+        <button class="chip" onclick="filterAlumni('economics', this)">경제학</button>
+      </div>
+    </div>
+    <div class="alumni-list" id="alumni-list"></div>
+  </div>
+
+  <!-- 푸터 -->
+  <footer>
+    <span class="footer-logo">CAREERLY</span>
+    <span>© 2025 Careerly. 대학생 커리어 빌딩 플랫폼</span>
+    <span>
+      <a href="login.html" style="color:inherit;text-decoration:none;margin-right:16px">로그인</a>
+      <a href="signup.html" style="color:inherit;text-decoration:none">회원가입</a>
+    </span>
+  </footer>
+
+  <script>
+    // ── 로그인 상태 ──
+    function checkLoginStatus() {
+      const user = JSON.parse(localStorage.getItem('careerly_user') || 'null');
+      const authArea = document.getElementById('auth-area');
+      const userArea = document.getElementById('user-area');
+      const userNameDisplay = document.getElementById('user-name-display');
+      if (user) {
+        authArea.style.display = 'none';
+        userArea.style.display = 'flex';
+        const displayName = user.nickname || user.name || user.username;
+        userNameDisplay.textContent = displayName + '님';
+      } else {
+        authArea.style.display = 'flex';
+        userArea.style.display = 'none';
+      }
+    }
+
+    function handleLogout() {
+      localStorage.removeItem('careerly_user');
+      checkLoginStatus();
+    }
+
+    checkLoginStatus();
+
+    // ── 동문 샘플 데이터 ──
+    const ALUMNI = [
+      { dept: 'cs',       avatar: '💻', name: '김○○', deptLabel: '컴퓨터공학과 24학번', company: '카카오', role: '백엔드 개발자', year: '2025' },
+      { dept: 'business', avatar: '📊', name: '이○○', deptLabel: '경영학과 23학번',     company: '미래에셋증권', role: 'IB 본부 신입', year: '2025' },
+      { dept: 'economics',avatar: '📈', name: '박○○', deptLabel: '경제학과 23학번',     company: '한국은행', role: '조사국 신입', year: '2024' },
+      { dept: 'cs',       avatar: '🤖', name: '정○○', deptLabel: '컴퓨터공학과 23학번', company: '네이버', role: 'ML엔지니어', year: '2024' },
+      { dept: 'business', avatar: '💼', name: '최○○', deptLabel: '경영학과 22학번',     company: 'McKinsey', role: '전략 컨설턴트', year: '2024' },
+    ];
+
+    function renderAlumni(filter) {
+      const list = document.getElementById('alumni-list');
+      const filtered = filter === 'all' ? ALUMNI : ALUMNI.filter(a => a.dept === filter);
+      list.innerHTML = filtered.map(a => `
+        <div class="alumni-card">
+          <div class="alumni-avatar">${a.avatar}</div>
+          <div class="alumni-info">
+            <div class="alumni-name">${a.name}</div>
+            <div class="alumni-dept">${a.deptLabel}</div>
+          </div>
+          <div class="alumni-company">
+            <div class="alumni-company-name">${a.company}</div>
+            <div class="alumni-role">${a.role}</div>
+          </div>
+          <span class="alumni-badge">${a.year}</span>
+        </div>
+      `).join('');
+    }
+
+    function filterAlumni(filter, btn) {
+      document.querySelectorAll('.chip').forEach(c => c.classList.remove('on'));
+      btn.classList.add('on');
+      renderAlumni(filter);
+    }
+
+    renderAlumni('all');
+  </script>
+
+</body>
+</html>

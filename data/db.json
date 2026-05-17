@@ -1,0 +1,154 @@
+{
+  "users": [
+    {
+      "id": "wNevgP1kiX8OFqMY-NZGL",
+      "username": "testuser",
+      "passwordHash": "$2a$10$UPdK.3lYCdkUptq.j6IuPuruiB9.7Mge59/KtO1217QRAW3oMoFMG",
+      "name": "홍길동",
+      "email": "test@test.com",
+      "createdAt": "2026-05-17T11:57:18.346Z"
+    }
+  ],
+  "profiles": [
+    {
+      "userId": "wNevgP1kiX8OFqMY-NZGL",
+      "nickname": "체리",
+      "university": "서울대 컴퓨터공학과",
+      "gpa": "3.9",
+      "currentJob": "무직",
+      "pastExperience": "",
+      "certifications": "정보처리기사",
+      "projects": "",
+      "internship": "",
+      "tips": "",
+      "updatedAt": "2026-05-17T11:59:24.384Z"
+    }
+  ],
+  "sessions": [
+    {
+      "token": "rJuexYIPXdXqJ2DObhO3CVYqKuyuzBOGWWm58cpaW2RLVw94",
+      "userId": "wNevgP1kiX8OFqMY-NZGL",
+      "createdAt": 1779019058297,
+      "expiresAt": 1779105458297
+    }
+  ],
+  "departments": [
+    {
+      "id": "business",
+      "name": "경영학과",
+      "category": "경상계열"
+    },
+    {
+      "id": "economics",
+      "name": "경제학과",
+      "category": "경상계열"
+    },
+    {
+      "id": "cs",
+      "name": "컴퓨터공학과",
+      "category": "이공계열"
+    },
+    {
+      "id": "stat",
+      "name": "통계학과",
+      "category": "이공계열"
+    },
+    {
+      "id": "law",
+      "name": "법학과",
+      "category": "사회·인문계열"
+    },
+    {
+      "id": "psych",
+      "name": "심리학과",
+      "category": "사회·인문계열"
+    },
+    {
+      "id": "media",
+      "name": "미디어학과",
+      "category": "사회·인문계열"
+    }
+  ],
+  "careerSpecs": [
+    {
+      "jobId": "ib",
+      "departmentId": "business",
+      "field": "finance",
+      "jobName": "증권사 IB",
+      "avgGpa": "3.7 / 4.5",
+      "internRate": "84%",
+      "certifications": [
+        "금융투자분석사",
+        "투자자산운용사",
+        "CFA Level 1"
+      ],
+      "roadmap": [
+        "1~2학년: 기초 학점과 영어 확보",
+        "2~3학년: 금융 자격증 취득",
+        "3학년: 금융 학회와 공모전",
+        "3학년 하반기: 증권사 IB 인턴",
+        "4학년: 재무모델링과 면접 준비"
+      ],
+      "companies": [
+        "미래에셋증권",
+        "한국투자증권",
+        "KB증권",
+        "NH투자증권"
+      ]
+    },
+    {
+      "jobId": "bank",
+      "departmentId": "business",
+      "field": "finance",
+      "jobName": "시중은행",
+      "avgGpa": "3.5 / 4.5",
+      "internRate": "65%",
+      "certifications": [
+        "은행텔러",
+        "한국사 1급",
+        "컴퓨터활용능력 1급"
+      ],
+      "roadmap": [
+        "1~2학년: 학점과 한국사",
+        "2~3학년: 자격증과 봉사활동",
+        "3학년: 은행 체험형 인턴",
+        "3~4학년: NCS 준비",
+        "4학년: 상·하반기 공채"
+      ],
+      "companies": [
+        "KB국민은행",
+        "신한은행",
+        "하나은행",
+        "우리은행",
+        "NH농협은행"
+      ]
+    },
+    {
+      "jobId": "backend",
+      "departmentId": "cs",
+      "field": "dev",
+      "jobName": "백엔드 개발자",
+      "avgGpa": "3.5 / 4.5",
+      "internRate": "60%",
+      "certifications": [
+        "정보처리기사",
+        "SQLD",
+        "AWS 기초"
+      ],
+      "roadmap": [
+        "1~2학년: 자료구조·알고리즘",
+        "2~3학년: Java/Spring 또는 Node.js",
+        "3학년: 팀 프로젝트와 Git 협업",
+        "3~4학년: 인턴·포트폴리오",
+        "4학년: 코딩테스트와 시스템 설계"
+      ],
+      "companies": [
+        "네이버",
+        "카카오",
+        "라인",
+        "쿠팡",
+        "토스"
+      ]
+    }
+  ]
+}

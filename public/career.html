@@ -1,0 +1,2131 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Careerly UI — 대학생 커리어 빌딩 플랫폼</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --c-bg: #f7f6f2;
+  --c-surface: #ffffff;
+  --c-surface2: #f0ede6;
+  --c-ink: #1a1814;
+  --c-ink2: #5a5750;
+  --c-ink3: #9a9590;
+  --c-border: #e2dfd8;
+  --c-accent: #2563eb;
+  --c-accent-light: #eff6ff;
+  --c-green: #16a34a;
+  --c-green-light: #f0fdf4;
+  --c-amber: #d97706;
+  --c-amber-light: #fffbeb;
+  --c-red: #dc2626;
+  --c-red-light: #fef2f2;
+  --font-body: 'Noto Sans KR', sans-serif;
+  --font-mono: 'DM Mono', monospace;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 24px rgba(0,0,0,0.08);
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--c-bg);
+  color: var(--c-ink);
+  min-height: 100vh;
+  font-size: 14px;
+  line-height: 1.6;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ───── LAYOUT ───── */
+.app { display: flex; height: calc(100vh - 52px); overflow: hidden; flex: 1; }
+
+/* SIDEBAR */
+.sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  background: var(--c-surface);
+  border-right: 1px solid var(--c-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.logo {
+  padding: 24px 20px 16px;
+  border-bottom: 1px solid var(--c-border);
+}
+.logo-mark {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.logo-icon {
+  width: 28px; height: 28px;
+  background: var(--c-ink);
+  border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff;
+  font-size: 14px;
+}
+.logo-name {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--c-ink);
+}
+.logo-sub {
+  font-size: 11px;
+  color: var(--c-ink3);
+  font-weight: 400;
+}
+
+
+
+.sidebar-search {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--c-border);
+}
+.search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+}
+.search-wrap i { color: var(--c-ink3); font-size: 14px; }
+.search-wrap input {
+  border: none;
+  background: none;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--c-ink);
+  outline: none;
+  width: 100%;
+}
+.search-wrap input::placeholder { color: var(--c-ink3); }
+
+.sidebar-section {
+  padding: 10px 8px 4px 16px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-ink3);
+}
+
+.dept-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 8px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-border) transparent;
+}
+.dept-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-bottom: 1px;
+}
+.dept-item:hover { background: var(--c-bg); }
+.dept-item.active { background: var(--c-ink); }
+.dept-item.active .dept-label { color: #fff; }
+.dept-item.active .dept-cat { color: rgba(255,255,255,0.55); }
+.dept-item.active .dept-emoji { filter: none; }
+.dept-emoji { font-size: 16px; flex-shrink: 0; }
+.dept-label { font-size: 13px; font-weight: 500; color: var(--c-ink); }
+.dept-cat { font-size: 11px; color: var(--c-ink3); margin-top: 1px; }
+
+/* USER PROFILE (캐릭터 꾸미기) */
+.user-profile-card {
+  margin: 12px 16px 0;
+  padding: 12px;
+  background: linear-gradient(135deg, #fff, #f4f6f8);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+}
+.user-profile-card:hover { transform: translateY(-1px); border-color: var(--c-ink3); box-shadow: var(--shadow); }
+.up-avatar {
+  width: 42px; height: 42px;
+  border-radius: 12px;
+  background: var(--c-ink);
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+}
+.up-info { flex: 1; }
+.up-name { font-size: 13px; font-weight: 700; color: var(--c-ink); margin-bottom: 4px; display: flex; align-items: center; gap: 4px; }
+.up-level { font-family: var(--font-mono); font-size: 10px; background: var(--c-accent); color: #fff; padding: 2px 5px; border-radius: 4px; }
+.up-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+.up-tag { font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-ink2); }
+
+/* MOVIE CARD */
+.movie-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+.movie-card { display: flex; align-items: flex-start; gap: 10px; padding: 10px; background: var(--c-bg); border-radius: var(--radius-sm); border: 1px solid var(--c-border); }
+.movie-poster { width: 36px; height: 48px; background: var(--c-ink3); border-radius: 4px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+.movie-info { flex: 1; }
+.movie-title { font-size: 12px; font-weight: 700; color: var(--c-ink); margin-bottom: 2px; }
+.movie-desc { font-size: 10px; color: var(--c-ink2); line-height: 1.4; }
+
+
+/* MAIN */
+.main { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+
+/* TOPBAR */
+.topbar {
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border);
+  padding: 14px 28px;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+}
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--c-ink3);
+}
+.breadcrumb span.active { color: var(--c-ink); font-weight: 500; }
+.breadcrumb .sep { font-size: 11px; color: var(--c-border); }
+.topbar-actions { margin-left: auto; display: flex; gap: 8px; }
+.btn-sm {
+  display: flex; align-items: center; gap: 5px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--c-border);
+  background: var(--c-surface);
+  color: var(--c-ink2);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-sm:hover { background: var(--c-bg); border-color: var(--c-ink3); }
+.btn-primary {
+  background: var(--c-ink);
+  color: #fff;
+  border-color: var(--c-ink);
+}
+.btn-primary:hover { background: #2d2a24; }
+
+/* CONTENT */
+.content { flex: 1; padding: 28px; }
+
+/* ── PHASE SELECTOR ── */
+.phase-bar {
+  display: flex;
+  gap: 0;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow);
+}
+.phase-tab {
+  flex: 1;
+  padding: 14px 8px;
+  text-align: center;
+  cursor: pointer;
+  border-right: 1px solid var(--c-border);
+  transition: all 0.2s;
+  position: relative;
+}
+.phase-tab:last-child { border-right: none; }
+.phase-tab:hover { background: var(--c-bg); }
+.phase-tab.active { background: var(--c-ink); }
+.phase-tab.active .pt-num { color: rgba(255,255,255,0.5); }
+.phase-tab.active .pt-label { color: #fff; }
+.phase-tab.active .pt-check { opacity: 1; }
+.pt-num {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--c-ink3);
+  margin-bottom: 3px;
+}
+.pt-label { font-size: 12px; font-weight: 600; color: var(--c-ink2); }
+.pt-check {
+  position: absolute;
+  top: 8px; right: 10px;
+  font-size: 12px;
+  color: #4fd9b3;
+  opacity: 0;
+}
+
+/* ── SECTION: 진출분야 ── */
+.section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-ink3);
+  margin-bottom: 12px;
+}
+
+.fields-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 10px;
+  margin-bottom: 28px;
+}
+.field-card {
+  background: var(--c-surface);
+  border: 1.5px solid var(--c-border);
+  border-radius: var(--radius);
+  padding: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: var(--shadow);
+}
+.field-card:hover { border-color: var(--c-ink3); transform: translateY(-1px); }
+.field-card.active {
+  border-color: var(--c-ink);
+  background: var(--c-ink);
+}
+.field-card.active .fc-name { color: #fff; }
+.field-card.active .fc-desc { color: rgba(255,255,255,0.55); }
+.fc-icon { font-size: 20px; margin-bottom: 8px; }
+.fc-name { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+.fc-desc { font-size: 11px; color: var(--c-ink3); }
+
+/* ── SECTION: 세부직무 ── */
+.jobs-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.job-chip {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 16px;
+  border-radius: 99px;
+  border: 1.5px solid var(--c-border);
+  background: var(--c-surface);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--c-ink2);
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: var(--shadow);
+}
+.job-chip:hover { border-color: var(--c-ink3); }
+.job-chip.active {
+  background: var(--c-ink);
+  border-color: var(--c-ink);
+  color: #fff;
+}
+.job-chip .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--c-accent);
+  flex-shrink: 0;
+}
+.job-chip.active .dot { background: #4fd9b3; }
+
+/* ── SPEC TABS ── */
+.spec-tab-bar {
+  display: flex;
+  gap: 0;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow);
+}
+.spec-tab {
+  flex: 1;
+  padding: 12px 8px;
+  text-align: center;
+  cursor: pointer;
+  border-right: 1px solid var(--c-border);
+  transition: all 0.2s;
+  position: relative;
+}
+.spec-tab:last-child { border-right: none; }
+.spec-tab:hover { background: var(--c-bg); }
+.spec-tab.active { background: var(--c-ink); }
+.spec-tab.active .st-label { color: #fff; }
+.spec-tab.active .st-icon { color: rgba(255,255,255,0.6); }
+.st-icon { font-size: 15px; color: var(--c-ink3); margin-bottom: 3px; }
+.st-label { font-size: 12px; font-weight: 600; color: var(--c-ink2); }
+.spec-tab-content { display: none; }
+.spec-tab-content.active { display: block; animation: fadeUp 0.25s ease both; }
+
+/* ── SPEC PANEL ── */
+.spec-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+/* ── QUALITATIVE SPEC ── */
+.qual-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.qual-card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+.qual-card.full { grid-column: 1 / -1; }
+.qual-card-header {
+  padding: 13px 16px 10px;
+  border-bottom: 1px solid var(--c-border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.qual-card-header i { font-size: 15px; color: var(--c-ink2); }
+.qual-card-title { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--c-ink2); }
+.qual-card-body { padding: 14px 16px; }
+
+/* activity list */
+.activity-list { display: flex; flex-direction: column; gap: 8px; }
+.activity-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+}
+.activity-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+.activity-body { flex: 1; }
+.activity-name { font-size: 13px; font-weight: 600; color: var(--c-ink); margin-bottom: 2px; }
+.activity-desc { font-size: 12px; color: var(--c-ink3); line-height: 1.5; }
+.activity-pct {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--c-green);
+  flex-shrink: 0;
+}
+
+/* language scores */
+.lang-list { display: flex; flex-direction: column; gap: 8px; }
+.lang-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+}
+.lang-name { font-size: 12px; font-weight: 600; color: var(--c-ink); min-width: 100px; }
+.lang-score-wrap { flex: 1; }
+.lang-avg { font-family: var(--font-mono); font-size: 13px; font-weight: 500; color: var(--c-ink); }
+.lang-range { font-size: 11px; color: var(--c-ink3); }
+.lang-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.lang-badge.must { background: var(--c-amber-light); color: var(--c-amber); }
+.lang-badge.opt { background: var(--c-accent-light); color: var(--c-accent); }
+
+/* ── COMPANY RESULTS ── */
+.company-section { margin-bottom: 20px; }
+.company-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--c-ink3);
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--c-border);
+}
+.company-section-title i { font-size: 13px; }
+.company-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+}
+.company-card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  padding: 11px 13px;
+  box-shadow: var(--shadow);
+  transition: all 0.15s;
+}
+.company-card:hover { border-color: var(--c-ink3); transform: translateY(-1px); }
+.company-card.hired {
+  border-color: rgba(22,163,74,0.3);
+  background: linear-gradient(135deg, #fff, #f0fdf4);
+}
+.cc-name { font-size: 13px; font-weight: 600; color: var(--c-ink); margin-bottom: 3px; }
+.cc-role { font-size: 11px; color: var(--c-ink3); margin-bottom: 5px; }
+.cc-tags { display: flex; flex-wrap: wrap; gap: 3px; }
+.cc-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  color: var(--c-ink3);
+}
+.cc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-bottom: 4px;
+}
+.cc-badge.hired { background: #dcfce7; color: #16a34a; border: none; }
+.cc-badge.doc { background: var(--c-accent-light); color: var(--c-accent); border: none; }
+.result-note {
+  font-size: 12px;
+  color: var(--c-ink3);
+  padding: 10px 12px;
+  background: var(--c-bg);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--c-border);
+  margin-top: 8px;
+  line-height: 1.6;
+}
+
+.spec-card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+.spec-card-header {
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--c-border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.spec-card-header i { font-size: 16px; color: var(--c-ink2); }
+.spec-card-title { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--c-ink2); }
+.spec-card-body { padding: 14px 16px; }
+
+/* GPA */
+.gpa-display {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.gpa-num {
+  font-family: var(--font-mono);
+  font-size: 32px;
+  font-weight: 500;
+  color: var(--c-ink);
+  letter-spacing: -0.02em;
+}
+.gpa-max { font-size: 14px; color: var(--c-ink3); }
+.gpa-label { font-size: 12px; color: var(--c-ink3); margin-bottom: 10px; }
+.gpa-bar-wrap { position: relative; }
+.gpa-bar-bg {
+  height: 6px;
+  background: var(--c-border);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.gpa-bar-fill {
+  height: 100%;
+  background: var(--c-ink);
+  border-radius: 99px;
+  transition: width 0.8s cubic-bezier(0.16,1,0.3,1);
+}
+.gpa-range {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--c-ink3);
+  font-family: var(--font-mono);
+}
+
+/* CERT */
+.cert-list { display: flex; flex-direction: column; gap: 8px; }
+.cert-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--c-bg);
+  border-radius: var(--radius-sm);
+}
+.cert-bar-wrap { flex: 1; }
+.cert-name { font-size: 12px; font-weight: 500; color: var(--c-ink); margin-bottom: 3px; }
+.cert-track {
+  height: 4px;
+  background: var(--c-border);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.cert-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 1s cubic-bezier(0.16,1,0.3,1);
+}
+.cert-pct {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--c-ink2);
+  min-width: 32px;
+  text-align: right;
+}
+
+/* TIMELINE (정성 스펙) */
+.spec-card.full { grid-column: 1 / -1; }
+.timeline { position: relative; padding: 0; }
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 67px;
+  top: 0; bottom: 0;
+  width: 1px;
+  background: var(--c-border);
+}
+.tl-item {
+  display: flex;
+  gap: 16px;
+  padding: 10px 0;
+  position: relative;
+  animation: fadeUp 0.4s ease both;
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.tl-period {
+  width: 52px;
+  flex-shrink: 0;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--c-ink3);
+  padding-top: 3px;
+  line-height: 1.3;
+}
+.tl-dot-wrap {
+  width: 30px;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  padding-top: 5px;
+}
+.tl-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  border: 2px solid var(--c-ink);
+  background: var(--c-surface);
+  flex-shrink: 0;
+}
+.tl-dot.filled { background: var(--c-ink); }
+.tl-body { flex: 1; }
+.tl-title { font-size: 13px; font-weight: 600; color: var(--c-ink); margin-bottom: 3px; }
+.tl-desc { font-size: 12px; color: var(--c-ink2); line-height: 1.5; margin-bottom: 6px; }
+.tl-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.tl-tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--c-border);
+  color: var(--c-ink2);
+  background: var(--c-bg);
+}
+.tl-tag.highlight {
+  border-color: var(--c-ink);
+  color: var(--c-ink);
+  font-weight: 500;
+}
+.tl-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--c-green);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+/* ── INSIGHT CARDS ── */
+.insight-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.insight-card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+.ic-label { font-size: 11px; color: var(--c-ink3); font-weight: 500; margin-bottom: 4px; }
+.ic-value {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--c-ink);
+  letter-spacing: -0.02em;
+  margin-bottom: 2px;
+}
+.ic-sub { font-size: 11px; color: var(--c-ink3); }
+.ic-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  margin-top: 4px;
+}
+.badge-green { background: var(--c-green-light); color: var(--c-green); }
+.badge-amber { background: var(--c-amber-light); color: var(--c-amber); }
+.badge-blue { background: var(--c-accent-light); color: var(--c-accent); }
+
+/* ── EMPTY / PLACEHOLDER ── */
+.welcome {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 60px 40px;
+  color: var(--c-ink3);
+}
+.welcome-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.4; }
+.welcome h2 { font-size: 16px; font-weight: 600; color: var(--c-ink2); margin-bottom: 8px; }
+.welcome p { font-size: 13px; line-height: 1.7; max-width: 320px; }
+
+/* ── NAVBAR ── */
+.c-navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 24px;
+  height: 52px;
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border);
+  flex-shrink: 0;
+  z-index: 200;
+}
+.c-logo {
+  font-size: 18px;
+  font-weight: 800;
+  color: #534AB7;
+  text-decoration: none;
+  letter-spacing: -0.5px;
+}
+.c-nav-actions { display: flex; gap: 8px; align-items: center; }
+.c-btn-login {
+  padding: 6px 14px;
+  border-radius: 7px;
+  border: 0.5px solid var(--c-border);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-body);
+  text-decoration: none;
+  color: var(--c-ink);
+  transition: background 0.2s;
+}
+.c-btn-login:hover { background: var(--c-bg); }
+.c-btn-signup {
+  padding: 6px 14px;
+  border-radius: 7px;
+  background: var(--c-ink);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-body);
+  text-decoration: none;
+  transition: background 0.2s;
+}
+.c-btn-signup:hover { background: #2d2a24; }
+.c-user-name {
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--c-ink);
+  text-decoration: none;
+}
+.c-user-name:hover { color: #534AB7; }
+.c-btn-logout {
+  padding: 6px 14px;
+  border-radius: 7px;
+  border: 0.5px solid var(--c-border);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-body);
+  transition: background 0.2s;
+}
+.c-btn-logout:hover { background: var(--c-bg); }
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--c-border); border-radius: 99px; }
+
+/* ── ANIMATIONS ── */
+.fade-in { animation: fadeUp 0.3s ease both; }
+
+/* ── INFO MODAL ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(26,24,20,0.45);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: overlayIn 0.2s ease;
+}
+@keyframes overlayIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.modal-box {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 16px;
+  width: 520px;
+  max-width: calc(100vw - 48px);
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 16px 64px rgba(0,0,0,0.18);
+  animation: modalSlide 0.25s cubic-bezier(0.16,1,0.3,1);
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-border) transparent;
+}
+@keyframes modalSlide {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.modal-header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--c-border);
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.modal-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  background: var(--c-bg);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal-title-wrap { flex: 1; }
+.modal-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--c-ink);
+  margin-bottom: 3px;
+  letter-spacing: -0.02em;
+}
+.modal-subtitle {
+  font-size: 12px;
+  color: var(--c-ink3);
+}
+.modal-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 99px;
+  border: 1px solid var(--c-border);
+  background: var(--c-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--c-ink3);
+  font-size: 14px;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.modal-close:hover { background: var(--c-ink); color: #fff; border-color: var(--c-ink); }
+.modal-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
+.modal-section {}
+.modal-section-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-ink3);
+  margin-bottom: 10px;
+}
+.modal-section-title i { font-size: 13px; }
+.modal-desc {
+  font-size: 13px;
+  color: var(--c-ink2);
+  line-height: 1.75;
+}
+.modal-companies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.modal-company-tag {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  color: var(--c-ink2);
+  font-weight: 500;
+}
+.modal-learn-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.modal-learn-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  background: var(--c-bg);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--c-border);
+}
+.modal-learn-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.modal-learn-text {}
+.modal-learn-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--c-ink);
+  margin-bottom: 2px;
+}
+.modal-learn-sub {
+  font-size: 12px;
+  color: var(--c-ink3);
+  line-height: 1.5;
+}
+.modal-skills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.modal-skill-tag {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--c-accent-light);
+  border: 1px solid rgba(37,99,235,0.15);
+  color: var(--c-accent);
+  font-weight: 500;
+}
+.modal-salary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, #f0fdf4, #eff6ff);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+}
+.modal-salary-icon { font-size: 20px; }
+.modal-salary-label { font-size: 11px; color: var(--c-ink3); }
+.modal-salary-value {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--c-green);
+}
+.modal-trigger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 99px;
+  border: 1px solid var(--c-border);
+  background: var(--c-surface);
+  color: var(--c-ink3);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.modal-trigger-btn:hover {
+  background: var(--c-ink);
+  color: #fff;
+  border-color: var(--c-ink);
+}
+.field-card-inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.fc-bottom {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ── CAREERLY ── */
+.careerly-badge{font-size:9px;background:var(--c-ink);color:#fff;padding:2px 6px;border-radius:4px;font-weight:600;margin-left:4px;letter-spacing:0.02em}
+.cas-wrap{margin-bottom:16px}
+.cas-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.cas-score-row{display:flex;align-items:baseline;gap:4px}
+.cas-big{font-family:var(--font-mono);font-size:36px;font-weight:500;color:var(--c-ink)}
+.cas-max{font-size:14px;color:var(--c-ink3)}
+.cas-gap{font-size:11px;color:var(--c-red);font-weight:600;margin-top:4px}
+.cas-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.cas-row-label{font-size:11px;font-weight:500;min-width:70px;color:var(--c-ink2)}
+.cas-bar-bg{flex:1;height:5px;background:var(--c-border);border-radius:3px;overflow:hidden}
+.cas-bar-fill{height:100%;border-radius:3px}
+.cas-row-val{font-family:var(--font-mono);font-size:11px;font-weight:500;min-width:36px;text-align:right}
+.path-card{border:1px solid var(--c-border);border-radius:var(--radius);padding:14px;margin-bottom:10px;cursor:pointer;transition:.2s;background:var(--c-surface);box-shadow:var(--shadow)}
+.path-card:hover{border-color:var(--c-ink3)}
+.path-card.open{border-color:var(--c-ink);background:var(--c-bg)}
+.path-head{display:flex;align-items:center;gap:10px}
+.path-avatar{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700}
+.path-info{flex:1}
+.path-name{font-size:13px;font-weight:600}
+.path-dest{font-size:11px;color:var(--c-ink3)}
+.path-badge{font-size:10px;font-weight:600;padding:3px 8px;border-radius:4px}
+.pb-green{background:var(--c-green-light);color:var(--c-green)}
+.pb-blue{background:var(--c-accent-light);color:var(--c-accent)}
+.pb-amber{background:var(--c-amber-light);color:var(--c-amber)}
+.mini-tl{display:flex;align-items:center;gap:0;margin:12px 0;padding:0 4px;overflow-x:auto}
+.mini-node{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:48px}
+.mini-dot{width:22px;height:22px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff}
+.md-school{background:var(--c-ink)}.md-cert{background:var(--c-green)}.md-intern{background:var(--c-accent)}.md-sp{background:var(--c-amber)}.md-win{background:var(--c-green)}
+.mini-lbl{font-size:9px;text-align:center;color:var(--c-ink3);line-height:1.3}
+.mini-conn{width:18px;height:2px;background:var(--c-border);flex-shrink:0}
+.mini-conn.d{background:var(--c-amber)}.mini-conn.s{background:var(--c-green)}
+.path-detail{display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--c-border)}
+.path-card.open .path-detail{display:block}
+.path-detail-row{display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--c-ink2);margin-bottom:6px;line-height:1.5}
+.source-bar{display:flex;gap:6px;margin-bottom:12px}
+.src-chip{font-size:10px;padding:4px 10px;border-radius:4px;background:var(--c-bg);color:var(--c-ink3);font-weight:500;display:flex;align-items:center;gap:4px;border:1px solid var(--c-border)}
+.rec-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--c-border)}
+.rec-row:last-child{border:none}
+.rec-icon-box{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.rec-main{flex:1;min-width:0}.rec-name{font-size:12px;font-weight:600}.rec-sub{font-size:10px;color:var(--c-ink3);margin-top:1px}
+.rec-right{display:flex;flex-direction:column;align-items:flex-end;gap:3px;min-width:70px}
+.rec-badge{font-size:9px;font-weight:600;padding:2px 6px;border-radius:3px}
+.rb-must{background:var(--c-green-light);color:var(--c-green)}.rb-rec{background:var(--c-amber-light);color:var(--c-amber)}.rb-adv{background:var(--c-accent-light);color:var(--c-accent)}
+.mini-bar-bg2{width:60px;height:4px;background:var(--c-border);border-radius:2px;overflow:hidden}
+.mini-bar-fill2{height:100%;background:var(--c-ink);border-radius:2px}
+.mini-pct{font-size:9px;color:var(--c-ink3)}
+.sim-seg{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+.sim-btn{padding:7px 14px;border:1px solid var(--c-border);border-radius:var(--radius-sm);font-size:11px;font-weight:500;cursor:pointer;background:var(--c-surface);color:var(--c-ink2);transition:.15s;font-family:var(--font-body)}
+.sim-btn.on{background:var(--c-ink);color:#fff;border-color:var(--c-ink)}
+.sim-pane{display:none}.sim-pane.active{display:block}
+.sim-notice{padding:12px 14px;border-radius:var(--radius-sm);margin-bottom:14px;font-size:12px;line-height:1.6;color:var(--c-ink2)}
+.sn-good{background:var(--c-green-light);border:1px solid rgba(22,163,74,.15)}
+.sn-warn{background:var(--c-amber-light);border:1px solid rgba(217,119,6,.15)}
+.sn-red{background:var(--c-red-light);border:1px solid rgba(220,38,38,.15)}
+.vtl-item{display:flex;gap:0;min-height:40px}
+.vtl-left{display:flex;flex-direction:column;align-items:center;width:28px;flex-shrink:0}
+.vtl-dot{width:18px;height:18px;border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;font-size:9px}
+.vd-done{background:var(--c-green)}.vd-now{background:var(--c-ink)}.vd-next{background:var(--c-amber)}.vd-future{background:var(--c-border);color:var(--c-ink3)}.vd-sp{background:#7c6cff}
+.vtl-line{flex:1;width:2px;min-height:16px}
+.vl-done{background:var(--c-green)}.vl-dash{background:var(--c-ink)}.vl-future{background:var(--c-border)}
+.vtl-right{flex:1;padding:0 0 14px 10px}
+.vtl-period{font-size:12px;font-weight:600;color:var(--c-ink);margin-bottom:5px;display:flex;align-items:center;gap:6px}
+.vtl-actions{display:flex;flex-direction:column;gap:3px}
+.va{font-size:11px;color:var(--c-ink2);display:flex;align-items:flex-start;gap:5px;line-height:1.5}
+.va.em{font-weight:600}.va.bad{color:var(--c-red)}.va.good{color:var(--c-green)}.va.warn{color:var(--c-amber)}
+.pat-card{border:1px solid var(--c-border);border-radius:var(--radius);padding:14px;margin-bottom:8px;background:var(--c-surface);box-shadow:var(--shadow)}
+.pat-head{display:flex;gap:12px;align-items:flex-start}
+.pat-num{width:26px;height:26px;border-radius:7px;background:var(--c-ink);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
+.pat-title{font-size:13px;font-weight:600;margin-bottom:4px}
+.pat-desc{font-size:11px;color:var(--c-ink3);line-height:1.5}
+.ev-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.ev-chip{font-size:10px;padding:2px 8px;border-radius:4px;background:var(--c-bg);color:var(--c-ink2);border:1px solid var(--c-border)}
+.warn-box{border:1px solid rgba(220,38,38,.12);border-radius:var(--radius-sm);background:var(--c-red-light);padding:10px 12px;margin-bottom:12px}
+.warn-row{display:flex;align-items:flex-start;gap:6px;font-size:11px;color:#991b1b;margin-bottom:4px;line-height:1.5}
+.warn-row:last-child{margin:0}
+.good-box{border:1px solid rgba(22,163,74,.12);border-radius:var(--radius-sm);background:var(--c-green-light);padding:10px 12px}
+.good-row{display:flex;align-items:flex-start;gap:6px;font-size:11px;color:#14532d;margin-bottom:4px;line-height:1.5}
+.good-row:last-child{margin:0}
+</style>
+</head>
+<body>
+
+<!-- NAVBAR -->
+<header class="c-navbar">
+  <a href="Main_web.html" class="c-logo">CAREERLY</a>
+  <div class="c-nav-actions" id="c-auth-area">
+    <a href="login.html" class="c-btn-login">로그인</a>
+    <a href="signup.html" class="c-btn-signup">회원가입</a>
+  </div>
+  <div class="c-nav-actions" id="c-user-area" style="display:none">
+    <a href="mypage.html" class="c-user-name" id="c-user-name-display">홍길동님</a>
+    <button class="c-btn-logout" onclick="handleLogout()">로그아웃</button>
+  </div>
+</header>
+
+<div class="app">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-mark">
+        <div class="logo-icon"><i class="ti ti-rocket"></i></div>
+        <span class="logo-name" style="color:#534AB7">CAREERLY</span>
+      </div>
+      <div class="logo-sub">대학생 커리어 빌딩 플랫폼</div>
+    </div>
+
+    <div class="user-profile-card" onclick="openProfileModal()">
+      <div class="up-avatar">👨‍🎓</div>
+      <div class="up-info">
+        <div class="up-name">김경기 <span class="up-level">Lv.3</span></div>
+        <div class="up-tags">
+          <span class="up-tag">ENTJ</span>
+          <span class="up-tag">데이터분석가</span>
+        </div>
+      </div>
+      <i class="ti ti-chevron-right" style="color:var(--c-ink3)"></i>
+    </div>
+
+    <div class="sidebar-search">
+      <div class="search-wrap">
+        <i class="ti ti-search"></i>
+        <input type="text" placeholder="학과 검색..." oninput="filterDepts(this.value)">
+      </div>
+    </div>
+
+    <div class="sidebar-section">경상계열</div>
+    <div class="dept-list" id="dept-list">
+      <div class="dept-item" data-id="business" onclick="selectDept('business', this)">
+        <span class="dept-emoji">📊</span>
+        <div>
+          <div class="dept-label">경영학과</div>
+          <div class="dept-cat">Business Administration</div>
+        </div>
+      </div>
+      <div class="dept-item" data-id="economics" onclick="selectDept('economics', this)">
+        <span class="dept-emoji">📈</span>
+        <div>
+          <div class="dept-label">경제학과</div>
+          <div class="dept-cat">Economics</div>
+        </div>
+      </div>
+      <div class="dept-item" data-id="accounting" onclick="selectDept('accounting', this)">
+        <span class="dept-emoji">🧾</span>
+        <div>
+          <div class="dept-label">회계학과</div>
+          <div class="dept-cat">Accounting</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section" style="margin-top:4px">이공계열</div>
+    <div class="dept-list">
+      <div class="dept-item" data-id="cs" onclick="selectDept('cs', this)">
+        <span class="dept-emoji">💻</span>
+        <div>
+          <div class="dept-label">컴퓨터공학과</div>
+          <div class="dept-cat">Computer Science</div>
+        </div>
+      </div>
+      <div class="dept-item" data-id="stat" onclick="selectDept('stat', this)">
+        <span class="dept-emoji">📐</span>
+        <div>
+          <div class="dept-label">통계학과</div>
+          <div class="dept-cat">Statistics</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section" style="margin-top:4px">사회·인문계열</div>
+    <div class="dept-list">
+      <div class="dept-item" data-id="law" onclick="selectDept('law', this)">
+        <span class="dept-emoji">⚖️</span>
+        <div>
+          <div class="dept-label">법학과</div>
+          <div class="dept-cat">Law</div>
+        </div>
+      </div>
+      <div class="dept-item" data-id="psych" onclick="selectDept('psych', this)">
+        <span class="dept-emoji">🧠</span>
+        <div>
+          <div class="dept-label">심리학과</div>
+          <div class="dept-cat">Psychology</div>
+        </div>
+      </div>
+      <div class="dept-item" data-id="media" onclick="selectDept('media', this)">
+        <span class="dept-emoji">📱</span>
+        <div>
+          <div class="dept-label">미디어학과</div>
+          <div class="dept-cat">Media Studies</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main" id="main">
+    <div class="welcome">
+      <div class="welcome-icon">🗺️</div>
+      <h2>학과를 선택해 주세요</h2>
+      <p>왼쪽 사이드바에서 학과를 클릭하면<br>진출분야별 취업 로드맵과 실제 취업자 스펙 데이터를 확인할 수 있어요.</p>
+    </div>
+  </main>
+
+</div>
+
+<script>
+// ─────── DATA ───────
+let DATA = {};
+// ─────── STATE ───────
+let currentDept = null;
+let currentField = null;
+let currentJob = null;
+
+// ─────── RENDER ───────
+function selectDept(id, el) {
+  document.querySelectorAll('.dept-item').forEach(d => d.classList.remove('active'));
+  el.classList.add('active');
+  currentDept = id;
+  currentField = null;
+  currentJob = null;
+
+  const data = DATA[id];
+  if (!data) { showPlaceholder(id); return; }
+  renderMain(data);
+}
+
+function renderMain(data) {
+  const main = document.getElementById('main');
+  main.innerHTML = `
+    <div class="topbar">
+      <div class="breadcrumb">
+        <span>${data.emoji} ${data.name}</span>
+        <span class="sep">›</span>
+        <span id="bc-field" class="active">진출분야 선택</span>
+        ${currentField ? `<span class="sep">›</span><span class="active" id="bc-job">직무 선택</span>` : ''}
+      </div>
+    </div>
+    <div class="content fade-in">
+      <div class="phase-bar">
+        <div class="phase-tab ${!currentField ? 'active' : ''}" onclick="gotoPhase(1)">
+          <div class="pt-num">STEP 01</div>
+          <div class="pt-label">진출분야</div>
+          ${currentField ? '<i class="ti ti-check pt-check"></i>' : ''}
+        </div>
+        <div class="phase-tab ${currentField && !currentJob ? 'active' : ''}" onclick="gotoPhase(2)">
+          <div class="pt-num">STEP 02</div>
+          <div class="pt-label">세부직무</div>
+          ${currentJob ? '<i class="ti ti-check pt-check"></i>' : ''}
+        </div>
+        <div class="phase-tab ${currentJob ? 'active' : ''}" onclick="gotoPhase(3)">
+          <div class="pt-num">STEP 03</div>
+          <div class="pt-label">스펙 데이터</div>
+        </div>
+      </div>
+
+      <div class="section-title">진출 가능 분야</div>
+      <div class="fields-grid" id="fields-grid">
+        ${data.fields.map(f => `
+          <div class="field-card ${currentField === f.id ? 'active' : ''}" onclick="selectField('${f.id}')">
+            <div class="fc-icon">${f.icon}</div>
+            <div class="fc-name">${f.name}</div>
+            <div class="fc-desc">${f.desc}</div>
+            <div class="fc-bottom">
+              ${INFO.fields[f.id] ? `<button class="modal-trigger-btn" onclick="openFieldModal('${f.id}', event)"><i class="ti ti-info-circle"></i>자세히 보기</button>` : ''}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+
+      ${currentField ? renderJobSection(data) : ''}
+      ${currentJob ? renderSpecSection(data) : ''}
+    </div>
+  `;
+  animateBars();
+}
+
+function renderJobSection(data) {
+  const jobs = data.jobs[currentField] || [];
+  return `
+    <div class="section-title">세부 직무 선택</div>
+    <div class="jobs-row">
+      ${jobs.map(j => `
+        <button class="job-chip ${currentJob === j.id ? 'active' : ''}" onclick="selectJob('${j.id}')">
+          <span class="dot"></span>
+          ${j.label}
+          ${INFO.jobs[j.id] ? `<span style="display:inline-flex;align-items:center;margin-left:4px;opacity:0.65;font-size:11px;" onclick="openJobModal('${j.id}', event)" title="직무 상세 보기"><i class="ti ti-info-circle"></i></span>` : ''}
+        </button>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderSpecSection(data) {
+  const spec = data.specs?.[currentJob];
+  if (!spec) return `<div style="color:var(--c-ink3);font-size:13px;padding:20px 0">이 직무의 스펙 데이터를 준비 중이에요.</div>`;
+
+  const gpaWidth = ((spec.gpa.avg - spec.gpa.min) / (spec.gpa.max_scale - spec.gpa.min) * 100).toFixed(1);
+  const activeTab = window._specTab || 'quant';
+
+  const quantHtml = `
+    <div class="insight-row">
+      ${spec.insights.map(ic => `
+        <div class="insight-card">
+          <div class="ic-label">${ic.label}</div>
+          <div class="ic-value">${ic.value}</div>
+          <div class="ic-sub">${ic.sub}</div>
+          <div class="ic-badge badge-${ic.badge.type}">
+            <i class="ti ti-info-circle" style="font-size:10px"></i>
+            ${ic.badge.text}
+          </div>
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="spec-panel">
+      <div class="spec-card">
+        <div class="spec-card-header">
+          <i class="ti ti-school"></i>
+          <div class="spec-card-title">학점 분포</div>
+        </div>
+        <div class="spec-card-body">
+          <div class="gpa-display">
+            <span class="gpa-num">${spec.gpa.avg}</span>
+            <span class="gpa-max">/ ${spec.gpa.max_scale}</span>
+          </div>
+          <div class="gpa-label">합격자 평균 학점</div>
+          <div class="gpa-bar-wrap">
+            <div class="gpa-bar-bg">
+              <div class="gpa-bar-fill" id="gpa-fill" style="width:0%" data-target="${gpaWidth}%"></div>
+            </div>
+            <div class="gpa-range">
+              <span>최저 ${spec.gpa.min}</span>
+              <span>최고 ${spec.gpa.max}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="spec-card">
+        <div class="spec-card-header">
+          <i class="ti ti-certificate"></i>
+          <div class="spec-card-title">자격증 보유율</div>
+        </div>
+        <div class="spec-card-body">
+          <div class="cert-list">
+            ${spec.certs.map((c, i) => `
+              <div class="cert-item" style="animation-delay:${i*0.1}s">
+                <div class="cert-bar-wrap">
+                  <div class="cert-name">${c.name}</div>
+                  <div class="cert-track">
+                    <div class="cert-fill" data-target="${c.pct}%" style="width:0%;background:${c.color}"></div>
+                  </div>
+                </div>
+                <div class="cert-pct">${c.pct}%</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+
+      ${spec.lang ? `
+      <div class="spec-card full">
+        <div class="spec-card-header">
+          <i class="ti ti-language"></i>
+          <div class="spec-card-title">어학 성적</div>
+        </div>
+        <div class="spec-card-body">
+          <div class="lang-list">
+            ${spec.lang.map(l => `
+              <div class="lang-item">
+                <div class="lang-name">${l.name}</div>
+                <div class="lang-score-wrap">
+                  <div class="lang-avg">${l.avg}</div>
+                  <div class="lang-range">합격자 범위 ${l.range}</div>
+                </div>
+                <span class="lang-badge ${l.must ? 'must' : 'opt'}">${l.must ? '필수' : '선택'}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>` : ''}
+    </div>
+  `;
+
+  const qualHtml = spec.qual ? `
+    <div class="qual-grid">
+
+      <div class="qual-card full">
+        <div class="qual-card-header">
+          <i class="ti ti-timeline"></i>
+          <div class="qual-card-title">학년별 준비 로드맵</div>
+        </div>
+        <div class="qual-card-body">
+          <div class="timeline">
+            ${spec.timeline.map((t, i) => `
+              <div class="tl-item" style="animation-delay:${i*0.08}s">
+                <div class="tl-period">${t.period}</div>
+                <div class="tl-dot-wrap">
+                  <div class="tl-dot ${t.filled ? 'filled' : ''}"></div>
+                </div>
+                <div class="tl-body">
+                  <div class="tl-title">${t.title}${t.highlight ? ' <span style="font-size:10px;background:#fff8e1;color:#d97706;padding:1px 6px;border-radius:4px;font-weight:600">핵심</span>' : ''}</div>
+                  ${t.stat ? `<div class="tl-stat"><i class="ti ti-chart-bar" style="font-size:11px"></i>${t.stat}</div>` : ''}
+                  <div class="tl-desc">${t.desc}</div>
+                  <div class="tl-tags">${t.tags.map(tag => `<span class="tl-tag">${tag}</span>`).join('')}</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+
+      <div class="qual-card">
+        <div class="qual-card-header">
+          <i class="ti ti-trophy"></i>
+          <div class="qual-card-title">대외활동 · 경험 보유율</div>
+        </div>
+        <div class="qual-card-body">
+          <div class="activity-list">
+            ${spec.qual.activities.map(a => `
+              <div class="activity-item">
+                <div class="activity-icon">${a.icon}</div>
+                <div class="activity-body">
+                  <div class="activity-name">${a.name}</div>
+                  <div class="activity-desc">${a.desc}</div>
+                </div>
+                <div class="activity-pct">${a.pct}%</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+
+      <div class="qual-card">
+        <div class="qual-card-header">
+          <i class="ti ti-writing"></i>
+          <div class="qual-card-title">자기소개서 핵심 소재</div>
+        </div>
+        <div class="qual-card-body">
+          <div class="activity-list">
+            ${spec.qual.essay.map(e => `
+              <div class="activity-item">
+                <div class="activity-icon">${e.icon}</div>
+                <div class="activity-body">
+                  <div class="activity-name">${e.name}</div>
+                  <div class="activity-desc">${e.desc}</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+
+    </div>
+  ` : `<div style="color:var(--c-ink3);font-size:13px;padding:12px 0">정성 스펙 데이터를 준비 중이에요.</div>`;
+
+  const resultHtml = spec.result ? `
+    <div class="company-section">
+      <div class="company-section-title">
+        <i class="ti ti-file-check" style="color:var(--c-accent)"></i>
+        서류 합격 기업 (실제 합격자 사례)
+      </div>
+      <div class="company-grid">
+        ${spec.result.doc.map(c => `
+          <div class="company-card">
+            <div class="cc-badge doc"><i class="ti ti-file-check"></i> 서류합격</div>
+            <div class="cc-name">${c.name}</div>
+            <div class="cc-role">${c.role}</div>
+            <div class="cc-tags">${c.tags.map(t => `<span class="cc-tag">${t}</span>`).join('')}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    <div class="company-section">
+      <div class="company-section-title">
+        <i class="ti ti-star" style="color:var(--c-green)"></i>
+        최종 취업 기업 (실제 합격자 사례)
+      </div>
+      <div class="company-grid">
+        ${spec.result.hired.map(c => `
+          <div class="company-card hired">
+            <div class="cc-badge hired"><i class="ti ti-check"></i> 최종합격</div>
+            <div class="cc-name">${c.name}</div>
+            <div class="cc-role">${c.role}</div>
+            <div class="cc-tags">${c.tags.map(t => `<span class="cc-tag">${t}</span>`).join('')}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    <div class="result-note">
+      <i class="ti ti-info-circle" style="font-size:12px;vertical-align:middle;margin-right:4px"></i>
+      ${spec.result.note}
+    </div>
+  ` : `<div style="color:var(--c-ink3);font-size:13px;padding:12px 0">합격 기업 데이터를 준비 중이에요.</div>`;
+
+  const casHtml = typeof renderCAS==='function' ? renderCAS() : '';
+  const pathsHtml = typeof renderPaths==='function' ? renderPaths() : '';
+  const simHtml = typeof renderSimulator==='function' ? renderSimulator() : '';
+  const patHtml = typeof renderPatterns==='function' ? renderPatterns() : '';
+
+  return `
+    <div class="section-title" style="margin-top:4px">실제 취업자 스펙 데이터</div>
+
+    <div class="spec-tab-bar">
+      <div class="spec-tab ${activeTab==='quant'?'active':''}" onclick="switchSpecTab('quant')">
+        <div class="st-icon"><i class="ti ti-chart-bar"></i></div>
+        <div class="st-label">정량 스펙</div>
+      </div>
+      <div class="spec-tab ${activeTab==='qual'?'active':''}" onclick="switchSpecTab('qual')">
+        <div class="st-icon"><i class="ti ti-medal"></i></div>
+        <div class="st-label">정성 스펙</div>
+      </div>
+      <div class="spec-tab ${activeTab==='result'?'active':''}" onclick="switchSpecTab('result')">
+        <div class="st-icon"><i class="ti ti-building-skyscraper"></i></div>
+        <div class="st-label">합격 기업</div>
+      </div>
+      <div class="spec-tab ${activeTab==='cas'?'active':''}" onclick="switchSpecTab('cas')">
+        <div class="st-icon"><i class="ti ti-chart-pie"></i></div>
+        <div class="st-label">CAS 점수 <span class="careerly-badge">C</span></div>
+      </div>
+      <div class="spec-tab ${activeTab==='paths'?'active':''}" onclick="switchSpecTab('paths')">
+        <div class="st-icon"><i class="ti ti-route"></i></div>
+        <div class="st-label">동문 패스 <span class="careerly-badge">C</span></div>
+      </div>
+      <div class="spec-tab ${activeTab==='sim'?'active':''}" onclick="switchSpecTab('sim')">
+        <div class="st-icon"><i class="ti ti-calendar"></i></div>
+        <div class="st-label">타임라인 <span class="careerly-badge">C</span></div>
+      </div>
+      <div class="spec-tab ${activeTab==='pat'?'active':''}" onclick="switchSpecTab('pat')">
+        <div class="st-icon"><i class="ti ti-analyze"></i></div>
+        <div class="st-label">패턴분석 <span class="careerly-badge">C</span></div>
+      </div>
+    </div>
+
+    <div id="spec-quant" class="spec-tab-content ${activeTab==='quant'?'active':''}">${quantHtml}</div>
+    <div id="spec-qual" class="spec-tab-content ${activeTab==='qual'?'active':''}">${qualHtml}</div>
+    <div id="spec-result" class="spec-tab-content ${activeTab==='result'?'active':''}">${resultHtml}</div>
+    <div id="spec-cas" class="spec-tab-content ${activeTab==='cas'?'active':''}">${casHtml}</div>
+    <div id="spec-paths" class="spec-tab-content ${activeTab==='paths'?'active':''}">${pathsHtml}</div>
+    <div id="spec-sim" class="spec-tab-content ${activeTab==='sim'?'active':''}">${simHtml}</div>
+    <div id="spec-pat" class="spec-tab-content ${activeTab==='pat'?'active':''}">${patHtml}</div>
+  `;
+}
+
+function switchSpecTab(tab) {
+  window._specTab = tab;
+  const tabs = ['quant','qual','result','cas','paths','sim','pat'];
+  document.querySelectorAll('.spec-tab').forEach((el, i) => {
+    el.classList.toggle('active', tabs[i] === tab);
+  });
+  document.querySelectorAll('.spec-tab-content').forEach(el => {
+    el.classList.toggle('active', el.id === 'spec-' + tab);
+  });
+  animateBars();
+}
+
+function selectField(id) {
+  currentField = id;
+  currentJob = null;
+  renderMain(DATA[currentDept]);
+}
+
+function selectJob(id) {
+  currentJob = id;
+  window._specTab = 'quant';
+  renderMain(DATA[currentDept]);
+  setTimeout(() => {
+    const spec = document.querySelector('.spec-tab-bar');
+    if (spec) spec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 50);
+}
+
+function gotoPhase(n) {
+  if (n === 1) { currentField = null; currentJob = null; }
+  if (n === 2) { currentJob = null; }
+  if (currentDept) renderMain(DATA[currentDept]);
+}
+
+function showPlaceholder(id) {
+  const main = document.getElementById('main');
+  main.innerHTML = `
+    <div class="topbar"><div class="breadcrumb"><span>준비 중</span></div></div>
+    <div class="welcome">
+      <div class="welcome-icon">🚧</div>
+      <h2>데이터 준비 중</h2>
+      <p>이 학과의 스펙 데이터를 열심히 수집하고 있어요.<br>곧 업데이트될 예정이에요!</p>
+    </div>
+  `;
+}
+
+function animateBars() {
+  requestAnimationFrame(() => {
+    const gpaFill = document.getElementById('gpa-fill');
+    if (gpaFill) setTimeout(() => { gpaFill.style.width = gpaFill.dataset.target; }, 100);
+    document.querySelectorAll('.cert-fill').forEach((el, i) => {
+      setTimeout(() => { el.style.width = el.dataset.target; }, 150 + i * 80);
+    });
+  });
+}
+
+function filterDepts(q) {
+  document.querySelectorAll('.dept-item').forEach(el => {
+    const label = el.querySelector('.dept-label').textContent;
+    el.style.display = label.includes(q) ? '' : 'none';
+  });
+}
+
+// ─────── INFO DATA ───────
+const INFO = {
+  fields: {
+    finance: {
+      icon: '🏦',
+      name: '금융권',
+      subtitle: '증권사 · 은행 · 자산운용사 · 보험사',
+      what: '기업과 개인의 자금을 운용·중개·관리하는 금융기관에서 일하는 분야입니다. 경영학과 출신이 가장 많이 진출하며, 금융 특유의 높은 연봉과 전문성으로 인기가 높습니다.',
+      companies: ['미래에셋증권', 'KB증권', '한국투자증권', 'NH투자증권', '삼성자산운용', 'KB국민은행', '신한은행', '하나은행'],
+      learn: [
+        { icon: '📊', label: '재무·회계 지식', sub: '재무제표 분석, 기업가치평가(DCF, EV/EBITDA), 회계원리' },
+        { icon: '📉', label: '금융시장 이해', sub: '주식·채권·파생상품 구조, 금리·환율 메커니즘, 거시경제 분석' },
+        { icon: '🧮', label: '퀀트·데이터 분석', sub: 'Python/Excel 기반 데이터 처리, 금융 모델링, Bloomberg 활용' },
+      ],
+      skills: ['재무모델링', 'DCF 밸류에이션', '파이썬', 'Bloomberg', 'Excel 심화', 'CFA'],
+      salary: '초봉 4,500~7,000만원 (직무별 상이)',
+    },
+    consulting: {
+      icon: '💼',
+      name: '컨설팅',
+      subtitle: '전략컨설팅 · IT컨설팅 · 회계법인 Advisory',
+      what: '기업의 경영 문제를 진단하고 해결책을 제안하는 전문 서비스 업종입니다. MBB(McKinsey·BCG·Bain), Big4 회계법인, 국내 전략컨설팅 펌 등이 대표적입니다. 빠른 성장과 다양한 산업 경험이 강점입니다.',
+      companies: ['McKinsey', 'BCG', 'Bain', 'Deloitte', 'PwC', 'KPMG', 'EY', 'AT Kearney', 'Roland Berger'],
+      learn: [
+        { icon: '🔍', label: '구조적 문제 해결', sub: 'MECE 사고, Issue Tree 작성, 가설 기반 분석 프레임워크' },
+        { icon: '📑', label: '보고서·슬라이드 작성', sub: 'Pyramid Principle 기반 스토리라인, 데이터 시각화, 임원 보고' },
+        { icon: '🗣️', label: '발표·커뮤니케이션', sub: '클라이언트 인터뷰, 워크숍 퍼실리테이션, 설득적 프레젠테이션' },
+      ],
+      skills: ['MECE 사고', 'PPT 고도화', '데이터 분석', '케이스 인터뷰', 'Excel 모델링', '영어 비즈니스'],
+      salary: '초봉 5,000~9,000만원 (펌·레벨별 상이)',
+    },
+    marketing: {
+      icon: '📣',
+      name: '마케팅',
+      subtitle: '브랜드마케팅 · 디지털마케팅 · 광고대행사',
+      what: '제품과 서비스를 소비자에게 알리고 구매를 유도하는 활동을 기획·실행하는 분야입니다. 대기업 마케팅 부서, 광고대행사, IT기업 그로스팀 등 다양한 형태로 존재합니다.',
+      companies: ['삼성전자', 'LG전자', '아모레퍼시픽', 'CJ제일제당', '제일기획', 'BBDO코리아', '카카오', '네이버'],
+      learn: [
+        { icon: '🎯', label: '소비자 행동 분석', sub: '소비자심리, 타깃 세그멘테이션, 고객 여정 맵(CJM) 설계' },
+        { icon: '📲', label: '디지털 채널 운영', sub: 'SNS 마케팅, SEO/SEM, 퍼포먼스 마케팅, GA4·META Ads' },
+        { icon: '📐', label: '브랜드 기획', sub: '브랜드 아이덴티티, IMC 전략, 캠페인 기획 및 성과 측정' },
+      ],
+      skills: ['Google Analytics', 'META Ads', '카피라이팅', 'PPT 기획', '데이터 분석', '크리에이티브 기획'],
+      salary: '초봉 3,200~4,800만원',
+    },
+    corp: {
+      icon: '🏢',
+      name: '대기업 일반직',
+      subtitle: '경영기획 · 재무 · 인사 · 구매',
+      what: '삼성·LG·SK·현대 등 대기업 본사 및 계열사의 지원 부서로 진출하는 경로입니다. 안정성과 복지가 뛰어나며, 기업 전략·운영의 핵심 업무를 담당합니다.',
+      companies: ['삼성전자', 'LG전자', 'SK하이닉스', '현대자동차', 'SK텔레콤', 'LG화학', 'POSCO', '롯데그룹'],
+      learn: [
+        { icon: '📋', label: '경영기획·전략', sub: '사업계획 수립, KPI 관리, 경쟁사 분석, 신사업 타당성 검토' },
+        { icon: '💰', label: '재무·원가관리', sub: '예산 편성, 원가 분석, 손익 관리, 세무·회계 기초' },
+        { icon: '👥', label: '인사·조직관리', sub: '채용·평가 제도 설계, 조직문화, 노무관리, 역량 개발' },
+      ],
+      skills: ['Excel·PPT', '사업계획서 작성', 'ERP(SAP)', '재무 분석', '프로젝트 관리', '영어 문서'],
+      salary: '초봉 4,000~5,500만원 (그룹사별 상이)',
+    },
+    // 경제학과
+    public: {
+      icon: '🏛️',
+      name: '공공기관',
+      subtitle: '한국은행 · 금융감독원 · 기재부 · 공기업',
+      what: '거시경제 분석, 통화정책, 금융 규제 등 국가 경제를 관리하는 공공 영역에서 일하는 경로입니다. 안정성이 높고, 경제학 전공 역량을 직접 활용할 수 있습니다.',
+      companies: ['한국은행', '금융감독원', '기획재정부', 'KDB산업은행', 'IBK기업은행', 'KDI', 'KOTRA', '한국수출입은행'],
+      learn: [
+        { icon: '📈', label: '거시경제 분석', sub: 'GDP·물가·금리·환율 메커니즘, 통화정책 전달경로, 경기예측 모형' },
+        { icon: '📊', label: '계량경제학', sub: 'OLS 회귀분석, 시계열 분석(ARIMA), 패널 데이터 모형, Stata·R 활용' },
+        { icon: '📝', label: '경제 보고서 작성', sub: '경제동향 분석, 정책 브리핑, 정부 문서 작성 방식' },
+      ],
+      skills: ['Stata', 'R', '거시경제학', '계량경제학', 'PSAT·경제학 시험', '한국은행 경시대회'],
+      salary: '초봉 4,000~5,500만원 (기관별 상이)',
+    },
+    research: {
+      icon: '🔬',
+      name: '연구·싱크탱크',
+      subtitle: 'KDI · KIEP · 민간 경제연구소',
+      what: '경제 현상을 학문적으로 연구하고 정책 제언을 하는 연구 기관에서 일하는 경로입니다. 대학원 진학(석·박사)이 사실상 필수이며, 깊은 전문성을 쌓을 수 있습니다.',
+      companies: ['KDI(한국개발연구원)', 'KIEP', '금융연구원', '삼성경제연구소', 'LG경제연구원', '현대경제연구원', '학계'],
+      learn: [
+        { icon: '🧪', label: '경제 모형 개발', sub: 'DSGE 모형, CGE 모형, 미시 기초 거시 모형, Python/MATLAB 구현' },
+        { icon: '📚', label: '논문 작성', sub: 'Working Paper 작성, 학술지 투고, 문헌 리뷰, 연구 설계' },
+        { icon: '🌐', label: '국제 경제 분석', sub: '무역 이론, 국제금융, 환율 결정 모형, 세계경제 전망' },
+      ],
+      skills: ['Python', 'MATLAB', 'Stata', '영어 논문 작성', '계량경제학', '대학원 진학'],
+      salary: '연구원 초봉 3,800~5,000만원 (박사 후 상이)',
+    },
+    // 컴퓨터공학
+    dev: {
+      icon: '💻',
+      name: '소프트웨어 개발',
+      subtitle: '백엔드 · 프론트엔드 · 풀스택 개발',
+      what: '웹/앱 서비스의 핵심 로직을 개발하고 유지보수하는 직군입니다. 네카라쿠배(네이버·카카오·라인·쿠팡·배민) 등 IT 대기업부터 스타트업까지 수요가 가장 많은 분야입니다.',
+      companies: ['카카오', '네이버', '라인', '쿠팡', '배달의민족', '토스', '당근마켓', '삼성SDS', 'LG CNS'],
+      learn: [
+        { icon: '🖥️', label: '핵심 언어 & 프레임워크', sub: 'Java/Spring, Python/Django, JavaScript/React, Node.js, Kotlin/Swift' },
+        { icon: '🗄️', label: '시스템 설계', sub: 'DB 설계(SQL/NoSQL), API 설계(REST·GraphQL), MSA 아키텍처, 캐싱' },
+        { icon: '☁️', label: 'DevOps & 클라우드', sub: 'AWS/GCP/Azure, Docker, Kubernetes, CI/CD, Git 협업 워크플로우' },
+      ],
+      skills: ['Java', 'Python', 'Spring Boot', 'React', 'SQL', 'AWS', 'Git', 'Docker'],
+      salary: '초봉 4,000~7,000만원 (회사·실력별 상이)',
+    },
+    ai: {
+      icon: '🤖',
+      name: 'AI · 데이터',
+      subtitle: 'ML엔지니어 · 데이터사이언티스트 · AI연구원',
+      what: '머신러닝 모델 개발, 데이터 파이프라인 구축, AI 서비스 상용화를 담당하는 분야입니다. 최근 LLM 붐으로 수요가 급증했으며, 석사 이상의 학력이 경쟁력을 높입니다.',
+      companies: ['카카오브레인', '네이버 Clova', '삼성리서치', 'LG AI연구원', 'SK C&C', '업스테이지', '뤼튼', 'Krafton AI'],
+      learn: [
+        { icon: '🧠', label: '머신러닝 · 딥러닝', sub: '회귀/분류, CNN/RNN/Transformer, PyTorch/TensorFlow, 모델 최적화' },
+        { icon: '📦', label: '데이터 파이프라인', sub: 'SQL, Spark, Airflow, Kafka, 데이터 웨어하우스(BigQuery, Redshift)' },
+        { icon: '🔬', label: 'AI 논문 구현', sub: 'ArXiv 논문 리뷰, 최신 아키텍처 구현, Kaggle·AI 경진대회' },
+      ],
+      skills: ['Python', 'PyTorch', 'SQL', 'MLOps', 'Hugging Face', '수학(선형대수·확률)'],
+      salary: '초봉 4,500~8,000만원 (실력·회사별 상이)',
+    },
+  },
+  jobs: {
+    ib: {
+      icon: '📈',
+      name: '증권사 IB (투자은행)',
+      what: '기업공개(IPO), 인수합병(M&A), 채권 발행 등 기업의 대규모 자금 조달을 돕는 직무입니다. 딜(Deal)을 직접 구조화하고 실행하며, 고강도 업무 환경으로 유명합니다.',
+      learn: [
+        { icon: '🏗️', label: '재무 모델링', sub: 'DCF, LBO, 합병모델(Merger Model), 3-Statement 통합 모형 작성' },
+        { icon: '📋', label: '딜 실행', sub: 'IM(투자설명서) 작성, 로드쇼 준비, Due Diligence, 계약 협상 지원' },
+        { icon: '📊', label: '기업 밸류에이션', sub: 'EV/EBITDA, P/E, PBR 등 멀티플 분석, 비교 기업 분석(Comps)' },
+      ],
+      skills: ['Excel 재무모델링', 'DCF', 'LBO', 'PowerPoint IM', 'Bloomberg', '영어 딜 문서'],
+      movies: [
+        { emoji: '📉', title: '빅 쇼트 (The Big Short)', desc: '월스트리트의 실전 투자 감각과 거시경제 인사이트를 엿볼 수 있어요.' },
+        { emoji: '🏦', title: '마진 콜 (Margin Call)', desc: '투자은행 내부의 리스크 관리와 냉혹한 생태계를 리얼하게 보여줍니다.' }
+      ]
+    },
+    bank: {
+      icon: '🏛️',
+      name: '시중은행',
+      what: '개인·기업 고객의 예금·대출·외환·자산관리 업무를 담당합니다. 지점 영업부터 본점 기획까지 다양한 직무가 있으며, 안정성과 복지가 강점입니다.',
+      learn: [
+        { icon: '💳', label: '여신·수신 업무', sub: '대출 심사, 여신 관리, 예금 상품 운용, 이자율 결정 구조 이해' },
+        { icon: '🌍', label: '외환·국제금융', sub: '외환 거래, 무역금융(LC), 해외송금, 환리스크 관리' },
+        { icon: '📊', label: 'NCS 기반 직무능력', sub: '의사소통, 수리능력, 문제해결, 자원관리, 직업윤리' },
+      ],
+      skills: ['NCS', '한국사 1급', '은행텔러 자격증', '컴활 1급', 'AFPK', '영업·고객 응대'],
+    },
+    am: {
+      icon: '📦',
+      name: '자산운용사',
+      what: '펀드매니저로서 주식·채권·대체투자 포트폴리오를 운용하거나, 리서치 애널리스트로 투자 아이디어를 발굴합니다. 수학·통계 역량이 특히 중요한 직무입니다.',
+      learn: [
+        { icon: '📉', label: '포트폴리오 이론', sub: '평균-분산 최적화, CAPM, 팩터 모형, 리스크 파리티 전략' },
+        { icon: '🧮', label: '퀀트 전략', sub: 'Python 기반 백테스팅, 알파 팩터 발굴, 시계열 분석, 머신러닝 적용' },
+        { icon: '🔍', label: '기업·산업 분석', sub: '재무제표 심화 분석, 산업 사이클 분석, 기업 탐방 보고서 작성' },
+      ],
+      skills: ['Python', 'CFA', '금융투자분석사', '투자자산운용사', '포트폴리오 이론', '재무제표 분석'],
+      movies: [
+        { emoji: '💵', title: '빌리언스 (Billions)', desc: '자산운용사(헤지펀드)의 치열한 두뇌 싸움과 투자 전략을 다룬 드라마.' }
+      ]
+    },
+    strategy: {
+      icon: '🎯',
+      name: '전략 컨설팅',
+      what: 'MBB 등 글로벌 전략컨설팅 펌에서 CEO 어젠다 수준의 경영 문제를 해결합니다. 케이스 인터뷰가 핵심 채용 관문이며, 입사 후 빠른 성장이 가능합니다.',
+      learn: [
+        { icon: '🗺️', label: '전략 프레임워크', sub: 'Porter 5 Forces, BCG Matrix, Value Chain, Ansoff Matrix 실전 적용' },
+        { icon: '🔢', label: '케이스 인터뷰', sub: '시장규모 추정(Estimation), 수익성 개선, 신규시장 진입, M&A 시너지' },
+        { icon: '📑', label: '슬라이드 커뮤니케이션', sub: 'MECE 구조, Pyramid Principle, McKinsey Deck 스타일 스토리라인' },
+      ],
+      skills: ['케이스 인터뷰', 'MECE', 'PPT 스토리라인', '데이터 분석', '영어 프레젠테이션', '경제학 기초'],
+      movies: [
+        { emoji: '⚾', title: '머니볼 (Moneyball)', desc: '데이터와 논리를 기반으로 한 전략적 문제해결의 정수를 보여줍니다.' },
+        { emoji: '🧠', title: '인턴 (The Intern)', desc: '비즈니스 딜레마를 해결해 나가는 컨설턴트의 커뮤니케이션 스킬 참고.' }
+      ]
+    },
+    it_cons: {
+      icon: '⚙️',
+      name: 'IT 컨설팅',
+      what: 'Big4(딜로이트·PwC·KPMG·EY) 또는 Accenture 등에서 기업의 디지털 전환(DX), ERP 구축, 데이터 전략 프로젝트를 수행합니다.',
+      learn: [
+        { icon: '🏗️', label: 'ERP 시스템', sub: 'SAP S/4HANA, Oracle ERP 구현, 비즈니스 프로세스 재설계(BPR)' },
+        { icon: '📊', label: '데이터 전략', sub: '데이터 거버넌스, BI 대시보드(Tableau·Power BI), 디지털 전환 로드맵' },
+        { icon: '🔄', label: '프로젝트 관리', sub: 'Agile/Scrum, PMP 기반 일정·리소스 관리, 클라이언트 커뮤니케이션' },
+      ],
+      skills: ['SAP', 'Power BI', 'Tableau', 'SQL', 'PMP', 'Agile', 'Python'],
+    },
+    brand: {
+      icon: '✨',
+      name: '브랜드 마케팅',
+      what: '브랜드의 아이덴티티를 정의하고 캠페인을 기획·실행합니다. 소비자 인사이트를 발굴해 감성적 연결을 만드는 것이 핵심 역할입니다.',
+      learn: [
+        { icon: '🎨', label: '브랜드 기획', sub: 'Brand Positioning, Brand Architecture, 소비자 리서치(FGI, 설문), 경쟁사 분석' },
+        { icon: '📺', label: '캠페인 실행', sub: 'TV·디지털·OOH 통합 캠페인, 광고대행사 협업, 미디어 믹스 전략' },
+        { icon: '📏', label: '성과 측정', sub: '브랜드 인지도 조사, NPS, ROI 분석, A/B 테스트' },
+      ],
+      skills: ['브랜드 기획', '소비자 리서치', 'PPT 기획서', '카피라이팅', 'IMC 전략', '광고대행사 협업'],
+      movies: [
+        { emoji: '🥐', title: '에밀리, 파리에 가다', desc: '글로벌 브랜드 마케팅, SNS 캠페인, 에이전시 라이프의 교과서.' },
+        { emoji: '👠', title: '악마는 프라다를 입는다', desc: '트렌드를 리드하는 마케팅 현장의 속도감과 치열함.' }
+      ]
+    },
+    digital: {
+      icon: '📲',
+      name: '디지털 마케팅',
+      what: '검색·SNS·이메일·앱 등 디지털 채널을 활용해 고객을 획득하고 전환율을 높이는 퍼포먼스 중심의 마케팅 직무입니다.',
+      learn: [
+        { icon: '🔍', label: '퍼포먼스 마케팅', sub: 'META·Google Ads 운용, ROAS 최적화, 랜딩페이지 A/B 테스트, UTM 추적' },
+        { icon: '📊', label: '데이터 분석', sub: 'Google Analytics 4, SQL 기초, 코호트 분석, 퍼널 분석, LTV 산출' },
+        { icon: '📱', label: 'SNS & 콘텐츠', sub: '인스타그램·유튜브·틱톡 채널 운영, 바이럴 콘텐츠 기획, 인플루언서 협업' },
+      ],
+      skills: ['META Ads', 'Google Ads', 'GA4', 'SQL', 'Figma', '콘텐츠 기획', '데이터 드리븐 의사결정'],
+      movies: [
+        { emoji: '📱', title: '소셜 네트워크', desc: '디지털 플랫폼의 성장과 유저 획득(User Acquisition)에 대한 영감.' }
+      ]
+    },
+    plan: {
+      icon: '📋',
+      name: '경영기획',
+      what: '기업의 중장기 전략 수립, 사업계획 조율, 경영 현황 분석 등 회사 전체를 조율하는 컨트롤 타워 역할을 합니다. 경력이 쌓일수록 경영진과 밀접하게 일합니다.',
+      learn: [
+        { icon: '📅', label: '사업계획 수립', sub: '연간·중기 사업계획 수립, KPI 설정 및 관리, 임원 보고 자료 작성' },
+        { icon: '🔍', label: '경영 분석', sub: '경쟁사·산업 트렌드 분석, 신사업 타당성 검토, 투자수익률(ROI) 분석' },
+        { icon: '🤝', label: '내부 조율', sub: '유관부서 협업, 이슈 에스컬레이션, 의사결정 지원, 회의체 운영' },
+      ],
+      skills: ['Excel·PPT', '사업계획서', 'KPI 관리', '데이터 분석', 'ERP(SAP)', '전략적 사고'],
+    },
+    finance_corp: {
+      icon: '💰',
+      name: '재무·회계',
+      what: '기업의 자금 흐름을 관리하고 재무 보고서를 작성합니다. 원가 분석, 세무 신고, 투자자 관계(IR) 등 세부 직무로 나뉩니다.',
+      learn: [
+        { icon: '📒', label: '회계 실무', sub: 'K-IFRS 기준 재무제표 작성, 결산 업무, ERP(SAP) 전표 처리, 감사 대응' },
+        { icon: '💵', label: '자금·원가 관리', sub: '현금흐름 관리, 예산 수립, 원가 분석, 투자 타당성 검토, 사업부별 손익' },
+        { icon: '🏦', label: '세무·IR', sub: '법인세·부가세 신고, 세무조사 대응, 투자자 IR 자료 작성, 공시 업무' },
+      ],
+      skills: ['회계(K-IFRS)', 'SAP ERP', 'Excel 재무 모델', '세무 신고', 'CPA·AICPA', 'IR 보고서'],
+    },
+  },
+};
+
+function openFieldModal(fieldId, event) {
+  event.stopPropagation();
+  const info = INFO.fields[fieldId];
+  if (!info) return;
+  showModal(info);
+}
+
+function openJobModal(jobId, event) {
+  event.stopPropagation();
+  const info = INFO.jobs[jobId];
+  if (!info) return;
+  showModal(info);
+}
+
+function showModal(info) {
+  // Remove existing
+  const existing = document.getElementById('info-modal');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'info-modal';
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+  overlay.innerHTML = `
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-icon">${info.icon}</div>
+        <div class="modal-title-wrap">
+          <div class="modal-title">${info.name}</div>
+          <div class="modal-subtitle">${info.subtitle || info.what.slice(0, 30) + '...'}</div>
+        </div>
+        <div class="modal-close" onclick="document.getElementById('info-modal').remove()">
+          <i class="ti ti-x"></i>
+        </div>
+      </div>
+      <div class="modal-body">
+
+        <div class="modal-section">
+          <div class="modal-section-title">
+            <i class="ti ti-building"></i>
+            이런 곳이에요
+          </div>
+          <div class="modal-desc">${info.what}</div>
+          ${info.companies ? `
+            <div class="modal-companies">
+              ${info.companies.map(c => `<span class="modal-company-tag">${c}</span>`).join('')}
+            </div>` : ''}
+        </div>
+
+        <div class="modal-section">
+          <div class="modal-section-title">
+            <i class="ti ti-books"></i>
+            이런 것을 배워요
+          </div>
+          <div class="modal-learn-list">
+            ${info.learn.map(l => `
+              <div class="modal-learn-item">
+                <div class="modal-learn-icon">${l.icon}</div>
+                <div class="modal-learn-text">
+                  <div class="modal-learn-label">${l.label}</div>
+                  <div class="modal-learn-sub">${l.sub}</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="modal-section">
+          <div class="modal-section-title">
+            <i class="ti ti-tool"></i>
+            핵심 스킬 & 키워드
+          </div>
+          <div class="modal-skills">
+            ${info.skills.map(s => `<span class="modal-skill-tag">${s}</span>`).join('')}
+          </div>
+        </div>
+
+        ${info.salary ? `
+        <div class="modal-section">
+          <div class="modal-section-title">
+            <i class="ti ti-coin"></i>
+            연봉 가이드
+          </div>
+          <div class="modal-salary">
+            <div class="modal-salary-icon">💵</div>
+            <div>
+              <div class="modal-salary-label">신입 초봉 기준</div>
+              <div class="modal-salary-value">${info.salary}</div>
+            </div>
+          </div>
+        </div>` : ''}
+
+        ${info.movies ? `
+        <div class="modal-section">
+          <div class="modal-section-title" style="color:var(--c-accent)">
+            <i class="ti ti-movie"></i>
+            이 직무에 영감을 주는 영화
+          </div>
+          <div class="movie-grid">
+            ${info.movies.map(m => `
+              <div class="movie-card">
+                <div class="movie-poster">${m.emoji}</div>
+                <div class="movie-info">
+                  <div class="movie-title">${m.title}</div>
+                  <div class="movie-desc">${m.desc}</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>` : ''}
+
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  // Close on ESC
+  const escHandler = (e) => {
+    if (e.key === 'Escape') {
+      overlay.remove();
+      document.removeEventListener('keydown', escHandler);
+    }
+  };
+  document.addEventListener('keydown', escHandler);
+}
+
+function openProfileModal() {
+  const existing = document.getElementById('info-modal');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'info-modal';
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+  overlay.innerHTML = `
+    <div class="modal-box" style="width: 440px;">
+      <div class="modal-header" style="background: linear-gradient(135deg, #f8f9fa, #e9ecef); align-items: center; border-bottom: none; border-radius: 16px 16px 0 0;">
+        <div class="up-avatar" style="width: 64px; height: 64px; font-size: 32px; box-shadow: var(--shadow-md);">👨‍🎓</div>
+        <div class="modal-title-wrap" style="margin-left: 4px;">
+          <div class="modal-title" style="font-size: 20px;">김경기 님 <span class="up-level" style="font-size: 12px; padding: 3px 8px;">Lv.3</span></div>
+          <div class="modal-subtitle">경영학과 22학번 · 취업 준비 중</div>
+        </div>
+        <div class="modal-close" onclick="document.getElementById('info-modal').remove()">
+          <i class="ti ti-x"></i>
+        </div>
+      </div>
+      <div class="modal-body" style="padding-top: 10px;">
+        
+        <div class="modal-section">
+          <div class="modal-section-title"><i class="ti ti-mood-smile"></i> 내 캐릭터 속성</div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px;">
+            <div style="background: var(--c-surface); border: 1px solid var(--c-border); padding: 12px 16px; border-radius: var(--radius); flex: 1; text-align: center;">
+              <div style="font-size: 11px; color: var(--c-ink3); margin-bottom: 4px;">MBTI 성향</div>
+              <div style="font-size: 16px; font-weight: 700; color: var(--c-ink);">ENTJ</div>
+              <div style="font-size: 10px; color: var(--c-accent); margin-top: 2px;">전략기획 특화</div>
+            </div>
+            <div style="background: var(--c-surface); border: 1px solid var(--c-border); padding: 12px 16px; border-radius: var(--radius); flex: 1; text-align: center;">
+              <div style="font-size: 11px; color: var(--c-ink3); margin-bottom: 4px;">주요 관심사</div>
+              <div style="font-size: 16px; font-weight: 700; color: var(--c-ink);">데이터 분석</div>
+              <div style="font-size: 10px; color: var(--c-green); margin-top: 2px;">수리 역량 우수</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-section">
+          <div class="modal-section-title"><i class="ti ti-medal"></i> 획득한 커리어 뱃지</div>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px;">
+            <div style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: var(--c-bg); border-radius: 99px; border: 1px solid var(--c-border);">
+              <span style="font-size: 16px;">💯</span>
+              <span style="font-size: 12px; font-weight: 600;">토익 900 돌파</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: var(--c-bg); border-radius: 99px; border: 1px solid var(--c-border);">
+              <span style="font-size: 16px;">📜</span>
+              <span style="font-size: 12px; font-weight: 600;">한국사 1급</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: var(--c-surface); border-radius: 99px; border: 1px dashed var(--c-border); opacity: 0.6; cursor: pointer;">
+              <span style="font-size: 16px;">➕</span>
+              <span style="font-size: 12px; font-weight: 600; color: var(--c-ink3);">뱃지 추가하기</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-section" style="margin-top: 8px;">
+          <button style="width: 100%; padding: 12px; border-radius: var(--radius-sm); border: none; background: var(--c-ink); color: #fff; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer;">
+            캐릭터 설정 편집
+          </button>
+        </div>
+
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const escHandler = (e) => {
+    if (e.key === 'Escape') {
+      overlay.remove();
+      document.removeEventListener('keydown', escHandler);
+    }
+  };
+  document.addEventListener('keydown', escHandler);
+}
+
+// ─────── AUTH STATE ───────
+function checkLoginStatus() {
+  const user = JSON.parse(localStorage.getItem('careerly_user') || 'null');
+  const authArea = document.getElementById('c-auth-area');
+  const userArea = document.getElementById('c-user-area');
+  const userNameDisplay = document.getElementById('c-user-name-display');
+  const upName = document.querySelector('.up-name');
+  const upAvatar = document.querySelector('.up-avatar');
+
+  if (user) {
+    authArea.style.display = 'none';
+    userArea.style.display = 'flex';
+    const displayName = user.nickname || user.name || user.username;
+    if (userNameDisplay) userNameDisplay.textContent = displayName + '님';
+    if (upName) upName.innerHTML = displayName + ' <span class="up-level">Lv.1</span>';
+    if (upAvatar) upAvatar.textContent = '👤';
+  } else {
+    authArea.style.display = 'flex';
+    userArea.style.display = 'none';
+  }
+}
+
+function handleLogout() {
+  localStorage.removeItem('careerly_user');
+  checkLoginStatus();
+}
+
+checkLoginStatus();
+
+async function loadCareerData() {
+  try {
+    const res = await fetch('/api/career-data');
+    const result = await res.json();
+
+    DATA = result.data;
+
+    console.log('불러온 데이터:', DATA);
+
+    // 기존 화면 렌더 함수 실행
+    // renderDepartments();
+  } catch (err) {
+    console.error('데이터 로드 실패:', err);
+  }
+}
+
+loadCareerData();
+</script>
+</body>
+</html>

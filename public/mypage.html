@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>커리얼리 - 시작하기</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #f7f6f1;
+      --surface:     #ffffff;
+      --border:      rgba(0,0,0,0.12);
+      --text-p:      #1a1a18;
+      --text-s:      #5f5e5a;
+      --text-m:      #9c9a92;
+      --brand-color: #534AB7;
+      --font:        -apple-system, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      font-family: var(--font);
+      padding: 60px 20px;
+      color: var(--text-p);
+    }
+
+    .back-link {
+      display: inline-block;
+      color: var(--brand-color);
+      font-size: 13px;
+      font-weight: 700;
+      text-decoration: none;
+      margin-bottom: 16px;
+    }
+
+    .back-link:hover { text-decoration: underline; }
+
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background: var(--surface);
+      padding: 40px;
+      border-radius: 14px;
+      border: 0.5px solid var(--border);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+    }
+
+    h1 { font-size: 22px; margin-bottom: 8px; }
+
+    p.desc {
+      color: var(--text-s);
+      font-size: 14px;
+      margin-bottom: 30px;
+    }
+
+    .success-box {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      color: #15803d;
+      font-size: 13px;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .error-box {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #dc2626;
+      font-size: 13px;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .section-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin: 24px 0 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--bg);
+      color: var(--brand-color);
+    }
+
+    .form-group { margin-bottom: 18px; }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    input, textarea, select {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      border: 0.5px solid var(--border);
+      font-size: 14px;
+      font-family: var(--font);
+      outline: none;
+      transition: border-color 0.2s;
+      background: #fff;
+    }
+
+    textarea { height: 100px; resize: none; }
+
+    input:focus, textarea:focus { border-color: var(--brand-color); }
+
+    .btn-save {
+      width: 100%;
+      padding: 16px;
+      background: var(--brand-color);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 16px;
+      margin-top: 30px;
+      font-family: var(--font);
+      transition: background 0.2s;
+    }
+
+    .btn-save:hover { background: #3C3489; }
+    .btn-save:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .not-logged-in {
+      display: none;
+      text-align: center;
+      padding: 40px 0;
+    }
+
+    .not-logged-in p {
+      color: var(--text-s);
+      margin-bottom: 16px;
+    }
+
+    .btn-go-login {
+      display: inline-block;
+      padding: 12px 24px;
+      background: var(--brand-color);
+      color: #fff;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+
+  <div style="max-width: 600px; margin: 0 auto;">
+    <a href="Main_web.html" class="back-link">← 홈으로 돌아가기</a>
+  </div>
+
+  <div class="container">
+
+    <!-- 비로그인 상태 -->
+    <div class="not-logged-in" id="not-logged-in">
+      <p>마이페이지는 로그인 후 이용 가능합니다.</p>
+      <a href="login.html" class="btn-go-login">로그인하러 가기</a>
+    </div>
+
+    <!-- 로그인 상태 -->
+    <div id="logged-in-content">
+      <h1>커리얼리 시작하기</h1>
+      <p class="desc">당신의 소중한 경험은 후배들에게 큰 힘이 됩니다. 정보를 입력하고 네트워크에 합류하세요.</p>
+
+      <div class="success-box" id="success-box">정보가 저장되었습니다.</div>
+      <div class="error-box" id="error-box"></div>
+
+      <form id="profile-form">
+
+        <div class="section-title">기본 정보</div>
+        <div class="form-group">
+          <label>닉네임 (서비스 내 표시 이름)</label>
+          <input type="text" id="nickname" placeholder="예: 취업왕탁이" />
+        </div>
+
+        <div class="section-title">학력 및 성적</div>
+        <div class="form-group">
+          <label>대학교 및 전공</label>
+          <input type="text" id="university" placeholder="예: 한국대학교 컴퓨터공학과" />
+        </div>
+        <div class="form-group">
+          <label>학점 (GPA)</label>
+          <input type="text" id="gpa" placeholder="예: 3.8 / 4.5" />
+        </div>
+
+        <div class="section-title">경력 사항</div>
+        <div class="form-group">
+          <label>현재 직장</label>
+          <input type="text" id="currentJob" placeholder="현재 재직 중인 곳 (없으면 '무직' 또는 '준비 중')" />
+        </div>
+        <div class="form-group">
+          <label>이전 경력 (과거 직장들)</label>
+          <textarea id="pastExperience" placeholder="회사명, 직무, 기간 등을 자유롭게 적어주세요."></textarea>
+        </div>
+
+        <div class="section-title">프로젝트 및 역량</div>
+        <div class="form-group">
+          <label>자격증</label>
+          <input type="text" id="certifications" placeholder="예: 정보처리기사, SQLD, 영어(AL)" />
+        </div>
+        <div class="form-group">
+          <label>참여 프로젝트 및 수상 경력</label>
+          <textarea id="projects" placeholder="주요 프로젝트 내용과 성과, 수상 내역을 입력하세요."></textarea>
+        </div>
+        <div class="form-group">
+          <label>인턴십 경험</label>
+          <textarea id="internship" placeholder="인턴 경험이 있다면 회사명과 담당했던 업무 내용을 적어주세요."></textarea>
+        </div>
+
+        <div class="section-title">나만의 취업 팁</div>
+        <div class="form-group">
+          <label>취준생을 위한 조언</label>
+          <textarea id="tips" placeholder="자신만의 공부법, 면접 팁 등 소소한 노하우를 공유해 주세요."></textarea>
+        </div>
+
+        <button type="submit" class="btn-save" id="save-btn">정보 저장하고 시작하기</button>
+      </form>
+    </div>
+
+  </div>
+
+  <script>
+    const user = JSON.parse(localStorage.getItem('careerly_user') || 'null');
+
+    if (!user) {
+      document.getElementById('not-logged-in').style.display = 'block';
+      document.getElementById('logged-in-content').style.display = 'none';
+    } else {
+      // 기존 프로필 로드
+      fetch('/api/profile', { credentials: 'include' })
+        .then(r => r.json())
+        .then(data => {
+          if (data.profile) {
+            const p = data.profile;
+            document.getElementById('nickname').value        = p.nickname        || '';
+            document.getElementById('university').value      = p.university      || '';
+            document.getElementById('gpa').value             = p.gpa             || '';
+            document.getElementById('currentJob').value      = p.currentJob      || '';
+            document.getElementById('pastExperience').value  = p.pastExperience  || '';
+            document.getElementById('certifications').value  = p.certifications  || '';
+            document.getElementById('projects').value        = p.projects        || '';
+            document.getElementById('internship').value      = p.internship      || '';
+            document.getElementById('tips').value            = p.tips            || '';
+          }
+        })
+        .catch(() => {});
+    }
+
+    const form     = document.getElementById('profile-form');
+    const saveBtn  = document.getElementById('save-btn');
+    const successBox = document.getElementById('success-box');
+    const errorBox   = document.getElementById('error-box');
+
+    form && form.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      successBox.style.display = 'none';
+      errorBox.style.display   = 'none';
+      saveBtn.disabled = true;
+      saveBtn.textContent = '저장 중...';
+
+      try {
+        const res = await fetch('/api/profile', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            nickname:       document.getElementById('nickname').value,
+            university:     document.getElementById('university').value,
+            gpa:            document.getElementById('gpa').value,
+            currentJob:     document.getElementById('currentJob').value,
+            pastExperience: document.getElementById('pastExperience').value,
+            certifications: document.getElementById('certifications').value,
+            projects:       document.getElementById('projects').value,
+            internship:     document.getElementById('internship').value,
+            tips:           document.getElementById('tips').value,
+          }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          errorBox.textContent = data.error || '저장에 실패했습니다.';
+          errorBox.style.display = 'block';
+          return;
+        }
+
+        // 닉네임 업데이트 → localStorage 반영
+        const nickname = document.getElementById('nickname').value;
+        const updated = { ...user, nickname: nickname || null };
+        localStorage.setItem('careerly_user', JSON.stringify(updated));
+
+        successBox.style.display = 'block';
+        setTimeout(() => { successBox.style.display = 'none'; }, 3000);
+
+      } catch (err) {
+        errorBox.textContent = '서버 오류가 발생했습니다.';
+        errorBox.style.display = 'block';
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = '정보 저장하고 시작하기';
+      }
+    });
+  </script>
+
+</body>
+</html>
