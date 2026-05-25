@@ -13,3 +13,6 @@ backend/data/profiles.json
 database/*.db
 database/*.sqlite
 database/*.sqlite3
+backend/database/*.db
+backend/database/*.sqlite
+backend/database/*.sqlite3
