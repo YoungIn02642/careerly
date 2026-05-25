@@ -4,5 +4,12 @@ backend/node_modules/
 .env
 backend/.env
 
+data/db.json
+backend/data/db.json
+
 backend/data/users.json
 backend/data/profiles.json
+
+database/*.db
+database/*.sqlite
+database/*.sqlite3
