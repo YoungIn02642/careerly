@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CAREERLY · 대학생 커리어 빌딩 플랫폼</title>
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
+<link rel="stylesheet" href="css/main.css">
+<link rel="stylesheet" href="css/home.css">
+
+<template id="__bundler_thumbnail" data-bg-color="#f1f7f4">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#f1f7f4"/>
+    <!-- soft brand blob -->
+    <circle cx="940" cy="180" r="240" fill="#c7bff5" opacity="0.55"/>
+    <circle cx="240" cy="700" r="180" fill="#ffe1b3" opacity="0.55"/>
+    <!-- CAREERLY wordmark -->
+    <text x="600" y="380" text-anchor="middle"
+          font-family="-apple-system, system-ui, sans-serif"
+          font-size="120" font-weight="800" fill="#534AB7"
+          letter-spacing="-3">CAREERLY</text>
+    <text x="600" y="450" text-anchor="middle"
+          font-family="-apple-system, system-ui, sans-serif"
+          font-size="28" font-weight="500" fill="#5f5e5a"
+          letter-spacing="2">대학생 커리어 빌딩 플랫폼</text>
+    <!-- chart bars accent -->
+    <g transform="translate(500 540)">
+      <rect x="0"   y="60" width="34" height="60" rx="6" fill="#534AB7" opacity="0.9"/>
+      <rect x="50"  y="30" width="34" height="90" rx="6" fill="#534AB7"/>
+      <rect x="100" y="0"  width="34" height="120" rx="6" fill="#16a34a"/>
+      <rect x="150" y="40" width="34" height="80" rx="6" fill="#534AB7" opacity="0.7"/>
+      <rect x="200" y="20" width="34" height="100" rx="6" fill="#534AB7" opacity="0.85"/>
+    </g>
+  </svg>
+</template>
+</head>
+<body class="dir-b">
+
+<!-- ══ NAVBAR ══ -->
+<header class="navbar" id="global-navbar">
+  <span class="logo-area" onclick="navigate('main')">CAREERLY</span>
+  <nav class="nav-links">
+    <span class="nav-link" data-nav="career" onclick="navigate('career')">커리어 로드맵</span>
+    <span class="nav-link" data-nav="dashboard" onclick="openMentoring('dashboard')">CAS</span>
+    <span class="nav-link" data-nav="search" onclick="openMentoring('search')">멘토 찾기</span>
+    <span class="nav-link" data-nav="mentoring" onclick="openMentoring('mentoring')">내 멘토링</span>
+  </nav>
+  <div class="nav-right">
+    <button class="nav-search" onclick="navigate('career')" aria-label="검색"><i class="ti ti-search"></i></button>
+    <div class="noti-wrap">
+      <button class="nav-bell" id="nav-bell" onclick="toggleNoti(event)" aria-label="알림">
+        <i class="ti ti-bell"></i>
+        <span class="noti-dot" id="noti-dot"></span>
+      </button>
+      <div class="noti-panel" id="noti-panel"></div>
+    </div>
+    <div class="nav-auth" id="nav-auth">
+      <button class="btn-nav-login" onclick="navigate('login')">회원가입 / 로그인</button>
+    </div>
+    <div class="nav-user" id="nav-user">
+      <span class="nav-user-name" id="nav-user-name" onclick="navigate('mypage')">홍길동님</span>
+      <button class="btn-nav-logout" onclick="handleLogout()">로그아웃</button>
+    </div>
+    <button class="btn-nav-biz" onclick="navigate('backoffice')">백오피스</button>
+  </div>
+</header>
+
+<!-- ══ MAIN ══ -->
+<div class="page active" id="page-main" data-screen-label="홈">
+  <div class="home">
+
+    <!-- DIR A · centered pill -->
+    <section class="home-pill-wrap" data-dir="a">
+      <div class="home-pill" onclick="openMentoring('dashboard')">
+        <span class="home-pill-ic">🙋</span>
+        <span class="txt">내 스펙은 지금 어느 정도일까? <b>선배 데이터와 비교해 보세요</b></span>
+        <i class="ti ti-chevron-right"></i>
+      </div>
+    </section>
+
+    <!-- DIR B · hero -->
+    <section class="home-hero" data-dir="b">
+      <div class="home-hero-copy">
+        <div class="eyebrow">DATA-DRIVEN CAREER</div>
+        <h1>당신의 커리어를<br><em>데이터</em>로 설계하세요</h1>
+        <p>회원이 직접 입력한 스펙을 학과·직무별로 집계해, 합격자의 학점·자격증·활동 분포를 투명하게 보여줍니다.</p>
+        <div class="home-hero-cta">
+          <button class="btn-primary" onclick="navigate('career')">커리어 로드맵 탐색</button>
+          <button class="btn-outline js-start-free" onclick="startFree()">무료로 시작하기</button>
+        </div>
+      </div>
+      <div class="home-hero-visual acc-a">
+        <div class="hcard">
+          <div class="hcard-head">
+            <span class="hcard-tag">💻 컴퓨터공학 · 백엔드</span>
+            <span class="hcard-n">n = 24</span>
+          </div>
+          <div class="hcard-stats">
+            <div>
+              <div class="hcard-stat-lab">평균 학점</div>
+              <div class="hcard-stat-val">3.82<small>/ 4.5</small></div>
+              <div class="hcard-bar"><i style="width:85%;background:var(--brand)"></i></div>
+            </div>
+            <div>
+              <div class="hcard-stat-lab">TOEIC 평균</div>
+              <div class="hcard-stat-val">895<small>점</small></div>
+              <div class="hcard-bar"><i style="width:90%;background:var(--blue-info)"></i></div>
+            </div>
+          </div>
+          <div class="hcard-list">
+            <div class="hcard-row"><span>정보처리기사</span><b>92%</b></div>
+            <div class="hcard-row"><span>SQLD</span><b>74%</b></div>
+            <div class="hcard-row"><span>인턴십 보유</span><b>71%</b></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DIR C · dark hero -->
+    <section class="home-hero-dark" data-dir="c">
+      <div class="eyebrow on-dark">DATA-DRIVEN CAREER</div>
+      <h1>데이터로 설계하는<br>대학생 커리어</h1>
+      <p>합격한 선배들의 실제 스펙을 학과·직무별 통계로. 막연한 준비 대신, 근거 있는 로드맵을 시작하세요.</p>
+      <div class="home-hero-cta">
+        <button class="btn-on-dark" onclick="navigate('career')">커리어 로드맵 탐색</button>
+        <button class="btn-on-dark-ghost js-start-free" onclick="startFree()">무료로 시작하기</button>
+      </div>
+      <div class="home-dark-stats">
+        <div class="home-dark-stat"><div class="n">8</div><div class="l">커버 학과</div></div>
+        <div class="home-dark-stat"><div class="n">20+</div><div class="l">진출 직무</div></div>
+        <div class="home-dark-stat"><div class="n">100%</div><div class="l">집계 통계 공개</div></div>
+      </div>
+    </section>
+
+    <!-- QUICK LINKS -->
+    <section class="home-quick">
+      <div class="ql acc-a" onclick="openMentoring('search')"><div class="ql-ic"><i class="ti ti-users-group"></i></div><div class="ql-label">멘토 찾기</div></div>
+      <div class="ql acc-b" onclick="navigate('career')"><div class="ql-ic"><i class="ti ti-map-2"></i></div><div class="ql-label">커리어 로드맵</div></div>
+      <div class="ql acc-a" onclick="navigate('mypage')"><div class="ql-ic"><i class="ti ti-file-pencil"></i></div><div class="ql-label">스펙 입력</div></div>
+      <div class="ql acc-b" onclick="openMentoring('mentoring')"><div class="ql-ic"><i class="ti ti-messages"></i></div><div class="ql-label">내 멘토링</div></div>
+      <div class="ql acc-a" onclick="navigate('career')"><div class="ql-ic"><i class="ti ti-chart-bar"></i></div><div class="ql-label">직군별 통계</div></div>
+      <div class="ql acc-b" onclick="openMentoring('dashboard')"><div class="ql-ic"><i class="ti ti-target-arrow"></i></div><div class="ql-label">CAS 점수</div></div>
+    </section>
+
+    <!-- CAROUSEL -->
+    <section class="home-sec">
+      <div class="home-sec-head">
+        <div>
+          <h2>주목할 직무·진출 분야</h2>
+          <div class="sub">선배들이 실제로 진출한 분야의 합격 데이터를 살펴보세요</div>
+        </div>
+        <div class="home-sec-nav">
+          <span class="home-sec-all" onclick="navigate('career')">전체보기</span>
+          <div class="home-arrows">
+            <button class="home-arrow" onclick="railScroll(-1)" aria-label="이전"><i class="ti ti-chevron-left"></i></button>
+            <button class="home-arrow" onclick="railScroll(1)" aria-label="다음"><i class="ti ti-chevron-right"></i></button>
+          </div>
+        </div>
+      </div>
+      <div class="home-rail" id="job-rail">
+        <div class="job-card acc-a" onclick="navigate('career')">
+          <div class="job-top">
+            <span class="job-chip">IT·개발</span>
+            <div class="job-cas"><div class="l">평균 CAS</div><div class="v">88</div></div>
+          </div>
+          <div class="job-name">백엔드 엔지니어</div>
+          <div class="job-companies">카카오 · 네이버 · 삼성전자 등 합격</div>
+          <div class="job-meta">
+            <div class="job-meta-item"><span class="n">24건</span><span class="l">스펙 데이터</span></div>
+            <div class="job-meta-item"><span class="n">3.82</span><span class="l">평균 학점</span></div>
+            <div class="job-meta-item"><span class="n">71%</span><span class="l">인턴 보유</span></div>
+          </div>
+        </div>
+        <div class="job-card acc-b" onclick="navigate('career')">
+          <div class="job-top">
+            <span class="job-chip">금융·데이터</span>
+            <div class="job-cas"><div class="l">평균 CAS</div><div class="v">86</div></div>
+          </div>
+          <div class="job-name">데이터 분석가</div>
+          <div class="job-companies">토스 · 쿠팡 · 신한은행 등 합격</div>
+          <div class="job-meta">
+            <div class="job-meta-item"><span class="n">18건</span><span class="l">스펙 데이터</span></div>
+            <div class="job-meta-item"><span class="n">3.74</span><span class="l">평균 학점</span></div>
+            <div class="job-meta-item"><span class="n">2.1회</span><span class="l">평균 인턴</span></div>
+          </div>
+        </div>
+        <div class="job-card acc-a" onclick="navigate('career')">
+          <div class="job-top">
+            <span class="job-chip">컨설팅</span>
+            <div class="job-cas"><div class="l">평균 CAS</div><div class="v">91</div></div>
+          </div>
+          <div class="job-name">전략 컨설턴트</div>
+          <div class="job-companies">맥킨지 · BCG · 베인 등 합격</div>
+          <div class="job-meta">
+            <div class="job-meta-item"><span class="n">12건</span><span class="l">스펙 데이터</span></div>
+            <div class="job-meta-item"><span class="n">3.91</span><span class="l">평균 학점</span></div>
+            <div class="job-meta-item"><span class="n">2.3회</span><span class="l">공모전 수상</span></div>
+          </div>
+        </div>
+        <div class="job-card acc-b" onclick="navigate('career')">
+          <div class="job-top">
+            <span class="job-chip">마케팅</span>
+            <div class="job-cas"><div class="l">평균 CAS</div><div class="v">82</div></div>
+          </div>
+          <div class="job-name">브랜드 마케터</div>
+          <div class="job-companies">배달의민족 · CJ · 아모레 등 합격</div>
+          <div class="job-meta">
+            <div class="job-meta-item"><span class="n">15건</span><span class="l">스펙 데이터</span></div>
+            <div class="job-meta-item"><span class="n">3.61</span><span class="l">평균 학점</span></div>
+            <div class="job-meta-item"><span class="n">5건</span><span class="l">대외활동</span></div>
+          </div>
+        </div>
+        <div class="job-card acc-a" onclick="navigate('career')">
+          <div class="job-top">
+            <span class="job-chip">IT·개발</span>
+            <div class="job-cas"><div class="l">평균 CAS</div><div class="v">85</div></div>
+          </div>
+          <div class="job-name">프론트엔드 엔지니어</div>
+          <div class="job-companies">라인 · 당근 · 토스 등 합격</div>
+          <div class="job-meta">
+            <div class="job-meta-item"><span class="n">21건</span><span class="l">스펙 데이터</span></div>
+            <div class="job-meta-item"><span class="n">3.70</span><span class="l">평균 학점</span></div>
+            <div class="job-meta-item"><span class="n">68%</span><span class="l">인턴 보유</span></div>
+          </div>
+        </div>
+        <div class="job-card acc-b" onclick="navigate('career')">
+          <div class="job-top">
+            <span class="job-chip">기획·PM</span>
+            <div class="job-cas"><div class="l">평균 CAS</div><div class="v">84</div></div>
+          </div>
+          <div class="job-name">핀테크 PM</div>
+          <div class="job-companies">토스 · 카카오뱅크 · 뱅크샐러드 등</div>
+          <div class="job-meta">
+            <div class="job-meta-item"><span class="n">9건</span><span class="l">스펙 데이터</span></div>
+            <div class="job-meta-item"><span class="n">3.83</span><span class="l">평균 학점</span></div>
+            <div class="job-meta-item"><span class="n">1.8회</span><span class="l">평균 인턴</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ARTICLES -->
+    <section class="home-sec" id="insights-sec">
+      <div class="home-sec-head">
+        <div><h2>커리어 인사이트</h2><div class="sub">데이터로 읽는 취업 준비 이야기</div></div>
+        <span class="home-sec-all" onclick="goInsights()">전체보기</span>
+      </div>
+      <div class="home-articles">
+        <div class="art-card acc-a">
+          <div class="art-cover"><span class="emoji">📜</span></div>
+          <div class="art-body">
+            <span class="art-chip">자격증</span>
+            <div class="art-title">백엔드 취업, 정보처리기사는 정말 필수일까?</div>
+            <div class="art-meta">데이터 인사이트 · 5분</div>
+          </div>
+        </div>
+        <div class="art-card acc-b">
+          <div class="art-cover"><span class="emoji">💼</span></div>
+          <div class="art-body">
+            <span class="art-chip">인턴십</span>
+            <div class="art-title">합격자 71%가 경험한 인턴십, 언제 시작할까</div>
+            <div class="art-meta">데이터 인사이트 · 7분</div>
+          </div>
+        </div>
+        <div class="art-card acc-a">
+          <div class="art-cover"><span class="emoji">🗣️</span></div>
+          <div class="art-body">
+            <span class="art-chip">어학</span>
+            <div class="art-title">TOEIC 900 vs 850, 실제 합격선은 어디일까</div>
+            <div class="art-meta">데이터 인사이트 · 4분</div>
+          </div>
+        </div>
+        <div class="art-card acc-b">
+          <div class="art-cover"><span class="emoji">🏆</span></div>
+          <div class="art-body">
+            <span class="art-chip">활동</span>
+            <div class="art-title">공모전 수상이 CAS 점수에 미치는 영향</div>
+            <div class="art-meta">데이터 인사이트 · 6분</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="home-footer">
+      <span class="fl">CAREERLY</span>
+      <span class="fr">© 2025 CAREERLY · 대학생 커리어 빌딩 플랫폼</span>
+    </footer>
+  </div>
+</div>
+
+<!-- ══ LOGIN ══ -->
+<div class="page" id="page-login">
+  <div class="auth-page">
+    <div class="auth-card" style="max-width:380px">
+      <span class="auth-logo" onclick="navigate('main')">CAREERLY</span>
+      <p class="auth-page-title">로그인</p>
+      <div class="error-box" id="login-error"></div>
+      <div class="form-group">
+        <label>아이디</label>
+        <input type="text" id="login-username" placeholder="아이디를 입력하세요" autocomplete="username" />
+      </div>
+      <div class="form-group">
+        <label>비밀번호</label>
+        <input type="password" id="login-password" placeholder="비밀번호를 입력하세요" autocomplete="current-password" />
+      </div>
+      <button class="btn-submit dark" id="login-btn" onclick="handleLogin()">로그인</button>
+      <div class="footer-links">
+        <span>아직 회원이 아니신가요?</span>
+        <a onclick="navigate('signup')">회원가입</a>
+      </div>
+      <div class="auth-hint">
+        <b>데모 계정</b> · 백오피스 → "데모 데이터 시드" 클릭 후<br>
+        ID: <code>demo_kim</code> / PW: <code>demo1234!</code>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SIGNUP ══ -->
+<div class="page" id="page-signup">
+  <div class="auth-page" style="align-items:flex-start;padding-top:40px">
+    <div class="auth-card auth-card--wide">
+      <span class="auth-logo" onclick="navigate('main')">CAREERLY</span>
+      <p class="auth-page-title">회원가입</p>
+      <p class="auth-page-desc">데이터로 설계하는 커리어, 지금 시작하세요</p>
+      <div class="error-box" id="signup-server-error"></div>
+
+      <!-- 회원 유형 선택 -->
+      <div class="role-pick">
+        <div class="role-pick-label">회원 유형을 선택해주세요</div>
+        <div class="role-cards">
+          <label class="role-card" data-role="mentee">
+            <input type="radio" name="role" value="mentee" checked />
+            <div class="role-card-emoji">🎓</div>
+            <div class="role-card-body">
+              <div class="role-card-name">멘티<span class="role-card-tag">재학생</span></div>
+              <div class="role-card-desc">선배 데이터를 보며 커리어를 설계해요</div>
+            </div>
+            <i class="ti ti-circle-check role-check"></i>
+          </label>
+          <label class="role-card" data-role="mentor">
+            <input type="radio" name="role" value="mentor" />
+            <div class="role-card-emoji">👔</div>
+            <div class="role-card-body">
+              <div class="role-card-name">멘토<span class="role-card-tag">취업한 선배</span></div>
+              <div class="role-card-desc">스펙·취업 경험을 후배에게 공유해요</div>
+            </div>
+            <i class="ti ti-circle-check role-check"></i>
+          </label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>아이디</label>
+        <input type="text" id="su-username" placeholder="영문, 숫자, 밑줄 포함 4~20자" autocomplete="username" />
+        <span class="field-error" id="err-su-username"></span>
+      </div>
+      <div class="form-group">
+        <label>비밀번호</label>
+        <input type="password" id="su-password" placeholder="영문+숫자+특수문자 포함 8~20자" autocomplete="new-password" />
+        <span class="field-error" id="err-su-password"></span>
+        <span class="field-hint">영문, 숫자, 특수문자(!@#$%^&amp;* 등)를 모두 포함해야 합니다.</span>
+      </div>
+      <div class="form-group">
+        <label>비밀번호 확인</label>
+        <input type="password" id="su-password-confirm" placeholder="비밀번호를 다시 입력하세요" autocomplete="new-password" />
+        <span class="field-error" id="err-su-password-confirm"></span>
+      </div>
+      <div class="form-group">
+        <label>이름</label>
+        <input type="text" id="su-name" placeholder="실명을 입력하세요" autocomplete="name" />
+        <span class="field-error" id="err-su-name"></span>
+      </div>
+      <div class="form-group">
+        <label>이메일 주소</label>
+        <input type="email" id="su-email" placeholder="example@email.com" autocomplete="email" />
+        <span class="field-error" id="err-su-email"></span>
+      </div>
+      <button class="btn-submit" id="signup-btn" onclick="handleSignup()">회원가입</button>
+      <div class="footer-links">
+        <span>이미 계정이 있으신가요?</span>
+        <a onclick="navigate('login')">로그인</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MYPAGE — 스펙 입력 ══ -->
+<div class="page" id="page-mypage">
+  <div class="mypage-wrap">
+    <span class="back-link" onclick="navigate('main')">← 홈으로 돌아가기</span>
+    <div class="mypage-card">
+      <div class="not-logged-in" id="mypage-not-logged-in">
+        <p>마이페이지는 로그인 후 이용 가능합니다.</p>
+        <span class="btn-go-login" onclick="navigate('login')">로그인하러 가기</span>
+      </div>
+      <div id="mypage-form-container"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ BACKOFFICE ══ -->
+<div class="page" id="page-backoffice">
+  <div class="bo-wrap"></div>
+</div>
+
+<!-- ══ MENTORING (격리 프레임) ══ -->
+<div class="page" id="page-mentoring">
+  <iframe id="mentoring-frame" class="mentoring-frame" title="CAREERLY 멘토링"></iframe>
+</div>
+
+<!-- ══ CAREER ROADMAP ══ -->
+<div class="career-page" id="page-career">
+  <div class="career-app">
+    <aside class="sidebar">
+      <div class="sidebar-search">
+        <div class="search-wrap">
+          <i class="ti ti-search"></i>
+          <input type="text" placeholder="학과 검색..." oninput="filterDepts(this.value)">
+        </div>
+      </div>
+      <div class="user-profile-card" onclick="navigate('mypage')">
+        <div class="up-avatar" id="career-avatar">👤</div>
+        <div class="up-info">
+          <div class="up-name" id="career-username">게스트 <span class="up-level">Lv.0</span></div>
+          <div class="up-tags"><span class="up-tag">스펙 입력하기</span></div>
+        </div>
+        <i class="ti ti-chevron-right" style="color:var(--c-ink3)"></i>
+      </div>
+
+      <div class="sidebar-section">경상계열</div>
+      <div class="dept-list">
+        <div class="dept-item" data-id="business"><span class="dept-emoji">📊</span><div><div class="dept-label">경영학과</div><div class="dept-cat">Business Administration</div></div></div>
+        <div class="dept-item" data-id="economics"><span class="dept-emoji">📈</span><div><div class="dept-label">경제학과</div><div class="dept-cat">Economics</div></div></div>
+        <div class="dept-item" data-id="accounting"><span class="dept-emoji">🧾</span><div><div class="dept-label">회계학과</div><div class="dept-cat">Accounting</div></div></div>
+      </div>
+      <div class="sidebar-section">이공계열</div>
+      <div class="dept-list">
+        <div class="dept-item" data-id="cs"><span class="dept-emoji">💻</span><div><div class="dept-label">컴퓨터공학과</div><div class="dept-cat">Computer Science</div></div></div>
+        <div class="dept-item" data-id="stat"><span class="dept-emoji">📐</span><div><div class="dept-label">통계학과</div><div class="dept-cat">Statistics</div></div></div>
+      </div>
+      <div class="sidebar-section">사회·인문계열</div>
+      <div class="dept-list">
+        <div class="dept-item" data-id="law"><span class="dept-emoji">⚖️</span><div><div class="dept-label">법학과</div><div class="dept-cat">Law</div></div></div>
+        <div class="dept-item" data-id="psych"><span class="dept-emoji">🧠</span><div><div class="dept-label">심리학과</div><div class="dept-cat">Psychology</div></div></div>
+        <div class="dept-item" data-id="media"><span class="dept-emoji">📱</span><div><div class="dept-label">미디어학과</div><div class="dept-cat">Media Studies</div></div></div>
+      </div>
+
+      <div class="sidebar-foot">
+        <span class="sidebar-foot-link" onclick="navigate('main')">← CAREERLY 홈</span>
+      </div>
+    </aside>
+    <main class="career-main" id="career-main"></main>
+  </div>
+</div>
+
+<!-- ══ MODULES ══ -->
+<script src="js/db.js"></script>
+<script src="js/aggregation.js"></script>
+<script src="js/spec-form.js"></script>
+<script src="js/backoffice.js"></script>
+<script src="js/career.js"></script>
+<script src="js/app.js"></script>
+
+<!-- ══ TWEAKS PANEL ══ -->
+<div id="tweaks-panel">
+  <div class="tw-head"><span class="tw-title">Tweaks</span><button class="tw-close" onclick="closeTweaks()"><i class="ti ti-x"></i></button></div>
+  <div class="tw-group">
+    <div class="tw-label">홈 방향</div>
+    <div class="tw-seg" id="tw-dir">
+      <button data-v="a">원티드형</button>
+      <button data-v="b">히어로형</button>
+      <button data-v="c">다크형</button>
+    </div>
+  </div>
+  <div class="tw-group">
+    <div class="tw-label">액센트</div>
+    <div class="tw-seg" id="tw-acc">
+      <button data-v="purple">보라</button>
+      <button data-v="blue">블루</button>
+      <button data-v="both">보라+블루</button>
+    </div>
+  </div>
+</div>
+<script>
+window.TWEAKS = /*EDITMODE-BEGIN*/{
+  "homeDir": "b",
+  "accent": "both"
+}/*EDITMODE-END*/;
+</script>
+<script src="js/home.js"></script>
+
+</body>
+</html>
