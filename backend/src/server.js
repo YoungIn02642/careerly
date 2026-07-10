@@ -1,4 +1,3 @@
-const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const cors = require('cors');
@@ -7,6 +6,7 @@ const bcrypt = require('bcryptjs');
 const { nanoid } = require('nanoid');
 const { readDb, writeDb } = require('./store');
 const recommendationsRouter = require("./routes/recommendations");
+const careerDataRouter = require("./routes/careerData");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -17,6 +17,7 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, '..', '..', 'frontend')));
+app.use("/api/career-data", careerDataRouter);
 app.use("/api/recommendations", recommendationsRouter);
 
 function publicUser(user) {
@@ -62,25 +63,6 @@ function isValidPassword(password) {
 
 app.get('/api/health', (req, res) => {
   res.json({ ok: true, service: 'careerly-backend' });
-});
-
-app.get('/api/career-data', (req, res) => {
-  const filePath = path.join(__dirname, '..', 'data', 'career-data.json');
-
-  try {
-    const rawData = fs.readFileSync(filePath, 'utf-8');
-    const careerData = JSON.parse(rawData);
-
-    res.json({
-      success: true,
-      data: careerData
-    });
-  } catch (err) {
-    res.status(500).json({
-      success: false,
-      error: '커리어 데이터를 불러오지 못했습니다.'
-    });
-  }
 });
 
 app.post('/api/auth/signup', async (req, res) => {
