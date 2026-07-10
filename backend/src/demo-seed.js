@@ -7,6 +7,116 @@
    해당 NCS 중분류로 집계된다.
    ════════════════════════════════════════════════════════════ */
 
+// ── 무작위 시드 생성기 ───────────────────────────────────────
+//  백오피스의 '무작위 N명 추가' 에서 사용. dept/field/job 은 ncs.js 의
+//  legacy 매핑에 맞는 조합만 쓴다(그래야 NCS 커리어 로드맵에 집계된다).
+//  각 원형(archetype)은 학과·직무와 어울리는 자격증 풀·어학 성향을 가진다.
+
+const ARCHETYPES = [
+  { dept: 'cs', field: 'service', jobs: ['backend', 'frontend', 'mobile', 'ai'],
+    certs: ['정보처리기사', 'SQLD', 'ADsP', 'AWS SAA', 'CKA', '정보보안기사'],
+    gpa: [3.2, 4.3], toeic: [780, 970], names: '개발' },
+  { dept: 'business', field: 'finance', jobs: ['ib', 'bank', 'am'],
+    certs: ['금융투자분석사', '투자자산운용사', 'CFA Level 1', '재무위험관리사(FRM)', '은행FP(AFPK)'],
+    gpa: [3.3, 4.2], toeic: [820, 980], names: '금융' },
+  { dept: 'business', field: 'consulting', jobs: ['strategy', 'operation'],
+    certs: ['재경관리사', 'ADsP', '컴퓨터활용능력 1급'],
+    gpa: [3.6, 4.4], toeic: [880, 990], names: '컨설팅' },
+  { dept: 'business', field: 'marketing', jobs: ['brand', 'digital', 'perf'],
+    certs: ['구글애널리틱스', 'ADsP', 'GTQ 1급'],
+    gpa: [3.0, 4.1], toeic: [750, 950], names: '마케팅' },
+  { dept: 'business', field: 'corp', jobs: ['plan', 'hr', 'finance'],
+    certs: ['경영지도사', '컴퓨터활용능력 1급', '재경관리사'],
+    gpa: [3.2, 4.2], toeic: [800, 960], names: '경영' },
+  { dept: 'economics', field: 'finance', jobs: ['research', 'bank'],
+    certs: ['CFA Level 1', '투자자산운용사', '재경관리사'],
+    gpa: [3.4, 4.3], toeic: [830, 980], names: '경제' },
+  { dept: 'accounting', field: 'audit', jobs: ['cpa', 'tax'],
+    certs: ['CPA', '재경관리사', 'TAT'],
+    gpa: [3.5, 4.4], toeic: [780, 940], names: '회계' },
+  { dept: 'stat', field: 'data', jobs: ['analyst', 'scientist'],
+    certs: ['ADsP', 'SQLD', '데이터분석 준전문가'],
+    gpa: [3.3, 4.3], toeic: [800, 970], names: '통계' },
+  { dept: 'psych', field: 'hr', jobs: ['hr', 'recruit'],
+    certs: ['공인노무사', '경영지도사(인적자원)'],
+    gpa: [3.2, 4.1], toeic: [770, 930], names: '인사' },
+  { dept: 'psych', field: 'clinical', jobs: ['counsel'],
+    certs: ['임상심리사', '청소년 상담사'],
+    gpa: [3.4, 4.2], toeic: [720, 900], names: '상담' },
+  { dept: 'law', field: 'lawfirm', jobs: ['paralegal', 'legaltech'],
+    certs: ['공인노무사', '법무사'],
+    gpa: [3.5, 4.4], toeic: [820, 970], names: '법무' },
+  { dept: 'media', field: 'marketing', jobs: ['brand', 'content'],
+    certs: ['GTQ 1급', 'ADsP', '구글애널리틱스'],
+    gpa: [3.0, 4.0], toeic: [760, 940], names: '미디어' },
+  { dept: 'media', field: 'media', jobs: ['pd', 'editor'],
+    certs: ['GTQ 1급', '웹디자인기능사'],
+    gpa: [2.9, 3.9], toeic: [730, 910], names: '방송' },
+];
+
+const OPIC_POOL = ['IM2', 'IM3', 'IH', 'IH', 'AL'];
+const TS_POOL   = ['IM', 'IM', 'IH', 'AL'];
+const SURNAMES  = '김이박최정강조윤장임한오서신권황안송류전홍고문양손배白'.replace('白','백').split('');
+const GIVEN     = ['민준','서연','도윤','하은','지호','수아','예준','지우','시우','하윤','주원','서준','지아','유진','건우','채원','현우','다은','준서','예은','윤서','지훈','서现','민서','재윤'].map(s=>s.replace('現','현'));
+
+function rint(lo, hi) { return Math.floor(Math.random() * (hi - lo + 1)) + lo; }
+function pick(arr)    { return arr[Math.floor(Math.random() * arr.length)]; }
+function chance(p)    { return Math.random() < p; }
+function sampleN(arr, n) {
+  const a = [...arr];
+  const out = [];
+  while (out.length < n && a.length) out.push(a.splice(rint(0, a.length - 1), 1)[0]);
+  return out;
+}
+
+/* seq: 아이디 유일성을 위한 일련번호 */
+function makeRandomEntry(seq) {
+  const a = pick(ARCHETYPES);
+  const gpa = Math.round((a.gpa[0] + Math.random() * (a.gpa[1] - a.gpa[0])) * 100) / 100;
+
+  // 어학: 대부분 토익, 일부는 오픽/토스도 함께
+  const scores = { toeic: rint(a.toeic[0], a.toeic[1]) - (rint(a.toeic[0], a.toeic[1]) % 5) };
+  if (chance(0.5)) scores.opic = pick(OPIC_POOL);
+  if (chance(0.25)) scores.toeicSpeaking = pick(TS_POOL);
+
+  // 정성 스펙: 항목별로 그럴듯한 확률
+  const qual = {
+    extracurricular: chance(0.75), projects: chance(0.7), internship: chance(0.55),
+    oncampus: chance(0.6), coreCourses: chance(0.85), langStudy: chance(0.2),
+    exchange: chance(0.18), gradSchool: chance(0.1),
+  };
+
+  const name = pick(SURNAMES) + pick(GIVEN);
+  return {
+    u: {
+      username: `rand_${Date.now().toString(36)}_${seq}`,
+      password: 'demo1234!',
+      name,
+      email: `rand_${Date.now().toString(36)}_${seq}@careerly.demo`,
+      role: chance(0.8) ? 'mentor' : 'mentee',
+    },
+    s: {
+      dept: a.dept, field: a.field, job: pick(a.jobs),
+      gpa, gpaMax: 4.5,
+      certs: sampleN(a.certs, rint(0, Math.min(3, a.certs.length))),
+      scores,
+      qual,
+      detail: {},
+    },
+  };
+}
+
+/* 멘티(스펙 없음)는 s:null 로 만든다 */
+function generateRandom(count) {
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    const e = makeRandomEntry(i);
+    if (e.u.role === 'mentee') e.s = null;   // 멘티는 스펙 미입력
+    out.push(e);
+  }
+  return out;
+}
+
 const DEMO_SEED = [
   { u: { username: 'demo_kim', password: 'demo1234!', name: '김민준', email: 'kim@careerly.demo', role: 'mentor' },
     s: { dept: 'cs', field: 'service', job: 'backend',
@@ -62,4 +172,4 @@ const DEMO_SEED = [
   { u: { username: 'mentee_c', password: 'demo1234!', name: '임시우', email: 'c@careerly.demo', role: 'mentee' }, s: null },
 ];
 
-module.exports = { DEMO_SEED };
+module.exports = { DEMO_SEED, generateRandom };

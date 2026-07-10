@@ -5,7 +5,7 @@ const cookieParser = require('cookie-parser');
 const bcrypt = require('bcryptjs');
 const { nanoid } = require('nanoid');
 const { readDb, writeDb } = require('./store');
-const { DEMO_SEED } = require('./demo-seed');
+const { DEMO_SEED, generateRandom } = require('./demo-seed');
 const recommendationsRouter = require("./routes/recommendations");
 const careerDataRouter = require("./routes/careerData");
 
@@ -314,22 +314,44 @@ app.post('/api/admin/seed', devOnly, async (req, res) => {
   const db = readDb();
   if (!db.userSpecs) db.userSpecs = [];
 
+  // 고정 데모는 계정마다 비밀번호가 다를 수 있어 개별 해싱한다
   for (const { u, s } of DEMO_SEED) {
     if (db.users.some(x => x.username === u.username)) continue;
-    const user = {
-      id: nanoid(),
-      username: u.username,
-      passwordHash: await bcrypt.hash(u.password, 10),
-      name: u.name, email: u.email, role: u.role,
-      nickname: null, createdAt: new Date().toISOString(),
-    };
-    db.users.push(user);
-    db.profiles.push({ userId: user.id, nickname: null });
-    if (s) db.userSpecs.push({ userId: user.id, ...s, createdAt: new Date().toISOString() });
+    await insertSeedUser(db, u, s, await bcrypt.hash(u.password, 10));
   }
   writeDb(db);
   res.json({ message: '데모 데이터가 추가되었습니다.' });
 });
+
+// 무작위 N명 추가 — 커리어 로드맵·CAS 집계를 채우기 위한 대량 시드
+app.post('/api/admin/seed-random', devOnly, async (req, res) => {
+  const count = Math.min(Math.max(parseInt(req.body?.count, 10) || 50, 1), 200);
+  const db = readDb();
+  if (!db.userSpecs) db.userSpecs = [];
+
+  // 무작위 계정은 비밀번호가 모두 같으므로 해시를 한 번만 계산해 재사용한다
+  const sharedHash = await bcrypt.hash('demo1234!', 10);
+  let added = 0;
+  for (const { u, s } of generateRandom(count)) {
+    if (db.users.some(x => x.username === u.username || x.email === u.email)) continue;
+    insertSeedUser(db, u, s, sharedHash);
+    added++;
+  }
+  writeDb(db);
+  res.json({ message: `무작위 회원 ${added}명이 추가되었습니다.`, added });
+});
+
+function insertSeedUser(db, u, s, passwordHash) {
+  const user = {
+    id: nanoid(),
+    username: u.username, passwordHash,
+    name: u.name, email: u.email, role: u.role,
+    nickname: null, createdAt: new Date().toISOString(),
+  };
+  db.users.push(user);
+  db.profiles.push({ userId: user.id, nickname: null });
+  if (s) db.userSpecs.push({ userId: user.id, ...s, createdAt: new Date().toISOString() });
+}
 
 app.get('/api/departments', (req, res) => {
   const db = readDb();

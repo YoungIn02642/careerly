@@ -112,6 +112,11 @@ window.DB = (() => {
 
   // ── 백오피스 (개발 전용 — 운영에서는 서버가 404 로 막는다) ──
   async function seedDemo() { await api('POST', '/api/admin/seed');  await refreshSpecs(); await refreshUsers(); }
+  async function seedRandom(count = 50) {
+    const r = await api('POST', '/api/admin/seed-random', { count });
+    await refreshSpecs(); await refreshUsers();
+    return r;
+  }
   async function clearAll() { await api('POST', '/api/admin/clear'); _me = null; _mySpec = null; await refreshSpecs(); await refreshUsers(); }
   async function deleteUser(username) {
     await api('DELETE', `/api/admin/users/${encodeURIComponent(username)}`);
@@ -123,6 +128,6 @@ window.DB = (() => {
     hydrate, refreshSpecs, refreshUsers,
     currentUser, getAllSpecs, getSpec, getUsers, countByRole, stats,
     createUser, login, logout, updateUser, upsertSpec,
-    seedDemo, clearAll, deleteUser,
+    seedDemo, seedRandom, clearAll, deleteUser,
   };
 })();
