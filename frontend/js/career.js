@@ -108,7 +108,7 @@ window.CareerPage = (() => {
         ${major.middles.map(m => `
           <div class="field-card ${currentMiddle===m.id?'active':''}" onclick="CareerPage.selectMiddle('${m.id}')">
             <div class="fc-name">${esc(m.name)}</div>
-            <div class="fc-desc">${m.smalls.length}개 소분류 · ${esc(m.smalls.join(' · '))}</div>
+            <div class="fc-desc">${esc(m.smalls.join(' · '))}</div>
           </div>`).join('')}
       </div>`;
   }
