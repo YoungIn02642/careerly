@@ -260,7 +260,7 @@ window.SpecForm = (() => {
       .map(i => i.dataset.cert);
   }
 
-  function handleSave(user) {
+  async function handleSave(user) {
     const success = document.getElementById('sf-success');
     const error   = document.getElementById('sf-error');
     success.style.display = error.style.display = 'none';
@@ -306,8 +306,17 @@ window.SpecForm = (() => {
       if (i.value.trim()) detail[i.dataset.detail] = i.value.trim();
     });
 
-    DB.updateUser(user.username, { nickname });
-    DB.upsertSpec(user.username, { dept, field, job, gpa, gpaMax, certs, scores, qual, detail });
+    const saveBtn = document.getElementById('sf-save');
+    saveBtn.disabled = true;
+    try {
+      await DB.updateUser({ nickname });
+      await DB.upsertSpec({ dept, field, job, gpa, gpaMax, certs, scores, qual, detail });
+    } catch (e) {
+      alert('저장에 실패했습니다. ' + e.message);
+      return;
+    } finally {
+      saveBtn.disabled = false;
+    }
 
     success.style.display = 'block';
     setTimeout(() => { success.style.display = 'none'; }, 2500);

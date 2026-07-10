@@ -118,21 +118,28 @@ function updateNavActive(key) {
 }
 window.updateNavActive = updateNavActive;
 
-function handleLogout() {
-  DB.logout();
+async function handleLogout() {
+  try { await DB.logout(); }
+  catch (e) { console.error('로그아웃 실패', e); }
   updateNavAuth();
   navigate('main');
 }
 window.handleLogout = handleLogout;
 
 // ── Boot ─────────────────────────────────────────────────────
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
   CareerPage.init();
   Mentoring.init();
   const hash = window.location.hash.replace('#', '') || 'main';
   const target = PAGES.includes(hash) ? hash : 'main';
   document.getElementById('page-career').style.display = 'none';
   history.replaceState({ page: target }, '', '#' + target);
+
+  // 서버 상태(로그인 여부·스펙)를 먼저 받아야 첫 화면이 올바르게 그려진다.
+  // 실패해도 게스트 상태로 화면은 띄운다.
+  try { await DB.hydrate(); }
+  catch (e) { console.error('서버 상태를 불러오지 못했습니다.', e); }
+
   showPage(target);
   updateNavAuth();
 });
@@ -140,7 +147,7 @@ window.addEventListener('DOMContentLoaded', () => {
 // ════════════════════════════════════════════════════════════
 //   LOGIN
 // ════════════════════════════════════════════════════════════
-function handleLogin() {
+async function handleLogin() {
   const errorBox = document.getElementById('login-error');
   const username = document.getElementById('login-username').value.trim();
   const password = document.getElementById('login-password').value;
@@ -152,8 +159,7 @@ function handleLogin() {
     return;
   }
   try {
-    const user = DB.authenticate(username, password);
-    DB.login(user);
+    await DB.login(username, password);
     navigate('main');
   } catch (e) {
     errorBox.textContent = e.message;
@@ -215,13 +221,13 @@ function validateSignup() {
   return valid;
 }
 
-function handleSignup() {
+async function handleSignup() {
   const serverError = document.getElementById('signup-server-error');
   serverError.style.display = 'none';
   if (!validateSignup()) return;
   const role = document.querySelector('input[name="role"]:checked')?.value;
   try {
-    DB.createUser({
+    await DB.createUser({
       username: document.getElementById('su-username').value.trim(),
       password: document.getElementById('su-password').value,
       name:     document.getElementById('su-name').value.trim(),
@@ -252,12 +258,13 @@ function initMypage() {
 //   MAIN — KPI counters
 // ════════════════════════════════════════════════════════════
 function updateMainStats() {
-  const users = DB.getUsers();
+  // 회원 목록은 관리자 전용이므로 총계는 /api/stats 에서 받은 값을 쓴다.
+  const { userCount } = DB.stats();
   const specs = DB.getAllSpecs();
   const depts = new Set(specs.map(s => s.dept).filter(Boolean));
   const fields = new Set(specs.map(s => s.dept + '/' + s.field).filter(s => !s.endsWith('/null')));
   document.getElementById('stats-bar').innerHTML = `
-    <div class="stat-item"><div class="stat-num">${users.length}</div><div class="stat-label">전체 회원</div></div>
+    <div class="stat-item"><div class="stat-num">${userCount}</div><div class="stat-label">전체 회원</div></div>
     <div class="stat-item"><div class="stat-num">${specs.length}</div><div class="stat-label">스펙 입력 데이터</div></div>
     <div class="stat-item"><div class="stat-num">${depts.size}</div><div class="stat-label">커버 학과 수</div></div>
     <div class="stat-item"><div class="stat-num">${fields.size}</div><div class="stat-label">진출 분야 데이터</div></div>
