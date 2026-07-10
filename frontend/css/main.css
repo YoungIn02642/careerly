@@ -108,6 +108,79 @@ code { font-family: var(--font-mono); background: var(--c-bg); padding: 1px 6px;
 }
 .nav-search:hover { background: var(--bg); }
 
+/* ── 더보기(햄버거) + 우측 슬라이드 드로어 ─────────────────
+   데스크톱에서는 숨김. 900px 이하에서만 .nav-links 대신 노출된다. */
+.nav-burger {
+  display: none;
+  width: 38px; height: 38px; border-radius: 9999px;
+  border: 1px solid var(--border); background: var(--canvas);
+  align-items: center; justify-content: center;
+  cursor: pointer; color: var(--ink); font-size: 21px;
+  transition: background 0.15s;
+}
+.nav-burger:hover { background: var(--bg); }
+
+.nav-drawer-overlay {
+  position: fixed; inset: 0; z-index: 1100;
+  background: rgba(8, 8, 8, 0.45);
+  opacity: 0; visibility: hidden;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
+}
+.nav-drawer-overlay.open { opacity: 1; visibility: visible; }
+
+.nav-drawer {
+  position: fixed; top: 0; right: 0; z-index: 1101;
+  width: min(320px, 84vw); height: 100dvh;
+  background: var(--canvas);
+  border-left: 1px solid var(--border);
+  box-shadow: -8px 0 32px rgba(8, 8, 8, 0.12);
+  display: flex; flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
+  visibility: hidden;
+}
+.nav-drawer.open { transform: translateX(0); visibility: visible; }
+
+.nav-drawer-head {
+  display: flex; align-items: center; gap: 8px;
+  min-height: 64px; padding: 12px 12px 12px 20px;
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.drawer-auth, .drawer-user {
+  display: flex; align-items: center; gap: 8px;
+  min-width: 0; margin-right: auto;
+}
+.drawer-login {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px; border: none; background: transparent; cursor: pointer;
+  font-family: var(--font); font-size: 16px; font-weight: 700; color: var(--ink);
+  min-width: 0;
+}
+.drawer-login > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drawer-login > .ti-user-circle { font-size: 22px; flex-shrink: 0; }
+.drawer-login-arrow { font-size: 17px; color: var(--text-m); flex-shrink: 0; }
+.drawer-login:hover { color: var(--brand); }
+.drawer-user { display: none; }   /* updateNavAuth() 가 로그인 시 flex 로 전환 */
+.drawer-user .btn-nav-logout { flex-shrink: 0; }
+.nav-drawer-close {
+  width: 40px; height: 40px; border: none; border-radius: 9999px;
+  background: transparent; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--ink); font-size: 22px; transition: background 0.15s;
+}
+.nav-drawer-close:hover { background: var(--bg); }
+
+.nav-drawer-links { display: flex; flex-direction: column; padding: 12px 0; overflow-y: auto; }
+.nav-drawer-links .nav-link {
+  padding: 16px 24px; font-size: 17px; font-weight: 700;
+  transition: background 0.15s, color 0.15s;
+}
+.nav-drawer-links .nav-link:hover { background: var(--bg); }
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-drawer, .nav-drawer-overlay { transition: none; }
+}
+
 /* notifications */
 .noti-wrap { position: relative; }
 .nav-bell {
@@ -754,12 +827,15 @@ input.input-error { border-color: var(--c-red); }
 .btn-cancel:hover { background: var(--bg); }
 
 /* ── CAREER PAGE ────────────────────────────────────────── */
+/* 사이드바와 본문이 각자 스크롤되도록, 페이지 높이를 뷰포트에 고정한다.
+   min-height:0 이 없으면 flex 아이템의 기본값 min-height:auto 때문에
+   콘텐츠 높이만큼 늘어나 body 가 대신 스크롤된다. */
 .career-page {
-  flex: 1; display: none; flex-direction: column; overflow: hidden;
-  height: calc(100vh - 64px);
+  flex: none; display: none; flex-direction: column; overflow: hidden;
+  height: calc(100dvh - 64px); min-height: 0;
 }
 .career-page.active { display: flex; }
-.career-app { display: flex; height: calc(100vh - 64px); overflow: hidden; flex: 1; }
+.career-app { display: flex; overflow: hidden; flex: 1; min-height: 0; }
 
 /* SIDEBAR */
 .sidebar {
@@ -826,17 +902,20 @@ input.input-error { border-color: var(--c-red); }
 .dept-label { font-size: 13px; font-weight: 500; color: var(--c-ink); }
 .dept-cat { font-size: 11px; color: var(--c-ink3); margin-top: 1px; }
 
-.sidebar-foot {
-  margin-top: auto; padding: 14px 20px;
-  border-top: 1px solid var(--c-border);
+/* NCS 24개 대분류 — 항목이 많아 목록만 따로 스크롤시킨다 */
+#ncs-list { flex: 1; min-height: 0; overflow-y: auto; }
+.ncs-num {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+  color: var(--c-ink3); width: 18px; flex-shrink: 0;
 }
-.sidebar-foot-link {
-  font-size: 12px; color: var(--c-ink3); cursor: pointer;
+.dept-item.active .ncs-num { color: rgba(255,255,255,0.6); }
+.sidebar-empty {
+  display: none; padding: 20px 16px; text-align: center;
+  font-size: 12px; color: var(--c-ink3);
 }
-.sidebar-foot-link:hover { color: var(--brand); }
 
 /* CAREER MAIN */
-.career-main { flex: 1; overflow-y: auto; display: flex; flex-direction: column; background: var(--bg); }
+.career-main { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; background: var(--bg); }
 .topbar {
   background: var(--c-surface); border-bottom: 1px solid var(--c-border);
   padding: 14px 28px; display: flex; align-items: center; gap: 0; flex-shrink: 0;
@@ -880,8 +959,48 @@ input.input-error { border-color: var(--c-red); }
   text-transform: none; letter-spacing: 0;
 }
 
+/* ── NCS 대분류 히어로 ──────────────────────────────────── */
+.ncs-hero {
+  display: flex; align-items: flex-start; gap: 16px;
+  background: var(--c-surface); border: 1px solid var(--c-border);
+  border-radius: var(--radius); padding: 20px; margin-bottom: 28px;
+  box-shadow: var(--shadow);
+}
+.ncs-hero-icon {
+  width: 52px; height: 52px; flex-shrink: 0; border-radius: var(--radius-sm);
+  background: var(--c-bg); display: flex; align-items: center;
+  justify-content: center; font-size: 26px;
+}
+.ncs-hero-body { min-width: 0; }
+.ncs-hero-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.ncs-hero-top h2 { font-size: 20px; font-weight: 800; letter-spacing: -0.4px; color: var(--c-ink); }
+.ncs-hero-badge {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+  padding: 3px 9px; border-radius: 99px;
+  background: var(--brand-soft); color: var(--brand);
+}
+.ncs-hero-body p { font-size: 13px; color: var(--c-ink2); line-height: 1.6; }
+
+/* ── STEP 02 · 관련 전공 / 소분류 ──────────────────────── */
+.roadmap-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px; margin-bottom: 28px;
+}
+.roadmap-card {
+  background: var(--c-surface); border: 1px solid var(--c-border);
+  border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow);
+}
+.roadmap-card-title { font-size: 13px; font-weight: 700; color: var(--c-ink); margin-bottom: 12px; }
+.roadmap-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font-size: 12px; font-weight: 600; padding: 7px 12px; border-radius: 99px;
+  background: var(--c-bg); color: var(--c-ink2); border: 1px solid var(--c-border);
+}
+.chip--small { background: var(--brand-soft); color: var(--brand); border-color: transparent; }
+.chip--empty { color: var(--c-ink3); font-weight: 500; }
+
 .fields-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 10px; margin-bottom: 28px;
 }
 .field-card {
@@ -895,7 +1014,12 @@ input.input-error { border-color: var(--c-red); }
 .field-card.active .fc-desc { color: rgba(255,255,255,0.55); }
 .fc-icon { font-size: 22px; margin-bottom: 8px; }
 .fc-name { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
-.fc-desc { font-size: 11px; color: var(--c-ink3); }
+/* 소분류를 이어 붙인 문구가 길어 카드 높이가 들쭉날쭉해지는 것을 막는다 */
+.fc-desc {
+  font-size: 11px; color: var(--c-ink3); line-height: 1.5;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 
 .jobs-row { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
 .job-chip {
@@ -1144,9 +1268,13 @@ input.input-error { border-color: var(--c-red); }
 .bo-bar-n { font-size: 11px; color: var(--text-m); text-align: right; font-family: var(--font-mono); }
 
 /* ── Responsive ──────────────────────────────────────────── */
+/* 드로어가 열려 있는 동안 뒤 페이지 스크롤 잠금 */
+body.nav-drawer-open { overflow: hidden; }
+
 @media (max-width: 900px) {
   .navbar { padding: 0 20px; gap: 12px; }
   .nav-links { display: none; }
+  .nav-burger { display: flex; }
   .features-grid { grid-template-columns: 1fr; }
   .stats-bar { gap: 30px; padding: 24px 20px; }
   .hero { padding: 60px 24px 80px; }
@@ -1171,4 +1299,3 @@ input.input-error { border-color: var(--c-red); }
 /* ── MENTORING FRAME ────────────────────────────────────── */
 #page-mentoring { padding: 0; }
 #page-mentoring.active { display: block; }
-.mentoring-frame { width: 100%; height: calc(100vh - 64px); border: 0; display: block; }

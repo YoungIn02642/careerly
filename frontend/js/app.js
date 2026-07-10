@@ -1,7 +1,16 @@
 // ════════════════════════════════════════════════════════════
 //  CAREERLY — App Bootstrap (라우터 + 인증)
 // ════════════════════════════════════════════════════════════
-const PAGES = ['main', 'login', 'signup', 'mypage', 'career', 'backoffice', 'mentoring'];
+const PAGES = [
+  'main', 'login', 'signup', 'mypage', 'career', 'backoffice',
+  'dashboard', 'search', 'profile', 'mentoring',   // ← 구 mentoring.html
+];
+
+/* navbar 에서 밑줄로 강조할 페이지 (data-nav 값과 일치) */
+const NAV_HIGHLIGHT = ['career', 'dashboard', 'search', 'mentoring'];
+
+/* 멘토링 계열 화면 — mentoring.js 가 렌더를 담당 */
+const MENTORING_PAGES = ['dashboard', 'search', 'profile', 'mentoring'];
 
 function showPage(page) {
   PAGES.forEach(p => {
@@ -16,22 +25,56 @@ function showPage(page) {
     }
   });
   document.getElementById('global-navbar').style.display = 'flex';
-  if (page !== 'mentoring') updateNavActive(page === 'career' ? 'career' : '');
+  // 멘토 프로필은 "멘토 찾기"의 하위 화면이므로 같은 메뉴를 강조한다.
+  const navKey = page === 'profile' ? 'search' : page;
+  updateNavActive(NAV_HIGHLIGHT.includes(navKey) ? navKey : '');
 
   if (page === 'mypage')     initMypage();
   if (page === 'career')     { CareerPage.refreshUser(); CareerPage.render(); }
   if (page === 'backoffice') Backoffice.render(document.querySelector('#page-backoffice .bo-wrap'));
   if (page === 'main')       { if (window.renderHome) renderHome(); }
-  if (page === 'mentoring')  loadMentoringFrame();
+  if (MENTORING_PAGES.includes(page)) Mentoring.onEnter(page);
 
+  if (page !== 'main') window.scrollTo({ top: 0 });
   updateNavAuth();
 }
 
 function navigate(page) {
+  closeNavDrawer();
   history.pushState({ page }, '', '#' + page);
   showPage(page);
 }
 window.navigate = navigate;
+
+// ── 더보기 드로어 (좁은 화면에서 nav-links 를 대체) ───────────
+function setNavDrawer(open) {
+  const drawer  = document.getElementById('nav-drawer');
+  const overlay = document.getElementById('nav-drawer-overlay');
+  const burger  = document.getElementById('nav-burger');
+  if (!drawer) return;
+  drawer.classList.toggle('open', open);
+  overlay.classList.toggle('open', open);
+  document.body.classList.toggle('nav-drawer-open', open);
+  drawer.setAttribute('aria-hidden', String(!open));
+  burger.setAttribute('aria-expanded', String(open));
+  burger.setAttribute('aria-label', open ? '메뉴 닫기' : '메뉴 열기');
+}
+function openNavDrawer()   { setNavDrawer(true); }
+function closeNavDrawer()  { setNavDrawer(false); }
+function toggleNavDrawer() {
+  setNavDrawer(!document.getElementById('nav-drawer').classList.contains('open'));
+}
+window.openNavDrawer   = openNavDrawer;
+window.closeNavDrawer  = closeNavDrawer;
+window.toggleNavDrawer = toggleNavDrawer;
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeNavDrawer();
+});
+// 데스크톱 폭으로 넓히면 드로어가 숨겨지므로 상태도 함께 초기화한다.
+window.addEventListener('resize', () => {
+  if (window.innerWidth > 900) closeNavDrawer();
+});
 
 window.addEventListener('popstate', e => {
   const page = (e.state && PAGES.includes(e.state.page))
@@ -46,13 +89,23 @@ function updateNavAuth() {
   const navAuth = document.getElementById('nav-auth');
   const navUser = document.getElementById('nav-user');
   const navName = document.getElementById('nav-user-name');
+  // 드로어 헤더도 같은 상태를 따라간다.
+  const drawerAuth = document.getElementById('drawer-auth');
+  const drawerUser = document.getElementById('drawer-user');
+  const drawerName = document.getElementById('drawer-user-name');
   if (user) {
+    const label = (user.nickname || user.name || user.username) + '님';
     navAuth.style.display = 'none';
     navUser.style.display = 'flex';
-    navName.textContent = (user.nickname || user.name || user.username) + '님';
+    navName.textContent = label;
+    drawerAuth.style.display = 'none';
+    drawerUser.style.display = 'flex';
+    drawerName.textContent = label;
   } else {
     navAuth.style.display = 'flex';
     navUser.style.display = 'none';
+    drawerAuth.style.display = 'flex';
+    drawerUser.style.display = 'none';
   }
 }
 window.updateNavAuth = updateNavAuth;
@@ -75,6 +128,7 @@ window.handleLogout = handleLogout;
 // ── Boot ─────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
   CareerPage.init();
+  Mentoring.init();
   const hash = window.location.hash.replace('#', '') || 'main';
   const target = PAGES.includes(hash) ? hash : 'main';
   document.getElementById('page-career').style.display = 'none';
@@ -251,20 +305,18 @@ function updateMainStats() {
   `;
 }
 
-// ════════════════════════════════════════════════════════════
-//   MENTORING (격리 프레임 — 최초 진입 시 1회 로드)
-// ════════════════════════════════════════════════════════════
-function loadMentoringFrame() {
-  const frame = document.getElementById('mentoring-frame');
-  if (frame && !frame.getAttribute('src')) {
-    frame.setAttribute('src', 'mentoring.html');
-  }
-}
-
-// ── 사이드바 학과 검색 (career page) ────────────────────────
-function filterDepts(q) {
-  document.querySelectorAll('.dept-item').forEach(el => {
-    el.style.display = el.querySelector('.dept-label').textContent.includes(q) ? '' : 'none';
+// ── 사이드바 NCS 직업 분류 검색 (career page) ───────────────
+function filterMajors(q) {
+  const query = q.trim();
+  let shown = 0;
+  document.querySelectorAll('#ncs-list .ncs-item').forEach(el => {
+    // 분류명("금융·보험")과 번호("03") 어느 쪽으로도 찾을 수 있게 한다.
+    const name = el.querySelector('.dept-label').textContent;
+    const num  = el.querySelector('.ncs-num').textContent;
+    const hit  = !query || name.includes(query) || num.includes(query);
+    el.style.display = hit ? '' : 'none';
+    if (hit) shown++;
   });
+  document.getElementById('ncs-list-empty').style.display = shown ? 'none' : 'block';
 }
-window.filterDepts = filterDepts;
+window.filterMajors = filterMajors;

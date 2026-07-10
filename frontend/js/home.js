@@ -2,13 +2,8 @@
    CAREERLY · Home interactions + Tweaks (Wanted-style landing)
    ════════════════════════════════════════════════════════════ */
 
-/* ── quick-link → mentoring sub-page (deep link via hash) ──── */
-function openMentoring(sub) {
-  const frame = document.getElementById('mentoring-frame');
-  if (frame) frame.setAttribute('src', 'mentoring.html#' + (sub || 'dashboard'));
-  navigate('mentoring');
-  if (window.updateNavActive) window.updateNavActive(sub || 'dashboard');
-}
+/* ── 멘토링 계열 화면도 이제 같은 라우터를 쓴다. 기존 호출부 호환용 별칭. ── */
+function openMentoring(sub) { navigate(sub || 'dashboard'); }
 window.openMentoring = openMentoring;
 
 /* ── job carousel ───────────────────────────────────────── */
@@ -57,10 +52,10 @@ window.refreshStartFree = refreshStartFree;
    ════════════════════════════════════════════════════════════ */
 const NOTI_KEY = 'careerly_notifications_read';
 const NOTIFICATIONS = [
-  { ic: '🤝', title: '멘토링 신청이 승인되었습니다.', time: '10분 전', go: () => openMentoring('mentoring') },
-  { ic: '✨', title: '새로운 추천 멘토가 도착했습니다.', time: '1시간 전', go: () => openMentoring('search') },
-  { ic: '✍️', title: '작성하지 않은 멘토링 후기가 있습니다.', time: '어제', go: () => openMentoring('mentoring') },
-  { ic: '🗺️', title: '커리어 로드맵이 업데이트되었습니다.', time: '2일 전', go: () => navigate('career') },
+  { ic: '🤝', title: '멘토링 신청이 승인되었습니다.', time: '10분 전', go: 'mentoring' },
+  { ic: '✨', title: '새로운 추천 멘토가 도착했습니다.', time: '1시간 전', go: 'search' },
+  { ic: '✍️', title: '작성하지 않은 멘토링 후기가 있습니다.', time: '어제', go: 'mentoring' },
+  { ic: '🗺️', title: '커리어 로드맵이 업데이트되었습니다.', time: '2일 전', go: 'career' },
 ];
 function notiIsRead() { return localStorage.getItem(NOTI_KEY) === 'true'; }
 function syncNotiDot() {
@@ -104,7 +99,7 @@ window.markNotiRead = markNotiRead;
 function notiClick(i) {
   document.getElementById('noti-panel').classList.remove('on');
   const n = NOTIFICATIONS[i];
-  if (n && n.go) n.go();
+  if (n && n.go) navigate(n.go);
 }
 window.notiClick = notiClick;
 document.addEventListener('click', e => {

@@ -32,6 +32,40 @@ window.Aggregator = (() => {
     law:        [{ id: '변호사 시험' }, { id: '공인노무사' }, { id: '법무사' }],
     psych:      [{ id: '청소년 상담사' }, { id: '임상심리사' }],
     media:      [{ id: 'GTQ 1급' }, { id: 'ADsP' }, { id: '구글애널리틱스' }],
+
+    // NCS 중분류 키 — 커리어 로드맵(NCS 분류) 에서 사용. 'ncs:<대분류>:<중분류>'
+    'ncs:02:plan': [{ id: '경영지도사' }, { id: 'ADsP', desc: '데이터 기반 기획' }, { id: '컴퓨터활용능력 1급' }],
+    'ncs:02:hr':   [{ id: '공인노무사' }, { id: '경영지도사(인적자원)' }],
+    'ncs:02:fin':  [{ id: 'CPA', desc: '회계법인 · 컨설팅' }, { id: '재경관리사' }, { id: '전산세무 1급' }],
+    'ncs:03:finance': [
+      { id: '금융투자분석사',       desc: 'IB · 증권' },
+      { id: '투자자산운용사',       desc: '자산운용사 필수급' },
+      { id: 'CFA Level 1',          desc: '글로벌 금융' },
+      { id: '재무위험관리사(FRM)',  desc: '리스크 관리' },
+      { id: '은행FP(AFPK)',         desc: '은행 창구·PB' },
+    ],
+    'ncs:03:insurance': [{ id: '손해사정사' }, { id: '보험계리사' }, { id: '언더라이터(AIU)' }],
+    'ncs:04:natural':   [{ id: 'ADsP' }, { id: 'SQLD' }, { id: '사회조사분석사 2급' }],
+    'ncs:05:law':       [{ id: '변호사 시험' }, { id: '법무사' }, { id: '변리사' }],
+    'ncs:06:health':    [{ id: '임상심리사' }, { id: '보건교육사' }, { id: '의무기록사' }],
+    'ncs:08:ad':        [{ id: '구글애널리틱스(GA4)' }, { id: 'ADsP' }, { id: 'GTQ 1급' }],
+    'ncs:08:design':    [{ id: 'GTQ 1급' }, { id: '컬러리스트기사' }, { id: '웹디자인기능사' }],
+    'ncs:14:arch':      [{ id: '건축기사' }, { id: '건축설비기사' }],
+    'ncs:15:design':    [{ id: '일반기계기사' }, { id: '기계설계산업기사' }],
+    'ncs:17:chem':      [{ id: '화공기사' }, { id: '위험물산업기사' }],
+    'ncs:17:bio':       [{ id: '생물공학기사' }, { id: 'GMP 교육이수' }],
+    'ncs:19:semi':      [{ id: '반도체설계기사' }, { id: '전자기사' }],
+    'ncs:19:electric':  [{ id: '전기기사' }, { id: '전기공사기사' }],
+    'ncs:20:it': [
+      { id: '정보처리기사', desc: 'IT 직무 가산점' },
+      { id: 'SQLD',         desc: '데이터 관련 직무 필수급' },
+      { id: 'ADsP',         desc: '데이터 분석 입문' },
+      { id: 'AWS SAA',      desc: '클라우드 직무 강점' },
+      { id: 'CKA',          desc: 'DevOps · 인프라' },
+      { id: '정보보안기사',  desc: '보안 직무' },
+    ],
+    'ncs:23:safety':    [{ id: '산업안전기사' }, { id: '위험물산업기사' }],
+    'ncs:23:env':       [{ id: '환경기사' }, { id: '수질환경기사' }],
   };
 
   const QUAL_FIELDS = [
@@ -69,11 +103,15 @@ window.Aggregator = (() => {
   }
 
   // ── main entry ─────────────────────────────────────────────
-  function compute({ dept, field, job } = {}) {
+  //   where  : 임의 조건 함수. NCS 분류처럼 dept/field/job 로 표현되지 않는
+  //            묶음을 집계할 때 사용한다. dept/field/job 와 함께 쓸 수 있다.
+  //   certKey: 자격증 카탈로그를 고를 키 (미지정 시 dept 사용)
+  function compute({ dept, field, job, where, certKey } = {}) {
     let specs = DB.getAllSpecs();
     if (dept)  specs = specs.filter(s => s.dept  === dept);
     if (field) specs = specs.filter(s => s.field === field);
     if (job)   specs = specs.filter(s => s.job   === job);
+    if (where) specs = specs.filter(where);
 
     if (specs.length === 0) {
       return { count: 0, empty: true };
@@ -91,7 +129,8 @@ window.Aggregator = (() => {
     } : null;
 
     // 자격증 보유율 — 학과 카탈로그 + 회원이 실제 입력한 모든 자격증 합집합
-    const deptCatalog = dept ? (CERT_CATALOG[dept] || []) : [];
+    const catalogKey = certKey || dept;
+    const deptCatalog = catalogKey ? (CERT_CATALOG[catalogKey] || []) : [];
     const observed = new Set();
     specs.forEach(s => (s.certs || []).forEach(c => observed.add(c)));
     const certIds = [

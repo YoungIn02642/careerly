@@ -111,8 +111,10 @@ const MENTORS = [
 const CATEGORIES = ['사업관리','경영·회계·사무','금융·보험','교육·자연·사회과학','법률·경찰·소방·교도·국방','보건·의료','사회복지·종교','문화·예술·디자인·방송','운전·운송','영업판매','경비·청소','이용·숙박·여행·오락·스포츠','음식서비스','건설','기계','재료','화학·바이오','섬유·의복','전기·전자','정보통신','식품가공','인쇄·목재·가구·공예','환경·에너지·안전','농림어업'];
 const CAT_NO = {}; CATEGORIES.forEach((c,i)=>{ CAT_NO[c] = String(i+1).padStart(2,'0'); });
 
-/* ── NCS 24 분야별 데이터 풀 ─────────────────────────────── */
-const NCS = {
+/* ── NCS 24 분야별 멘토 데이터 풀 ────────────────────────────
+   이름을 NCS 로 두면 js/ncs.js 의 window.NCS(직업 분류 카탈로그)를 가린다.
+   최상위 const 는 window 에 붙지 않으면서 전역 스코프를 차지하기 때문. */
+const MENTOR_POOL = {
   '사업관리':{roles:['사업기획 담당','PMO','경영기획','사업개발'],cos:['대기업 전략실','종합상사','공기업 기획처','IT기업 기획실','스타트업 사업팀'],specs:[['사업기획','사업계획서','예산관리','KPI설계'],['PMO','프로젝트관리','일정관리','리스크관리'],['경영기획','전략수립','시장분석','IR']],topics:['사업기획 직무 취업 준비 상담','경영기획 자소서·직무 이해','PMO·프로젝트관리 커리어 상담']},
   '경영·회계·사무':{roles:['재무회계 담당','인사(HR) 담당','경영관리','총무','전략 컨설턴트'],cos:['회계법인','대기업 재무팀','컨설팅펌','중견기업 경영지원','공공기관'],specs:[['재무회계','결산','세무','ERP'],['관리회계','원가','예산','엑셀모델링'],['인사','채용','노무','급여'],['전략컨설팅','케이스면접','자소서첨삭','문제해결']],topics:['회계·재무 직무 취업 상담','인사(HR) 직무 준비','컨설팅 케이스 면접 코칭']},
   '금융·보험':{roles:['데이터 분석가','은행원','IB 애널리스트','퀀트','핀테크 PM','보험계리사'],cos:['시중은행','증권사','자산운용사','보험사','핀테크','카카오뱅크'],specs:[['데이터분석','SQL','통계','태블로'],['퀀트','파이썬','금융공학','리스크'],['IB','재무모델링','밸류에이션','엑셀'],['계리','보험수리','리스크','통계']],topics:['금융권 취업 자소서·직무 상담','데이터 분석가 커리어·포폴 첨삭','IB·자산운용 취업 준비']},
@@ -143,7 +145,7 @@ const NCS = {
 const CAT_REMAP = {'IT·개발':'정보통신','금융':'금융·보험','컨설팅':'경영·회계·사무','마케팅':'문화·예술·디자인·방송','대기업':'전기·전자','창업':'사업관리'};
 MENTORS.forEach((m,i)=>{
   if (CAT_REMAP[m.cat]) { m.cat = CAT_REMAP[m.cat]; m.tag = m.cat; }
-  m.topic = m.topic || (NCS[m.cat]?.topics||['커리어 상담'])[0];
+  m.topic = m.topic || (MENTOR_POOL[m.cat]?.topics||['커리어 상담'])[0];
   m.reviews = m.reviews || Math.max(6, Math.round(m.sessions*1.6 + (i*3)%11));
 });
 
@@ -157,7 +159,7 @@ MENTORS.forEach((m,i)=>{
   const rnd = (n)=>{ seed = (seed*9301 + 49297) % 233280; return Math.floor((seed/233280)*n); };
   let idx = 0;
   CATEGORIES.forEach(cat=>{
-    const F = NCS[cat]; if (!F) return;
+    const F = MENTOR_POOL[cat]; if (!F) return;
     for (let k=0; k<4; k++){
       idx++;
       const name = LAST[rnd(LAST.length)] + FIRST[rnd(FIRST.length)];
@@ -287,37 +289,12 @@ function toast(msg){
   t._tm = setTimeout(()=>t.classList.remove('on'), 2600);
 }
 
-/* ── navigation ─────────────────────────────────────────── */
-function goCareerlyHome(){ parentNav('main'); }
-function inFrame(){ return window.parent && window.parent !== window; }
-function parentNav(page){
-  if (inFrame() && typeof window.parent.navigate === 'function') window.parent.navigate(page);
-  else window.location.href = 'careerly.html#' + page;
-}
-function parentLogout(){
-  if (inFrame() && typeof window.parent.handleLogout === 'function') window.parent.handleLogout();
-  else window.location.href = 'careerly.html';
-}
-function currentParentUser(){
-  try { return inFrame() && window.parent.DB ? window.parent.DB.currentUser() : null; }
-  catch(e){ return null; }
-}
-function renderTopAuth(){
-  const box = $('#tn-auth'); if(!box) return;
-  const u = currentParentUser();
-  if (u) {
-    const name = (u.nickname || u.name || u.username) + '님';
-    box.innerHTML = `<span class="tn-username" onclick="parentNav('mypage')">${name}</span>` +
-                    `<button class="tn-btn" onclick="parentLogout()">로그아웃</button>`;
-  } else {
-    box.innerHTML = `<button class="tn-btn solid" onclick="parentNav('login')">회원가입 / 로그인</button>`;
-  }
-}
-function navigate(page){
-  $$('.page').forEach(p=>p.classList.remove('on'));
-  $('#page-'+page).classList.add('on');
-  $$('.tn-link').forEach(l=>l.classList.toggle('on', l.dataset.page===page));
-  window.scrollTo({top:0});
+/* ── navigation ─────────────────────────────────────────────
+   라우팅은 app.js 의 전역 navigate() 하나가 담당한다. 이 파일은 화면을
+   그리는 훅(onEnter)만 제공하고, 링크는 그대로 navigate('search') 처럼 부른다. */
+function onEnterMentoringPage(page){
+  // #profile 로 직접 진입/새로고침하면 그릴 멘토가 없다 → 목록으로 되돌린다.
+  if (page==='profile' && !currentMentor) { navigate('search'); return; }
   if (page==='dashboard') animateDashboard();
   if (page==='search')    renderSearch();
   if (page==='mentoring') renderMentoring();
@@ -809,53 +786,11 @@ function saveRating(){
 function openModal(id){ $('#'+id).classList.add('on'); }
 function closeModal(id){ $('#'+id).classList.remove('on'); }
 
-/* ══════ NOTIFICATIONS (localStorage 공유) ══════ */
-const NOTI_KEY = 'careerly_notifications_read';
-const NOTIFICATIONS = [
-  { ic:'🤝', title:'멘토링 신청이 승인되었습니다.', time:'10분 전', go:'mentoring' },
-  { ic:'✨', title:'새로운 추천 멘토가 도착했습니다.', time:'1시간 전', go:'search' },
-  { ic:'✍️', title:'작성하지 않은 멘토링 후기가 있습니다.', time:'어제', go:'mentoring' },
-  { ic:'🗺️', title:'커리어 로드맵이 업데이트되었습니다.', time:'2일 전', go:'dashboard' },
-];
-function notiIsRead(){ return localStorage.getItem(NOTI_KEY)==='true'; }
-function syncNotiDot(){ const d=$('#tn-noti-dot'); if(d) d.classList.toggle('on', !notiIsRead()); }
-function buildNotiPanel(){
-  const panel=$('#noti-panel'); if(!panel) return;
-  panel.innerHTML = `
-    <div class="noti-head">
-      <span class="noti-head-title">알림</span>
-      <span class="noti-head-clear" onclick="markNotiRead()">모두 읽음</span>
-    </div>
-    <div class="noti-list">
-      ${NOTIFICATIONS.map((n,i)=>`
-        <div class="noti-item ${notiIsRead()?'':'unread'}" onclick="notiClick(${i})">
-          <div class="noti-item-ic">${n.ic}</div>
-          <div class="noti-item-body">
-            <div class="noti-item-title">${n.title}</div>
-            <div class="noti-item-time">${n.time}</div>
-          </div>
-        </div>`).join('')}
-    </div>`;
-}
-function toggleNoti(e){
-  if(e) e.stopPropagation();
-  const panel=$('#noti-panel'); if(!panel) return;
-  const willOpen=!panel.classList.contains('on');
-  if(willOpen){ buildNotiPanel(); markNotiRead(); }
-  panel.classList.toggle('on', willOpen);
-}
-function markNotiRead(){
-  localStorage.setItem(NOTI_KEY,'true');
-  syncNotiDot();
-  $$('#noti-panel .noti-item').forEach(el=>el.classList.remove('unread'));
-}
-function notiClick(i){
-  $('#noti-panel').classList.remove('on');
-  const n=NOTIFICATIONS[i]; if(n&&n.go) navigate(n.go);
-}
+/* 알림(종 아이콘)은 전역 navbar 의 기능이므로 home.js 한 곳에서만 정의한다.
+   여기에 다시 선언하면 같은 전역 스코프에서 const 가 중복돼 스크립트가 죽는다. */
 
-/* ── init ───────────────────────────────────────────────── */
-document.addEventListener('DOMContentLoaded', ()=>{
+/* ── init (app.js 부팅 시 1회 호출) ─────────────────────── */
+function initMentoring(){
   // star input listeners
   $$('#star-input i').forEach((s,i)=>{
     s.addEventListener('mouseenter', ()=>hoverStar(i+1));
@@ -867,18 +802,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
   document.addEventListener('keydown', e=>{ if(e.key==='Escape') $$('.modal-overlay').forEach(m=>m.classList.remove('on')); });
   renderGap('cert');
   initSearchFilters();
-  renderTopAuth();
-  syncNotiDot();
-  document.addEventListener('click', e=>{
-    const panel=$('#noti-panel');
-    if(panel && panel.classList.contains('on') && !e.target.closest('.tn-noti-wrap')) panel.classList.remove('on');
-  });
-  const sub = (location.hash || '').replace('#', '');
-  navigate(['dashboard','search','mentoring','profile'].includes(sub) ? sub : 'dashboard');
-});
+}
 
-/* react to deep-link hash changes from the parent (quick-links) */
-window.addEventListener('hashchange', () => {
-  const sub = (location.hash || '').replace('#', '');
-  if (['dashboard','search','mentoring','profile'].includes(sub)) navigate(sub);
-});
+window.Mentoring = { init: initMentoring, onEnter: onEnterMentoringPage };

@@ -20,133 +20,37 @@
 
   --font-sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont,
                'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
 
-  --brand:       #534AB7;
-  --brand-dark:  #3C3489;
-  --brand-soft:  #EEEDFE;
+  /* --brand / --brand-dark / --brand-soft / --blue / --shadow / --font-mono 는
+     main.css 의 홈 토큰을 그대로 쓴다. 여기서 재정의하면 로드 순서에 따라
+     홈과 멘토링의 브랜드 색이 갈린다. */
   --brand-soft2: #E3E0FB;
 
   --green:  #16855f; --green-soft:#E1F5EE; --green-ink:#085041;
-  --blue:   #0C447C; --blue-soft: #E6F1FB;
+  --blue-soft: #E6F1FB; --blue-ink: #0C447C;
   --amber:  #9A5B06; --amber-soft:#FAEEDA;
   --gold:   #BA7517;
 
   --shadow-sm: 0 1px 2px rgba(28,24,20,0.05);
-  --shadow:    0 2px 6px rgba(28,24,20,0.05), 0 10px 30px -16px rgba(28,24,20,0.18);
   --shadow-lg: 0 20px 60px -20px rgba(28,24,20,0.30);
 }
 
 html { scroll-behavior: smooth; }
-body {
-  background: var(--color-background-secondary);
-  color: var(--color-text-primary);
-  font-family: var(--font-sans);
-  font-size: 14px; line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
-  min-height: 100vh;
-}
+/* body 는 main.css 가 소유한다(display:flex 레이아웃 포함).
+   여기서 재정의하면 홈 화면까지 함께 바뀐다. 멘토링 화면 고유 배경·글자색은
+   .page--doc 에만 건다. */
 
 /* ── TOP NAV ─────────────────────────────────────────────── */
-.topnav {
-  display: none; /* unified: parent(careerly) global navbar is used instead */
-}
-.topnav-inner {
-  width: 100%; margin: 0;
-  height: 64px; padding: 0 32px;
-  display: flex; align-items: center; justify-content: space-between;
-}
-.tn-left { display: flex; align-items: center; gap: 36px; height: 100%; }
-.tn-logo {
-  font-size: 22px; font-weight: 800; color: var(--color-text-primary, #080808);
-  letter-spacing: -0.6px; cursor: pointer; user-select: none;
-}
-.tn-links { display: flex; align-items: stretch; gap: 28px; height: 100%; }
-.tn-link {
-  display: flex; align-items: center; height: 100%;
-  font-size: 15px; font-weight: 600;
-  color: var(--color-text-primary, #080808); cursor: pointer;
-  border-bottom: 2.5px solid transparent;
-  transition: color .15s;
-}
-.tn-link:hover { color: var(--brand); }
-.tn-link.on { color: var(--color-text-primary); font-weight: 700; border-bottom-color: var(--brand); }
-.tn-right { display: flex; align-items: center; gap: 10px; }
-.tn-auth { display: flex; align-items: center; gap: 10px; }
-.tn-username { font-size: 14px; font-weight: 600; color: var(--color-text-primary); cursor: pointer; }
-.tn-username:hover { color: var(--brand); }
-.tn-btn {
-  padding: 9px 16px; border-radius: 8px;
-  border: 1px solid var(--color-border-secondary, #ddd); background: #fff;
-  font-size: 14px; font-weight: 600; cursor: pointer; color: var(--color-text-primary);
-  font-family: var(--font-sans); white-space: nowrap; transition: background .15s, border-color .15s;
-}
-.tn-btn:hover { background: var(--color-background-secondary, #f5f5f5); }
-.tn-btn.solid { background: var(--color-text-primary, #080808); color: #fff; border-color: var(--color-text-primary, #080808); }
-.tn-btn.solid:hover { background: #222; }
-.tn-biz {
-  padding: 9px 16px; border-radius: 8px;
-  border: 1px solid var(--color-border-secondary, #ddd); background: #fff;
-  font-size: 14px; font-weight: 600; cursor: pointer; color: var(--color-text-secondary);
-  font-family: var(--font-sans); white-space: nowrap; transition: all .15s;
-}
-.tn-biz:hover { border-color: var(--color-text-primary); color: var(--color-text-primary); }
-.tn-noti-wrap { position: relative; display: flex; }
-.tn-bell {
-  position: relative; font-size: 20px; color: var(--color-text-secondary);
-  cursor: pointer; display: flex;
-}
-.tn-noti-dot {
-  content: ''; position: absolute; top: -1px; right: -1px;
-  width: 8px; height: 8px; border-radius: 50%; background: #E5484D;
-  border: 2px solid #fff; display: none;
-}
-.tn-noti-dot.on { display: block; }
-
-/* notification panel (shared markup) */
-.noti-panel {
-  position: absolute; top: 34px; right: 0; z-index: 3000;
-  width: 340px; background: var(--color-background-primary, #fff);
-  border: 1px solid var(--color-border-primary, #e5e5e8);
-  border-radius: var(--border-radius-md, 12px);
-  box-shadow: 0 20px 48px rgba(0,0,0,0.16); overflow: hidden; display: none;
-}
-.noti-panel.on { display: block; }
-.noti-head {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 15px 18px; border-bottom: 1px solid var(--color-border-tertiary, #eee);
-}
-.noti-head-title { font-size: 15px; font-weight: 700; color: var(--color-text-primary); }
-.noti-head-clear { font-size: 12px; font-weight: 600; color: var(--brand); cursor: pointer; }
-.noti-list { max-height: 380px; overflow-y: auto; }
-.noti-item {
-  display: flex; gap: 12px; padding: 13px 18px;
-  border-bottom: 1px solid var(--color-border-tertiary, #f0f0f0);
-  cursor: pointer; transition: background .12s;
-}
-.noti-item:last-child { border-bottom: none; }
-.noti-item:hover { background: var(--color-background-secondary, #f6f6f4); }
-.noti-item-ic {
-  width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center; font-size: 16px;
-  background: var(--brand-soft); color: var(--brand);
-}
-.noti-item-title { font-size: 13.5px; font-weight: 600; color: var(--color-text-primary); line-height: 1.45; }
-.noti-item.unread .noti-item-title::after {
-  content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
-  background: var(--brand); margin-left: 6px; vertical-align: middle;
-}
-.noti-item-time { font-size: 11.5px; color: var(--color-text-tertiary); margin-top: 3px; }
-.tn-avatar {
-  width: 34px; height: 34px; border-radius: 50%;
-  background: var(--brand-soft); color: var(--brand-dark);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 13px; font-weight: 600; cursor: pointer; user-select: none;
-}
+/* 통합 후 상단 네비는 careerly.html 의 .navbar 하나만 쓴다. (.topnav 제거됨) */
 
 /* ── PAGE / LAYOUT ───────────────────────────────────────── */
-.page { display: none; }
-.page.on { display: block; animation: pageIn .28s cubic-bezier(.16,1,.3,1) both; }
+/* .page / .page.active 의 표시 규칙은 main.css 가 소유한다(라우터 규약).
+   멘토링 화면은 flex 컬럼이 아니라 일반 문서 흐름이라 .page--doc 으로 되돌린다. */
+.page--doc {
+  background: var(--color-background-primary);
+  color: var(--color-text-primary);
+}
+.page--doc.active { display: block; animation: pageIn .28s cubic-bezier(.16,1,.3,1) both; }
 @keyframes pageIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
 .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 28px 80px; }
@@ -663,7 +567,7 @@ body {
   display: inline-block; font-size: 11.5px; padding: 4px 10px; border-radius: 8px;
   font-weight: 600; margin-bottom: 5px;
 }
-.badge.blue { background: var(--blue-soft); color: var(--blue); }
+.badge.blue { background: var(--blue-soft); color: var(--blue-ink); }
 .badge.amber { background: var(--amber-soft); color: var(--amber); }
 .badge.green { background: var(--green-soft); color: var(--green-ink); }
 .si-when { font-size: 12px; color: var(--color-text-secondary); }
