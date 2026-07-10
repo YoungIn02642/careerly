@@ -16,7 +16,12 @@ const ONE_DAY = 24 * 60 * 60 * 1000;
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
-app.use(express.static(path.join(__dirname, '..', '..', 'frontend')));
+const FRONTEND_DIR = path.join(__dirname, '..', '..', 'frontend');
+
+// 프론트엔드는 careerly.html 단일 문서 SPA (해시 라우팅). / 로 들어오면 그걸 준다.
+app.get('/', (req, res) => res.sendFile(path.join(FRONTEND_DIR, 'careerly.html')));
+
+app.use(express.static(FRONTEND_DIR));
 app.use("/api/career-data", careerDataRouter);
 app.use("/api/recommendations", recommendationsRouter);
 
