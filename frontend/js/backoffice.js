@@ -15,7 +15,10 @@ window.Backoffice = (() => {
   let activeTab = 'members';
   let aggDept   = '';   // 필터: 학과
 
-  function render(container) {
+  async function render(container) {
+    // 회원 목록은 관리자 전용 엔드포인트라 캐시에 없다. 진입할 때마다 받아온다.
+    // 운영 환경에서는 서버가 404 로 막으므로 빈 배열이 된다.
+    await DB.refreshUsers();
     const users = DB.getUsers();
     const specs = DB.getAllSpecs();
     const rc = DB.countByRole();
@@ -29,6 +32,7 @@ window.Backoffice = (() => {
           </div>
           <div class="bo-actions">
             <button class="bo-btn-ghost" id="bo-seed">데모 데이터 시드</button>
+            <button class="bo-btn-ghost" id="bo-seed-random">무작위 50명 추가</button>
             <button class="bo-btn-danger" id="bo-clear">전체 초기화</button>
           </div>
         </div>
@@ -53,15 +57,25 @@ window.Backoffice = (() => {
     container.querySelectorAll('.bo-tab').forEach(t => {
       t.addEventListener('click', () => { activeTab = t.dataset.tab; render(container); });
     });
-    document.getElementById('bo-seed').onclick = () => {
-      if (confirm('데모 회원 5명 + 스펙을 추가합니다. 진행할까요?')) {
-        DB.seedDemo(); render(container);
-      }
+    document.getElementById('bo-seed').onclick = async () => {
+      if (!confirm('데모 회원 5명 + 스펙을 추가합니다. 진행할까요?')) return;
+      try { await DB.seedDemo(); } catch (e) { return alert('추가 실패: ' + e.message); }
+      render(container);
     };
-    document.getElementById('bo-clear').onclick = () => {
-      if (confirm('정말 모든 회원·스펙·세션 데이터를 삭제할까요? 되돌릴 수 없습니다.')) {
-        DB.clearAll(); render(container); updateNavAuth();
-      }
+    document.getElementById('bo-seed-random').onclick = async (e) => {
+      const btn = e.currentTarget;
+      if (!confirm('무작위 회원 50명(스펙 포함)을 추가합니다. 진행할까요?')) return;
+      btn.disabled = true; btn.textContent = '추가 중…';
+      try { const r = await DB.seedRandom(50); alert(r.message); }
+      catch (err) { alert('추가 실패: ' + err.message); }
+      finally { btn.disabled = false; btn.textContent = '무작위 50명 추가'; }
+      render(container);
+    };
+    document.getElementById('bo-clear').onclick = async () => {
+      if (!confirm('정말 모든 회원·스펙·세션 데이터를 삭제할까요? 되돌릴 수 없습니다.')) return;
+      try { await DB.clearAll(); } catch (e) { return alert('삭제 실패: ' + e.message); }
+      await render(container);
+      updateNavAuth();
     };
 
     const body = document.getElementById('bo-body');
@@ -109,11 +123,12 @@ window.Backoffice = (() => {
         </table>
       </div>`;
     body.querySelectorAll('.bo-row-del').forEach(b => {
-      b.onclick = () => {
-        if (confirm(`${b.dataset.user} 회원을 삭제할까요? (스펙도 함께 삭제됨)`)) {
-          DB.deleteUser(b.dataset.user);
-          render(document.getElementById('page-backoffice').querySelector('.bo-wrap'));
-        }
+      b.onclick = async () => {
+        if (!confirm(`${b.dataset.user} 회원을 삭제할까요? (스펙도 함께 삭제됨)`)) return;
+        try { await DB.deleteUser(b.dataset.user); }
+        catch (e) { return alert('삭제 실패: ' + e.message); }
+        await render(document.getElementById('page-backoffice').querySelector('.bo-wrap'));
+        updateNavAuth();
       };
     });
   }

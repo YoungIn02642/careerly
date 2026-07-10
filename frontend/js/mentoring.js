@@ -295,7 +295,7 @@ function toast(msg){
 function onEnterMentoringPage(page){
   // #profile 로 직접 진입/새로고침하면 그릴 멘토가 없다 → 목록으로 되돌린다.
   if (page==='profile' && !currentMentor) { navigate('search'); return; }
-  if (page==='dashboard') animateDashboard();
+  if (page==='dashboard') { if (window.CASRadar) CASRadar.render(); animateDashboard(); }
   if (page==='search')    renderSearch();
   if (page==='mentoring') renderMentoring();
 }
