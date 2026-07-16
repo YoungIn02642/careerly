@@ -87,6 +87,23 @@ window.SpecForm = (() => {
           <label>희망 세부직무</label>
           <select id="sf-job"></select>
         </div>
+        <div class="sf-row-2">
+          <div class="form-group">
+            <label>회사명 <span class="sf-optional">선택</span></label>
+            <input type="text" id="sf-company" placeholder="예: 삼성전자, 한국전력공사"
+                   value="${escapeHtml(spec.company || '')}" autocomplete="off" />
+            <div class="sf-hint-inline" id="sf-company-hint">입력하면 기업 유형을 자동으로 찾아드려요</div>
+          </div>
+          <div class="form-group">
+            <label>기업 유형</label>
+            <select id="sf-corpType">
+              <option value="">선택 안 함</option>
+              ${Aggregator.CORP_TYPES.map(c =>
+                `<option value="${c.id}" ${spec.corpType===c.id?'selected':''}>${c.icon} ${c.label}</option>`).join('')}
+            </select>
+            <div class="sf-hint-inline">커리어 로드맵에서 기업 유형별 통계로 묶입니다</div>
+          </div>
+        </div>
       </div>
 
       <!-- 정량 스펙 -->
@@ -192,6 +209,63 @@ window.SpecForm = (() => {
     });
     document.getElementById('sf-save').addEventListener('click', () => handleSave(user));
     document.getElementById('sf-cancel').addEventListener('click', () => navigate('main'));
+
+    initCompanyAutoClassify();
+  }
+
+  /* ── 회사명 → 기업 유형 자동 판정 ──────────────────────────
+     공식 명단(공정위 대규모기업집단 / 공공기관 지정현황)에 있으면 드롭다운을
+     대신 골라준다. 명단에 없는 회사가 훨씬 많으므로 못 찾아도 실패가 아니다.
+     그때는 회원이 직접 고르게 안내만 한다.
+
+     자동판정은 어디까지나 추천이라 회원이 고른 값을 덮어쓰지 않는다.
+     그래서 '회사명이 바뀐 순간' 에만 반영하고, 그 뒤 드롭다운을 손대면 그대로 둔다. */
+  let lastClassifiedFor = null;
+
+  function initCompanyAutoClassify() {
+    const input = document.getElementById('sf-company');
+    const hint  = document.getElementById('sf-company-hint');
+    const sel   = document.getElementById('sf-corpType');
+    if (!input || !hint || !sel) return;
+
+    // 저장된 회사명이 있으면 이미 판정된 상태로 보고, 다시 덮어쓰지 않는다
+    lastClassifiedFor = input.value.trim() || null;
+
+    let timer = null;
+    const run = () => {
+      const name = input.value.trim();
+      if (!name) {
+        hint.className = 'sf-hint-inline';
+        hint.textContent = '입력하면 기업 유형을 자동으로 찾아드려요';
+        lastClassifiedFor = null;
+        return;
+      }
+      if (name === lastClassifiedFor) return;   // 같은 회사명 재조회 방지
+
+      hint.className = 'sf-hint-inline';
+      hint.textContent = '찾는 중…';
+      DB.classifyCompany(name).then(r => {
+        if (input.value.trim() !== name) return;   // 그새 더 입력했으면 결과 버림
+        lastClassifiedFor = name;
+
+        if (!r) {
+          hint.className = 'sf-hint-inline';
+          hint.textContent = '자동 판정을 못 했어요. 기업 유형을 직접 골라주세요.';
+          return;
+        }
+        if (r.matched) {
+          sel.value = r.corpType;
+          hint.className = 'sf-hint-inline sf-hint-ok';
+          hint.textContent = `${r.label}로 확인했어요 (${r.source}). 다르면 직접 고치세요.`;
+        } else {
+          hint.className = 'sf-hint-inline sf-hint-warn';
+          hint.textContent = '공식 명단에 없는 회사예요. 기업 유형을 직접 골라주세요.';
+        }
+      });
+    };
+
+    input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(run, 400); });
+    input.addEventListener('blur', run);
   }
 
   function fillCertGrid(deptId, having) {
@@ -268,6 +342,8 @@ window.SpecForm = (() => {
     const dept   = document.getElementById('sf-dept').value;
     const field  = document.getElementById('sf-field').value || null;
     const job    = document.getElementById('sf-job').value   || null;
+    const corpType = document.getElementById('sf-corpType').value || null;
+    const company  = document.getElementById('sf-company').value.trim() || null;
     const nickname = document.getElementById('sf-nickname').value.trim() || null;
     const gpaRaw   = document.getElementById('sf-gpa').value;
     const gpaMax   = parseFloat(document.getElementById('sf-gpaMax').value);
@@ -310,7 +386,7 @@ window.SpecForm = (() => {
     saveBtn.disabled = true;
     try {
       await DB.updateUser({ nickname });
-      await DB.upsertSpec({ dept, field, job, gpa, gpaMax, certs, scores, qual, detail });
+      await DB.upsertSpec({ dept, field, job, company, corpType, gpa, gpaMax, certs, scores, qual, detail });
     } catch (e) {
       alert('저장에 실패했습니다. ' + e.message);
       return;

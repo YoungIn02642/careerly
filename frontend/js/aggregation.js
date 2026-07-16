@@ -1,7 +1,7 @@
 // ════════════════════════════════════════════════════════════
 //  CAREERLY  —  Spec Aggregation Engine
 //   • computeAggregate(filter)  : { count, gpa, certs, scores, qual }
-//     filter: { dept?, field?, job? } 모두 옵션. 미지정 시 전체.
+//     filter: { dept?, field?, job?, corpType? } 모두 옵션. 미지정 시 전체.
 //   • OPIc / TOEIC Speaking 레벨은 ordinal scale 로 평균 후 다시 레벨로 환산
 // ════════════════════════════════════════════════════════════
 window.Aggregator = (() => {
@@ -68,6 +68,17 @@ window.Aggregator = (() => {
     'ncs:23:env':       [{ id: '환경기사' }, { id: '수질환경기사' }],
   };
 
+  /* 기업 유형 4분류 — 커리어 로드맵 STEP 02 에서 중분류를 한 번 더 쪼갠다.
+     스펙의 corpType 필드와 1:1. 옛 스펙에는 corpType 이 없어 어느 유형에도
+     잡히지 않는다(중분류 전체 집계에만 포함).
+     cas: CAS.TARGETS 의 지원처 키. 공기업은 학점 블라인드라 배점이 다르다. */
+  const CORP_TYPES = [
+    { id: 'large',  label: '대기업',   icon: '🏢', cas: 'private', desc: '대기업 · 계열사' },
+    { id: 'mid',    label: '중견기업', icon: '🏬', cas: 'private', desc: '중견기업' },
+    { id: 'small',  label: '중소기업', icon: '🏭', cas: 'startup', desc: '중소기업 · 스타트업' },
+    { id: 'public', label: '공기업',   icon: '🏛️', cas: 'public',  desc: '공기업 · 공공기관' },
+  ];
+
   const QUAL_FIELDS = [
     { id: 'extracurricular', label: '대외활동',          icon: '🌐',
       help: '학회·공모전·서포터즈 등 — 협업 역량과 분야 관심도 증명' },
@@ -106,11 +117,13 @@ window.Aggregator = (() => {
   //   where  : 임의 조건 함수. NCS 분류처럼 dept/field/job 로 표현되지 않는
   //            묶음을 집계할 때 사용한다. dept/field/job 와 함께 쓸 수 있다.
   //   certKey: 자격증 카탈로그를 고를 키 (미지정 시 dept 사용)
-  function compute({ dept, field, job, where, certKey } = {}) {
+  //   corpType: 기업 유형 4분류 ('large'|'mid'|'small'|'public'). 미지정 시 전체.
+  function compute({ dept, field, job, corpType, where, certKey } = {}) {
     let specs = DB.getAllSpecs();
     if (dept)  specs = specs.filter(s => s.dept  === dept);
     if (field) specs = specs.filter(s => s.field === field);
     if (job)   specs = specs.filter(s => s.job   === job);
+    if (corpType) specs = specs.filter(s => s.corpType === corpType);
     if (where) specs = specs.filter(where);
 
     if (specs.length === 0) {
@@ -169,5 +182,5 @@ window.Aggregator = (() => {
     return { count: specs.length, empty: false, gpa, certs, scores, qual };
   }
 
-  return { compute, CERT_CATALOG, QUAL_FIELDS, OPIC_LEVELS, TS_LEVELS };
+  return { compute, CERT_CATALOG, QUAL_FIELDS, CORP_TYPES, OPIC_LEVELS, TS_LEVELS };
 })();
