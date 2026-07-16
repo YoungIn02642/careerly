@@ -276,6 +276,12 @@ function saveState() { localStorage.setItem(LS_KEY, JSON.stringify(STATE)); }
 const $  = (s, r=document) => r.querySelector(s);
 const $$ = (s, r=document) => [...r.querySelectorAll(s)];
 function initial(name){ return name.charAt(0); }
+/* 이름 가운데를 * 로 가린다: 황수아 → 황*아, 남궁도윤 → 남**윤, 김준 → 김* */
+function maskName(name){
+  if (!name) return '';
+  if (name.length <= 2) return name.charAt(0) + '*';
+  return name.charAt(0) + '*'.repeat(name.length-2) + name.charAt(name.length-1);
+}
 function avatarStyle(pal){ const p = PALETTE[pal]||PALETTE.purple; return `background:${p.bg};color:${p.ink};`; }
 function tagStyle(tag){ const c = TAGCOLOR[tag]||TAGCOLOR['IT·개발']; return `background:${c.bg};color:${c.ink};`; }
 function starsHTML(n){
@@ -427,7 +433,7 @@ function renderSearch(){
       <div class="mc-topic">${m.topic}</div>
       <div class="mc-body">
         <div class="mc-info">
-          <div class="mc-name">${m.name} · ${m.cohort}</div>
+          <div class="mc-name">${maskName(m.name)} · ${m.cohort}</div>
           <div class="mc-line"><i class="ti ti-briefcase"></i>${m.role}</div>
           <div class="mc-line"><i class="ti ti-stairs-up"></i>경력 ${m.years}년차</div>
           <div class="mc-line mc-company"><i class="ti ti-building-skyscraper"></i>${m.company}</div>
