@@ -7,6 +7,7 @@ const bcrypt = require('bcryptjs');
 const { nanoid } = require('nanoid');
 const { readDb, writeDb } = require('./store');
 const { DEMO_SEED, generateRandom } = require('./demo-seed');
+const { classify: classifyCompany, stats: classifyStats, CORP_TYPE_ID } = require('./company-classify');
 const recommendationsRouter = require("./routes/recommendations");
 const careerDataRouter = require("./routes/careerData");
 
@@ -207,7 +208,13 @@ app.put('/api/profile', requireAuth, (req, res) => {
 });
 
 /* ── 회원 스펙 (커리어 로드맵 집계의 원천) ─────────────────────
-   userSpecs: [{ userId, dept, field, job, gpa, gpaMax, certs, scores, qual, detail }]
+   userSpecs: [{ userId, dept, field, job, company, corpType, gpa, gpaMax, certs, scores, qual, detail }]
+   corpType: 'large' | 'mid' | 'small' | 'public' — 커리어 로드맵의 기업유형 4분류.
+             옛 스펙에는 없다(undefined). 그런 스펙은 유형별 집계에서 빠지고
+             중분류 전체 집계에만 잡힌다.
+   company : 회사명. corpType 자동판정의 입력이다. 판정은 어디까지나 추천이고
+             최종 corpType 은 회원이 고른 값을 그대로 저장한다(자동판정을
+             덮어쓰지 않는다) — 명단에 없는 회사가 훨씬 많기 때문.
    회원당 1건. userId 가 PK. */
 
 // 집계용 전체 조회. 누가 입력했는지는 내보내지 않는다 —
@@ -226,7 +233,7 @@ app.get('/api/specs/me', requireAuth, (req, res) => {
 });
 
 app.put('/api/specs/me', requireAuth, (req, res) => {
-  const allowed = ['dept', 'field', 'job', 'gpa', 'gpaMax', 'certs', 'scores', 'qual', 'detail'];
+  const allowed = ['dept', 'field', 'job', 'company', 'corpType', 'gpa', 'gpaMax', 'certs', 'scores', 'qual', 'detail'];
   const db = readDb();
   if (!db.userSpecs) db.userSpecs = [];
 
@@ -274,6 +281,27 @@ app.get('/api/stats', (req, res) => {
     specCount: (db.userSpecs || []).length,
   });
 });
+
+/* ── 회사명 → 기업 규모 자동 분류 ──────────────────────────────
+   공식 명단(공정위 대규모기업집단 / 공공기관 지정현황) 기반 조회.
+   로컬 캐시만 보므로 외부 API 를 부르지 않는다 — 입력할 때마다 호출돼도 즉시 답한다.
+   판정은 추천일 뿐이라 회원이 화면에서 고쳐 저장할 수 있다. */
+app.get('/api/company/classify', (req, res) => {
+  const name = String(req.query.name || '').trim();
+  if (!name) return res.status(400).json({ error: '회사명이 필요합니다.' });
+
+  const r = classifyCompany(name);
+  res.json({
+    company: name,
+    corpType: CORP_TYPE_ID[r.type] || 'small',   // 프론트 드롭다운 값과 맞춘다
+    label: r.type,
+    source: r.source,
+    matched: r.matched,        // false = 명단에 없어 기본값. 회원이 직접 골라야 한다.
+  });
+});
+
+// 분류 캐시 상태 — 배치를 돌렸는지 확인용
+app.get('/api/company/stats', (req, res) => res.json(classifyStats()));
 
 /* ── 백오피스 (개발 전용) ──────────────────────────────────────
    회원 목록 조회·삭제, 데모 시드, 전체 초기화. 인증·권한 체계가 아직 없으므로

@@ -78,6 +78,18 @@ window.DB = (() => {
     return _me && _me.username === username ? _mySpec : null;
   }
 
+  /* 회사명 → 기업 규모 자동 판정. 서버가 로컬 캐시만 보므로 입력 중 호출해도 빠르다.
+     실패해도 화면이 멈추면 안 되므로 null 을 돌려주고, 호출부는 회원이 직접
+     고르는 흐름으로 넘어간다. */
+  async function classifyCompany(name) {
+    if (!name || !name.trim()) return null;
+    try {
+      return await api('GET', `/api/company/classify?name=${encodeURIComponent(name.trim())}`);
+    } catch {
+      return null;
+    }
+  }
+
   // ── 쓰기 (비동기) ──────────────────────────────────────────
   async function createUser({ username, password, name, email, role }) {
     const { user } = await api('POST', '/api/auth/signup', { username, password, name, email, role });
@@ -127,7 +139,7 @@ window.DB = (() => {
   return {
     hydrate, refreshSpecs, refreshUsers,
     currentUser, getAllSpecs, getSpec, getUsers, countByRole, stats,
-    createUser, login, logout, updateUser, upsertSpec,
+    createUser, login, logout, updateUser, upsertSpec, classifyCompany,
     seedDemo, seedRandom, clearAll, deleteUser,
   };
 })();

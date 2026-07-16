@@ -3,6 +3,7 @@
 //   • 사이드바      : NCS 24개 직업 대분류 (js/ncs.js)
 //   • STEP 01       : 중분류 선택
 //   • STEP 02       : 커리어 로드맵 — 관련 전공 + 소분류(세부 직무) + 정량/정성 스펙
+//   • 기업 유형     : 중분류를 대기업/중견/중소/공기업 4가지로 한 번 더 나눠 본다
 //   • 정량/정성 스펙 섹션은 Aggregator.compute() 결과로 동적 생성
 //   • 데이터가 없으면 "데이터 없음" 빈 상태 표시
 // ════════════════════════════════════════════════════════════
@@ -10,6 +11,7 @@ window.CareerPage = (() => {
 
   let currentMajor = null;   // NCS 대분류 id ('01' ~ '24')
   let currentMiddle = null;  // 중분류 id
+  let currentCorp = 'all';   // 기업 유형 ('all' | Aggregator.CORP_TYPES 의 id)
   let specTab = 'quant';
 
   function init() {
@@ -116,15 +118,35 @@ window.CareerPage = (() => {
   // ── STEP 02 · 커리어 로드맵 ───────────────────────────────
   function renderRoadmap(major, middle) {
     /* 스펙 레코드는 아직 학과(dept) 스키마다. NCS 중분류 → 옛 스펙 매칭 함수로 집계한다.
-       중분류에 매칭되는 스펙이 없으면 같은 대분류 전체로 넓혀 본다. */
+       집계 범위는 좁은 것부터 넓은 순으로 시도한다:
+         중분류+기업유형 → 중분류 전체 → 대분류 전체
+       4분류로 쪼개면 표본이 크게 줄어 빈 유형이 흔하다. 그때 빈 화면을 주는 대신
+       중분류 전체 통계로 물러서고, 무엇을 보고 있는지 scope 태그로 밝힌다. */
     const midFn = NCS.middleMatcher(currentMajor, currentMiddle);
     const majFn = NCS.majorMatcher(currentMajor);
     const certKey = `ncs:${major.id}:${middle.id}`;
 
+    /* 유형별 실제 표본 수 — 폴백 전 숫자여야 어디에 데이터가 있는지 보인다 */
+    const corpCounts = {};
+    Aggregator.CORP_TYPES.forEach(c => {
+      corpCounts[c.id] = midFn
+        ? Aggregator.compute({ where: midFn, corpType: c.id, certKey }).count
+        : 0;
+    });
+
     let agg = { empty: true }, scope = '';
     if (midFn) {
-      agg = Aggregator.compute({ where: midFn, certKey });
-      scope = '선배 데이터';
+      if (currentCorp === 'all') {
+        agg = Aggregator.compute({ where: midFn, certKey });
+        scope = '선배 데이터';
+      } else {
+        agg = Aggregator.compute({ where: midFn, corpType: currentCorp, certKey });
+        scope = `${corpLabel(currentCorp)} 선배 데이터`;
+        if (agg.empty) {
+          agg = Aggregator.compute({ where: midFn, certKey });
+          scope = '중분류 전체 (기업유형 미일치)';
+        }
+      }
     }
     if (agg.empty && majFn) {
       agg = Aggregator.compute({ where: majFn, certKey });
@@ -132,6 +154,7 @@ window.CareerPage = (() => {
     }
 
     const head = `
+      ${corpTabBar(corpCounts)}
       <div class="section-title">${esc(middle.name)} 커리어 로드맵
         ${agg.empty ? '' : `<span class="scope-tag">${esc(scope)} · n = ${agg.count}명</span>`}
       </div>
@@ -175,6 +198,27 @@ window.CareerPage = (() => {
           <a class="empty-cta" onclick="navigate('backoffice')">백오피스에서 데모 시드 추가 →</a>
         </div>
       </div>`;
+  }
+
+  /* 기업 유형 선택 줄. '전체' 는 유형을 나누기 전 중분류 통계 — 기본값이다.
+     각 유형 옆 숫자는 폴백 전 실제 표본 수라 0 이면 0 이라고 그대로 보여준다. */
+  function corpTabBar(corpCounts) {
+    const tab = (id, label, icon, n) => `
+      <div class="corp-tab ${currentCorp===id?'active':''}" onclick="CareerPage.switchCorp('${id}')">
+        <span class="ct-icon">${icon}</span>
+        <span class="ct-label">${esc(label)}</span>
+        ${n == null ? '' : `<span class="ct-count ${n===0?'zero':''}">${n}</span>`}
+      </div>`;
+    return `
+      <div class="section-title">기업 유형</div>
+      <div class="corp-tab-bar">
+        ${tab('all', '전체', '📊', null)}
+        ${Aggregator.CORP_TYPES.map(c => tab(c.id, c.label, c.icon, corpCounts[c.id])).join('')}
+      </div>`;
+  }
+
+  function corpLabel(id) {
+    return (Aggregator.CORP_TYPES.find(c => c.id === id) || {}).label || id;
   }
 
   function tabBar() {
@@ -316,5 +360,6 @@ window.CareerPage = (() => {
     selectMiddle(id) { currentMiddle = id; specTab = 'quant'; render(); },
     gotoPhase(n)     { if (n === 1) currentMiddle = null; render(); },
     switchTab(t)     { specTab = t; render(); },
+    switchCorp(id)   { currentCorp = id; render(); },
   };
 })();
