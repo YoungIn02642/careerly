@@ -601,5 +601,6 @@ window.SpecForm = (() => {
       ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[m]));
   }
 
-  return { render };
+  // 학과·분야·직무 id → 라벨의 단일 출처로도 쓰인다 (cas-hero.js 등)
+  return { render, DEPTS, FIELD_OPTIONS, JOB_OPTIONS };
 })();

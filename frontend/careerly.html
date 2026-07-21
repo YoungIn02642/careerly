@@ -451,23 +451,26 @@
     <div class="page-head">
       <div class="page-eyebrow">CAS · Career Asset Score</div>
       <h1 class="page-title">내 역량 자산 점수</h1>
-      <p class="page-desc">정량·정성 스펙을 종합한 CAS 점수와 유사 경로 합격자와의 비교 분석입니다.</p>
+      <p class="page-desc">학점·어학·자격증처럼 <b>숫자로 남는 스펙</b>과 인턴·공모전처럼
+        <b>경험으로 쌓이는 스펙</b>을 합쳐 1,000점으로 나타낸 점수예요.
+        취업에 성공한 선배들의 실제 데이터와 비교해 계산합니다.</p>
     </div>
 
-    <!-- CAS hero -->
-    <div class="card cas-hero">
+    <!-- CAS hero — 값은 js/cas-hero.js 가 채운다 -->
+    <div class="card cas-hero" id="cas-hero">
       <div>
         <div class="cas-score-label">내 CAS 점수</div>
         <div class="cas-score-row">
-          <span class="cas-score-num">87</span>
-          <span class="cas-score-max">/ 100</span>
+          <span class="cas-score-num" id="cas-score-num">—</span>
+          <span class="cas-score-max">/ 1000</span>
         </div>
-        <div class="cas-rank"><i class="ti ti-trophy"></i>전공·희망직무 상위 12%</div>
+        <div class="cas-rank" id="cas-rank"><i class="ti ti-trophy"></i>계산 중…</div>
+        <div class="cas-split" id="cas-split"></div>
       </div>
       <div>
         <div class="cas-dist-head">
-          <span>컴퓨터공학과 · 백엔드 희망 기준 백분위 분포</span>
-          <b>우수 등급</b>
+          <span id="cas-dist-label">백분위 분포</span>
+          <b id="cas-grade">—</b>
         </div>
         <div class="cas-bar">
           <div class="cas-bar-fill"></div>
@@ -476,6 +479,7 @@
         <div class="cas-scale">
           <span>미흡</span><span>보통</span><span class="hit">우수</span><span>탁월</span>
         </div>
+        <div class="cas-dist-help" id="cas-dist-help"></div>
       </div>
     </div>
 
@@ -751,6 +755,7 @@
 <script src="js/aggregation.js"></script>
 <script src="js/cas.js"></script>
 <script src="js/cas-radar.js"></script>
+<script src="js/cas-hero.js"></script>
 <script src="js/spec-form.js"></script>
 <script src="js/backoffice.js"></script>
 <script src="js/career.js"></script>

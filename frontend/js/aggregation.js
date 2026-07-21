@@ -179,7 +179,10 @@ window.Aggregator = (() => {
       : [];
     const qualBenchRaw = qualRaws.length ? Math.round(avg(qualRaws)) : null;
 
-    return { count: specs.length, empty: false, gpa, certs, scores, qual, qualBenchRaw };
+    /* specs — 조건에 걸린 선배 스펙 원본.
+       평균만으로는 못 하는 계산(예: CAS 백분위 = 선배 각자의 점수를 매겨 줄 세우기)에
+       필요하다. 필터 조건이 여기 있으므로 호출부가 같은 필터를 다시 짜지 않게 넘겨준다. */
+    return { count: specs.length, empty: false, gpa, certs, scores, qual, qualBenchRaw, specs };
   }
 
   return {
