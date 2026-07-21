@@ -402,8 +402,12 @@ window.SpecForm = (() => {
         resultEl.hidden = false;
         resultEl.innerHTML = `
           <div class="sf-ai-score">정성 CAS <b>${q.deterministicTotal ?? '-'}</b> <span>/ 600</span></div>
+          <div class="sf-ai-note">AI가 글에서 찾아낸 활동을 careerly 채점 기준(활동 유형 ×
+            기간 × 역할 × 성과)으로 계산한 점수예요. 저장하면 로드맵에도 이 점수가 표시됩니다.</div>
           ${q.rationale ? `<div class="sf-ai-reason">${escapeHtml(q.rationale)}</div>` : ''}
-          <div class="sf-ai-cross">참고(AI 추정): ${q.aiTotal ?? '-'} / 600</div>
+          <div class="sf-ai-cross">참고(AI 추정): ${q.aiTotal ?? '-'} / 600
+            <span>— AI가 직접 매긴 총점입니다. 채점 기준을 똑같이 적용하지 못해
+            위 점수와 차이가 날 수 있어요. 실제 반영되는 건 위 점수입니다.</span></div>
           <div class="sf-ai-hint">아래 활동·정량 칸에 자동으로 채웠어요. 틀린 곳은 직접 고친 뒤 저장하세요.</div>`;
         statusEl.textContent = '완료!';
       } catch (e) {
