@@ -79,24 +79,18 @@ window.Aggregator = (() => {
     { id: 'public', label: '공기업',   icon: '🏛️', cas: 'public',  desc: '공기업 · 공공기관' },
   ];
 
-  const QUAL_FIELDS = [
-    { id: 'extracurricular', label: '대외활동',          icon: '🌐',
-      help: '학회·공모전·서포터즈 등 — 협업 역량과 분야 관심도 증명' },
-    { id: 'projects',         label: '참여 프로젝트',     icon: '🛠️',
-      help: '캡스톤·해커톤·팀 프로젝트 — 실무 역량 직접 증명' },
-    { id: 'internship',       label: '인턴십',            icon: '💼',
-      help: '대부분 직무에서 가장 강력한 차별화 — 전환·정규직 합격에 직결' },
-    { id: 'oncampus',         label: '교내활동',          icon: '🏫',
-      help: '동아리·총학·조교 — 리더십·꾸준함 등 인성 평가 자료' },
-    { id: 'coreCourses',      label: '필수 이수교과목',    icon: '📚',
-      help: '직무 적합성 1차 필터 — 전공 학점·관련 수업 이수 여부' },
-    { id: 'langStudy',        label: '어학연수',          icon: '✈️',
-      help: '글로벌 직무·해외 영업 가산점 — 단순 연수보다 성과가 중요' },
-    { id: 'exchange',         label: '교환학생',          icon: '🌍',
-      help: '문화 적응력·자기주도성 어필 — 외국계 기업 합격률 ↑' },
-    { id: 'gradSchool',       label: '대학원 진학',       icon: '🎓',
-      help: 'R&D·연구직 진출 핵심 경로 — 학사로 진입 어려운 직무 우회' },
-  ];
+  /* 정성 활동 유형은 설문(구글폼) 구조와 CAS 채점 가중치의 단일 출처인
+     CAS.ACTIVITY_TYPES 를 그대로 쓴다. (cas.js 가 이 파일보다 나중에 로드되므로
+     로드 시점 상수로 잡지 않고, 집계가 호출되는 런타임에 읽는다.) */
+  const activityTypes = () => (typeof CAS !== 'undefined' ? CAS.ACTIVITY_TYPES : []);
+
+  /* 스펙이 특정 활동 유형을 보유했는가 (옛 boolean qual 도 CAS 가 환산해준다) */
+  function hasActivityType(s, id) {
+    const acts = (typeof CAS !== 'undefined')
+      ? CAS.normalizeActivities(s)
+      : (Array.isArray(s.activities) ? s.activities : []);
+    return acts.some(a => a.type === id);
+  }
 
   // ── score helpers ──────────────────────────────────────────
   const avg = arr => arr.length ? arr.reduce((a,b) => a+b, 0) / arr.length : null;
@@ -169,18 +163,30 @@ window.Aggregator = (() => {
       toeicSpeaking: ts.length    ? { avg: tsAvg(ts),    n: ts.length    } : null,
     };
 
-    // 정성스펙 보유율
-    const qual = QUAL_FIELDS.map(q => {
-      const have = specs.filter(s => s.qual?.[q.id]).length;
+    // 정성스펙 — 활동 유형별 보유율 (CAS 가중치 tier 포함)
+    const qual = activityTypes().map(t => {
+      const have = specs.filter(s => hasActivityType(s, t.id)).length;
       return {
-        id: q.id, label: q.label, icon: q.icon, help: q.help,
+        id: t.id, label: t.label, icon: t.icon, help: t.help, tier: t.tier, base: t.base,
         pct: Math.round(have / specs.length * 100),
         n: have,
       };
     });
 
-    return { count: specs.length, empty: false, gpa, certs, scores, qual };
+    // 합격자 평균 정성 원점수 — CAS 정성 채점의 벤치마크(benchRaw)로 쓰인다
+    const qualRaws = (typeof CAS !== 'undefined')
+      ? specs.map(s => CAS.qualRaw(CAS.normalizeActivities(s))).filter(x => x > 0)
+      : [];
+    const qualBenchRaw = qualRaws.length ? Math.round(avg(qualRaws)) : null;
+
+    return { count: specs.length, empty: false, gpa, certs, scores, qual, qualBenchRaw };
   }
 
-  return { compute, CERT_CATALOG, QUAL_FIELDS, CORP_TYPES, OPIC_LEVELS, TS_LEVELS };
+  return {
+    compute, CERT_CATALOG, CORP_TYPES, OPIC_LEVELS, TS_LEVELS,
+    hasActivityType,
+    // 정성 활동 유형 — CAS.ACTIVITY_TYPES 를 런타임에 노출 (단일 출처)
+    get ACTIVITY_TYPES() { return activityTypes(); },
+    get QUAL_FIELDS()    { return activityTypes(); },   // 예전 이름 호환
+  };
 })();
