@@ -51,7 +51,10 @@ window.SpecForm = (() => {
   function render(container, user) {
     const spec = DB.getSpec(user.username) || {};
     const certsHaving = new Set(spec.certs || []);
-    const qual = spec.qual || {};
+    // 구조화된 활동 우선. 없으면 옛 boolean qual 을 활동으로 환산해 시작한다.
+    const initialActivities = (spec.activities && spec.activities.length)
+      ? spec.activities
+      : (window.CAS ? CAS.normalizeActivities(spec) : []);
 
     container.innerHTML = `
       <div class="sf-head">
@@ -171,13 +174,30 @@ window.SpecForm = (() => {
         </div>
       </div>
 
-      <!-- 정성 스펙 -->
+      <!-- 정성 스펙 · 대표 활동 -->
       <div class="sf-section">
         <div class="sf-section-title sf-section-title--qual">
-          <i class="ti ti-medal"></i>정성 스펙
-          <span class="sf-section-helper">취업에 어떻게 도움이 되는지 함께 안내합니다</span>
+          <i class="ti ti-medal"></i>정성 스펙 · 대표 활동
+          <span class="sf-section-helper">유형·기간·역할·성과까지 적을수록 CAS 정성 점수가 정확해집니다</span>
         </div>
-        <div class="sf-qual-list" id="sf-qual-list"></div>
+        <!-- AI 자동 입력 -->
+        <div class="sf-ai" id="sf-ai">
+          <div class="sf-ai-head"><i class="ti ti-sparkles"></i> AI로 한 번에 입력</div>
+          <div class="sf-ai-desc">활동을 자유롭게 적어주세요. 유형·기간·역할이 비어 있어도 AI가 알아서 분류하고 아래 칸을 채워드려요.</div>
+          <textarea id="sf-ai-text" class="sf-ai-text" rows="5" placeholder="예)
+1. 인턴십 국민은행 3개월~6개월, 결과물 없음
+2. 프로젝트 로얄에이전트 6개월~1년, 팀장, 깃헙 공개
+3. 공모전 SW상상기업 6개월~1년, 수상"></textarea>
+          <div class="sf-ai-actions">
+            <button type="button" class="sf-ai-btn" id="sf-ai-run"><i class="ti ti-wand"></i> AI로 분석하기</button>
+            <span class="sf-ai-status" id="sf-ai-status"></span>
+          </div>
+          <div class="sf-ai-result" id="sf-ai-result" hidden></div>
+        </div>
+
+        <div class="sf-act-note">인턴십 &gt; 공모전·대외활동 순으로 가중됩니다. 대표 활동을 자유롭게 추가하세요.</div>
+        <div class="sf-act-list" id="sf-act-list"></div>
+        <button type="button" class="sf-act-add" id="sf-act-add"><i class="ti ti-plus"></i> 활동 추가</button>
       </div>
 
       <button class="btn-save" id="sf-save">저장하기</button>
@@ -193,8 +213,14 @@ window.SpecForm = (() => {
     });
     document.getElementById('sf-cert-other').value = otherCerts.join(', ');
 
-    // ── 정성스펙 리스트
-    fillQualList(qual, spec.detail || {});
+    // ── 정성스펙 · 대표 활동 편집기
+    renderActivities(initialActivities);
+    bindActWrap();
+    document.getElementById('sf-act-add').addEventListener('click', () => {
+      actState.push({});
+      paintActivities();
+    });
+    bindAiAssist();
 
     // ── 필드/직무 의존 채우기
     fillFieldJob(spec.dept, spec.field, spec.job);
@@ -289,30 +315,202 @@ window.SpecForm = (() => {
     });
   }
 
-  function fillQualList(qual, detail) {
-    const wrap = document.getElementById('sf-qual-list');
-    wrap.innerHTML = Aggregator.QUAL_FIELDS.map(q => {
-      const checked = !!qual[q.id];
-      return `
-        <div class="sf-qual-item ${checked ? 'on' : ''}" data-qid="${q.id}">
-          <label class="sf-qual-head">
-            <input type="checkbox" data-qual="${q.id}" ${checked ? 'checked' : ''} />
-            <span class="sf-qual-icon">${q.icon}</span>
-            <span class="sf-qual-label">${q.label}</span>
-            <span class="sf-qual-help">${q.help}</span>
-          </label>
-          <div class="sf-qual-detail">
-            <input type="text" data-detail="${q.id}Text" placeholder="간단히 적어주세요 (예: 회사명/기간/역할)"
-                   value="${escapeHtml(detail[q.id + 'Text'] || '')}" />
-          </div>
-        </div>
-      `;
-    }).join('');
-    wrap.querySelectorAll('input[data-qual]').forEach(inp => {
-      inp.addEventListener('change', () => {
-        inp.closest('.sf-qual-item').classList.toggle('on', inp.checked);
-      });
+  // ── 정성 · 대표 활동 편집기 ────────────────────────────────
+  //   설문(구글폼)과 동일한 구조: 유형 · 활동명 · 기간 · 역할(또는 연구단계) · 성과
+  //   저장되는 값은 spec.activities = [{ type, name, duration, role|stage, outcome }]
+  //   이 배열이 CAS.computeQual 의 입력이 된다.
+  const OUTCOME_KEYS = ['수상', '논문', '발표 또는 산출물 공개(깃헙 등)', '전환, 정규직 합격', '결과물 없음'];
+  const ROLE_BY_KIND = {
+    team:  ['팀장', '팀원', '개인'],
+    exec:  ['임원진', '동아리원, 일반학회원'],
+    stage: ['학부연구생', '석사', '박사'],
+  };
+  const durationKeys = () => Object.keys(CAS.DURATION_MULT);
+
+  let actState = [];   // 현재 편집 중인 활동 배열
+
+  function renderActivities(initial) {
+    actState = (initial || []).map(a => ({ ...a }));
+    if (!actState.length) actState.push({});
+    paintActivities();
+  }
+
+  function paintActivities() {
+    const wrap = document.getElementById('sf-act-list');
+    if (!wrap) return;
+    wrap.innerHTML = actState.map((a, i) => activityRow(a, i)).join('');
+  }
+
+  /* 이벤트 위임 — 한 번만 바인딩한다. 입력값은 즉시 actState 에 반영되므로
+     유형이 바뀌어 역할 옵션을 다시 그려도(paintActivities) 값이 유지된다. */
+  function bindActWrap() {
+    const wrap = document.getElementById('sf-act-list');
+    const onChange = e => {
+      const el = e.target;
+      const i = el.dataset.i, f = el.dataset.field;
+      if (i == null || !f) return;
+      actState[+i][f] = el.value;
+      if (f === 'type') paintActivities();   // 유형별 역할/단계 옵션 갱신
+    };
+    wrap.addEventListener('change', onChange);
+    wrap.addEventListener('input', onChange);
+    wrap.addEventListener('click', e => {
+      const btn = e.target.closest('[data-act-remove]');
+      if (!btn) return;
+      actState.splice(+btn.dataset.i, 1);
+      if (!actState.length) actState.push({});
+      paintActivities();
     });
+  }
+
+  // ── AI 자동 입력 ───────────────────────────────────────────
+  /* 반정형 텍스트를 서버(/api/cas/analyze, Gemini)로 보내 활동을 정규화·채점하고,
+     그 결과로 활동 편집기와 정량 필드를 채운다. 채운 뒤에도 사용자가 각 칸을
+     자유롭게 고칠 수 있다(값은 그대로 편집기 상태에 반영됨). */
+  function bindAiAssist() {
+    const btn = document.getElementById('sf-ai-run');
+    if (!btn) return;
+    const textEl   = document.getElementById('sf-ai-text');
+    const statusEl = document.getElementById('sf-ai-status');
+    const resultEl = document.getElementById('sf-ai-result');
+
+    btn.addEventListener('click', async () => {
+      const text = (textEl.value || '').trim();
+      if (!text) { statusEl.textContent = '분석할 내용을 입력해 주세요.'; return; }
+
+      btn.disabled = true;
+      statusEl.textContent = 'AI가 분석 중…';
+      resultEl.hidden = true;
+      try {
+        const r = await DB.analyzeCas(text);
+
+        // 활동 편집기 채우기 (빈 값이면 그대로 두어 사용자가 마저 채우게)
+        if (Array.isArray(r.activities) && r.activities.length) {
+          actState = r.activities.map(a => ({
+            type: a.type, name: a.name, duration: a.duration,
+            role: a.role || undefined, stage: a.stage || undefined, outcome: a.outcome,
+          }));
+          paintActivities();
+        }
+
+        applyQuant(r.quant);
+
+        // 정성 점수 결과 표시
+        const q = r.qual || {};
+        resultEl.hidden = false;
+        resultEl.innerHTML = `
+          <div class="sf-ai-score">정성 CAS <b>${q.aiTotal ?? '-'}</b> <span>/ 600</span></div>
+          ${q.rationale ? `<div class="sf-ai-reason">${escapeHtml(q.rationale)}</div>` : ''}
+          <div class="sf-ai-cross">참고(규칙 기반 교차검증): ${q.deterministicTotal ?? '-'} / 600</div>
+          <div class="sf-ai-hint">아래 활동·정량 칸에 자동으로 채웠어요. 틀린 곳은 직접 고친 뒤 저장하세요.</div>`;
+        statusEl.textContent = '완료!';
+      } catch (e) {
+        statusEl.textContent = '';
+        resultEl.hidden = false;
+        resultEl.innerHTML = `<div class="sf-ai-err">${escapeHtml(e.message || 'AI 분석에 실패했습니다.')}</div>`;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
+
+  /* AI 가 파싱한 정량 값을 폼에 반영한다. 값이 있는 것만 덮어쓴다. */
+  function applyQuant(quant) {
+    if (!quant) return;
+    const set = (id, v) => { const el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; };
+    if (quant.gpa != null)    set('sf-gpa', quant.gpa);
+    if (quant.gpaMax != null) set('sf-gpaMax', String(quant.gpaMax));
+    const lang = quant.lang || {};
+    set('sf-toeic', lang.toeic);
+    set('sf-toefl', lang.toefl);
+    // OPIc / 토익스피킹은 select — 해당 옵션이 있을 때만 반영
+    const setSelIfOption = (id, v) => {
+      const el = document.getElementById(id);
+      if (el && v && [...el.options].some(o => o.value === v)) el.value = v;
+    };
+    setSelIfOption('sf-opic', lang.opic);
+    setSelIfOption('sf-toeicSpeaking', lang.toeicSpeaking);
+
+    // 자격증: 카탈로그에 있으면 체크, 나머지는 '기타' 칸에 채운다
+    const certs = Array.isArray(quant.certs) ? quant.certs.filter(Boolean) : [];
+    if (certs.length) {
+      const grid = document.getElementById('sf-cert-grid');
+      const matched = new Set();
+      grid?.querySelectorAll('input[data-cert]').forEach(inp => {
+        if (certs.includes(inp.dataset.cert)) {
+          inp.checked = true;
+          inp.closest('.sf-cert-card')?.classList.add('on');
+          matched.add(inp.dataset.cert);
+        }
+      });
+      const others = certs.filter(c => !matched.has(c));
+      const otherEl = document.getElementById('sf-cert-other');
+      if (otherEl && others.length) {
+        const existing = otherEl.value.split(',').map(s => s.trim()).filter(Boolean);
+        otherEl.value = [...new Set([...existing, ...others])].join(', ');
+      }
+    }
+  }
+
+  function activityRow(a, i) {
+    const types = CAS.ACTIVITY_TYPES;
+    const t = types.find(x => x.id === a.type);
+    return `
+      <div class="sf-act-row">
+        <div class="sf-act-grid">
+          <select data-i="${i}" data-field="type" class="sf-act-type">
+            <option value="">유형 선택</option>
+            ${types.map(x => `<option value="${x.id}" ${a.type === x.id ? 'selected' : ''}>${x.icon} ${x.label}</option>`).join('')}
+          </select>
+          <input type="text" data-i="${i}" data-field="name" placeholder="활동명 (예: OO기업 인턴, OO 공모전)"
+                 value="${escapeHtml(a.name || '')}" />
+          <select data-i="${i}" data-field="duration">
+            <option value="">기간</option>
+            ${durationKeys().map(d => `<option value="${d}" ${a.duration === d ? 'selected' : ''}>${d}</option>`).join('')}
+          </select>
+          ${roleFieldHtml(a, i, t && t.roleKind)}
+          <select data-i="${i}" data-field="outcome">
+            <option value="">성과</option>
+            ${OUTCOME_KEYS.map(o => `<option value="${escapeHtml(o)}" ${a.outcome === o ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('')}
+          </select>
+          <button type="button" class="sf-act-remove" data-act-remove data-i="${i}" title="삭제"><i class="ti ti-x"></i></button>
+        </div>
+        ${t ? `<div class="sf-act-help">${escapeHtml(t.help)}</div>` : ''}
+      </div>`;
+  }
+
+  function roleFieldHtml(a, i, roleKind) {
+    if (roleKind === 'stage') {
+      return `<select data-i="${i}" data-field="stage">
+        <option value="">연구 단계</option>
+        ${ROLE_BY_KIND.stage.map(r => `<option value="${r}" ${a.stage === r ? 'selected' : ''}>${r}</option>`).join('')}
+      </select>`;
+    }
+    if (roleKind === 'team' || roleKind === 'exec') {
+      return `<select data-i="${i}" data-field="role">
+        <option value="">역할</option>
+        ${ROLE_BY_KIND[roleKind].map(r => `<option value="${escapeHtml(r)}" ${a.role === r ? 'selected' : ''}>${escapeHtml(r)}</option>`).join('')}
+      </select>`;
+    }
+    if (roleKind === 'free') {
+      return `<input type="text" data-i="${i}" data-field="role" placeholder="역할 (예: 기자단 2기)" value="${escapeHtml(a.role || '')}" />`;
+    }
+    return `<span class="sf-act-spacer"></span>`;   // none / 미선택 — 그리드 정렬 유지
+  }
+
+  function collectActivities() {
+    return actState
+      .filter(a => a.type)
+      .map(a => {
+        const t = CAS.ACTIVITY_TYPES.find(x => x.id === a.type);
+        const o = { type: a.type };
+        if (a.name && a.name.trim()) o.name = a.name.trim();
+        if (a.duration) o.duration = a.duration;
+        if (t && t.roleKind === 'stage') { if (a.stage) o.stage = a.stage; }
+        else if (a.role && String(a.role).trim()) o.role = String(a.role).trim();
+        if (a.outcome) o.outcome = a.outcome;
+        return o;
+      });
   }
 
   function fillFieldJob(dept, currentField, currentJob) {
@@ -373,20 +571,13 @@ window.SpecForm = (() => {
       toeicSpeaking: document.getElementById('sf-toeicSpeaking').value || null,
     };
 
-    const qual = {};
-    document.querySelectorAll('input[data-qual]').forEach(i => {
-      qual[i.dataset.qual] = i.checked;
-    });
-    const detail = {};
-    document.querySelectorAll('input[data-detail]').forEach(i => {
-      if (i.value.trim()) detail[i.dataset.detail] = i.value.trim();
-    });
+    const activities = collectActivities();
 
     const saveBtn = document.getElementById('sf-save');
     saveBtn.disabled = true;
     try {
       await DB.updateUser({ nickname });
-      await DB.upsertSpec({ dept, field, job, company, corpType, gpa, gpaMax, certs, scores, qual, detail });
+      await DB.upsertSpec({ dept, field, job, company, corpType, gpa, gpaMax, certs, scores, activities });
     } catch (e) {
       alert('저장에 실패했습니다. ' + e.message);
       return;
