@@ -77,6 +77,7 @@ window.CASHero = (() => {
   /* 점수를 못 내는 상태(비로그인·스펙없음·선배없음)를 한 자리에서 처리한다.
      빈칸에 0 을 띄우면 "0점" 으로 오해하므로 무엇을 하면 되는지를 말해준다. */
   function showEmpty(msg, help) {
+    if (window.CASCompare) CASCompare.render(null, null);
     $('cas-score-num').textContent = '—';
     $('cas-rank').innerHTML = `<i class="ti ti-info-circle"></i>${msg}`;
     $('cas-split').innerHTML = '';
@@ -131,6 +132,10 @@ window.CASHero = (() => {
 
     const catalogIds = (Aggregator.CERT_CATALOG[spec.dept] || []).map(c => c.id);
     const mine = scoreOf(spec, agg, catalogIds);
+
+    /* 아래 비교 카드도 같은 벤치마크로 그린다 — 모집단이 다르면
+       "상위 30% 인데 전 항목이 평균 이하" 같은 모순이 생긴다. */
+    if (window.CASCompare) CASCompare.render(spec, agg);
 
     // 점수 + 구성
     $('cas-score-num').textContent = mine.total;

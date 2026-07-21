@@ -488,57 +488,29 @@
     <div class="card radar-card" id="cas-radar-card"></div>
 
     <!-- 정량 / 정성 비교 -->
-    <div class="section-label"><i class="ti ti-chart-bar"></i>정량 · 정성 스펙 비교 — 나 vs 유사 경로 선배 평균</div>
+    <div class="section-label"><i class="ti ti-chart-bar"></i>스펙 비교 — 나 vs 같은 길을 간 선배 평균</div>
     <div class="compare-grid">
       <!-- 정량 -->
       <div class="card compare-card">
-        <div class="compare-head"><span class="compare-dot quant"></span><span class="compare-title">정량 스펙</span></div>
-        <div class="compare-sub">학점·어학·자격증 등 수치화된 역량</div>
+        <div class="compare-head"><span class="compare-dot quant"></span><span class="compare-title">숫자 스펙</span></div>
+        <div class="compare-sub">학점·어학·자격증처럼 점수나 개수로 딱 떨어지는 스펙이에요.
+          세로 선이 선배 평균, 색 막대가 나예요 — 막대가 선을 넘으면 평균 이상입니다.</div>
         <div class="compare-legend">
           <span class="lg"><span class="sw me"></span>나</span>
           <span class="lg"><span class="sw peer"></span>선배 평균</span>
         </div>
-        <div class="cmp-row">
-          <div class="cmp-row-top"><span class="cmp-label">학점 (GPA)</span><span class="cmp-nums"><b>3.82</b> / 4.5 <span class="gap pos">+0.1</span></span></div>
-          <div class="cmp-track"><div class="cmp-peer" style="left:82%"></div><div class="cmp-me quant" data-w="85"></div></div>
-        </div>
-        <div class="cmp-row">
-          <div class="cmp-row-top"><span class="cmp-label">어학 (TOEIC)</span><span class="cmp-nums"><b>870</b> / 990 <span class="gap neg">-25</span></span></div>
-          <div class="cmp-track"><div class="cmp-peer" style="left:90%"></div><div class="cmp-me quant" data-w="79"></div></div>
-        </div>
-        <div class="cmp-row">
-          <div class="cmp-row-top"><span class="cmp-label">자격증 보유</span><span class="cmp-nums"><b>1</b>개 / 평균 3개 <span class="gap neg">-8점</span></span></div>
-          <div class="cmp-track"><div class="cmp-peer" style="left:75%"></div><div class="cmp-me lacking" data-w="33"></div></div>
-        </div>
-        <div class="cmp-row" style="margin-bottom:0">
-          <div class="cmp-row-top"><span class="cmp-label">전공 핵심 과목</span><span class="cmp-nums"><b>A0</b> 평균 <span class="gap pos">동일</span></span></div>
-          <div class="cmp-track"><div class="cmp-peer" style="left:80%"></div><div class="cmp-me quant" data-w="80"></div></div>
-        </div>
+        <div id="cmp-quant-rows"></div>
       </div>
       <!-- 정성 -->
       <div class="card compare-card">
-        <div class="compare-head"><span class="compare-dot qual"></span><span class="compare-title">정성 스펙</span></div>
-        <div class="compare-sub">인턴십·대외활동·수상 등 경험 기반 역량</div>
+        <div class="compare-head"><span class="compare-dot qual"></span><span class="compare-title">경험 스펙</span></div>
+        <div class="compare-sub">인턴·공모전·대외활동처럼 숫자로 표현하기 어려운 경험이에요.
+          몇 번 했는지를 선배 평균과 비교합니다.</div>
         <div class="compare-legend qual">
           <span class="lg"><span class="sw me"></span>나</span>
           <span class="lg"><span class="sw peer"></span>합격자 평균</span>
         </div>
-        <div class="cmp-row">
-          <div class="cmp-row-top"><span class="cmp-label">인턴십 경험</span><span class="cmp-nums"><b>1</b>회 / 평균 2.1회 <span class="gap neg">-1회</span></span></div>
-          <div class="cmp-track"><div class="cmp-peer" style="left:84%"></div><div class="cmp-me lacking" data-w="48"></div></div>
-        </div>
-        <div class="cmp-row">
-          <div class="cmp-row-top"><span class="cmp-label">대외활동</span><span class="cmp-nums"><b>5</b>건 / 평균 5건 <span class="gap pos">+0</span></span></div>
-          <div class="cmp-track"><div class="cmp-peer" style="left:82%"></div><div class="cmp-me qual" data-w="84"></div></div>
-        </div>
-        <div class="cmp-row">
-          <div class="cmp-row-top"><span class="cmp-label">공모전·수상</span><span class="cmp-nums"><b>0</b>회 / 평균 2.3회 <span class="gap neg">-2.3회</span></span></div>
-          <div class="cmp-track"><div class="cmp-peer" style="left:78%"></div><div class="cmp-me lacking" data-w="10"></div></div>
-        </div>
-        <div class="cmp-row" style="margin-bottom:0">
-          <div class="cmp-row-top"><span class="cmp-label">프로젝트 수행</span><span class="cmp-nums"><b>3</b>건 / 평균 2.5건 <span class="gap pos">+0.5</span></span></div>
-          <div class="cmp-track"><div class="cmp-peer" style="left:72%"></div><div class="cmp-me qual" data-w="86"></div></div>
-        </div>
+        <div id="cmp-qual-rows"></div>
       </div>
     </div>
 
@@ -756,6 +728,7 @@
 <script src="js/cas.js"></script>
 <script src="js/cas-radar.js"></script>
 <script src="js/cas-hero.js"></script>
+<script src="js/cas-compare.js"></script>
 <script src="js/spec-form.js"></script>
 <script src="js/backoffice.js"></script>
 <script src="js/career.js"></script>

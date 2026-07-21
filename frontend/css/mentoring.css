@@ -218,6 +218,9 @@ html { scroll-behavior: smooth; }
 .cmp-me.quant { background: var(--brand); }
 .cmp-me.qual { background: var(--green); }
 .cmp-me.lacking { background: repeating-linear-gradient(45deg,#E0823F,#E0823F 5px,#eda86f 5px,#eda86f 10px); }
+/* 값이 없거나 비교 대상이 없을 때 — 0 을 띄우면 '0점' 으로 오해한다 */
+.cmp-none { color: var(--color-text-tertiary); font-weight: 500; }
+.cmp-empty { padding: 18px 2px; font-size: 13px; color: var(--color-text-tertiary); }
 
 /* deficit / gap section */
 .gap-card { padding: 24px 26px; }
