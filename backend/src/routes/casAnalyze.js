@@ -94,7 +94,9 @@ ${rubricText()}
       "assumed": <boolean>, "rawScore": <number>, "reason": <짧은 한국어 근거> }
   ],
   "qualTotal": <number>,
-  "qualRationale": <짧은 한국어 근거>,
+  "qualRationale": <짧은 한국어 근거 — 총점 숫자를 언급하지 말고, 어떤 활동을 어떤 유형으로
+                    보고 무엇을 강점/약점으로 판단했는지 서술한다. 화면에 뜨는 총점은
+                    서버가 다시 계산한 값이라 여기 숫자를 적으면 서로 어긋난다>,
   "quant": {
     "gpa": <number|null>, "gpaMax": <number|null>, "certs": [<string>],
     "lang": { "opic": <string|null>, "toeic": <number|null>,
@@ -202,8 +204,11 @@ router.post('/analyze', async (req, res) => {
       .filter(Boolean)
       .map(rescore);
 
-    /* 교차검증: 같은 활동을 cas.js 결정론 엔진으로도 채점해 함께 돌려준다.
-       AI 점수가 흔들릴 때 비교 근거가 되고, 프론트가 원하면 이 값을 쓸 수 있다. */
+    /* 화면에 띄우는 정성 총점은 이 값이다(프론트 spec-form.js).
+       스펙을 저장하면 로드맵·레이더는 저장된 activities 로 computeQual 을 다시 돌리므로,
+       결정론 값을 보여줘야 "입력할 때 본 점수"와 "저장 후 점수"가 일치한다.
+       AI 총점은 상대평가 환산 산수를 자주 틀린다(같은 입력에 595/360). 활동 분류는
+       믿을 만하고 그게 여기 입력으로 들어가므로, 버리는 건 AI 의 곱셈뿐이다. */
     const deterministic = CAS.computeQual({ spec: { activities } });
 
     res.json({
@@ -212,7 +217,7 @@ router.post('/analyze', async (req, res) => {
       activities,
       qual: {
         aiTotal: Math.max(0, Math.min(CAS.TOTAL_QUAL, Math.round(Number(ai.qualTotal) || 0))),
-        deterministicTotal: deterministic.total,   // cas.js 교차검증
+        deterministicTotal: deterministic.total,   // 화면 표시용 정본
         rationale: String(ai.qualRationale || ''),
         raw: deterministic.raw,
         benchRaw: deterministic.benchRaw,

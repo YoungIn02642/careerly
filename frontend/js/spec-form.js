@@ -395,13 +395,15 @@ window.SpecForm = (() => {
 
         applyQuant(r.quant);
 
-        // 정성 점수 결과 표시
+        // 정성 점수 결과 표시.
+        // 헤드라인은 결정론 점수(deterministicTotal) — 저장 후 로드맵이 보여줄 값과 같다.
+        // AI 총점은 같은 입력에도 흔들려서 참고로만 병기한다.
         const q = r.qual || {};
         resultEl.hidden = false;
         resultEl.innerHTML = `
-          <div class="sf-ai-score">정성 CAS <b>${q.aiTotal ?? '-'}</b> <span>/ 600</span></div>
+          <div class="sf-ai-score">정성 CAS <b>${q.deterministicTotal ?? '-'}</b> <span>/ 600</span></div>
           ${q.rationale ? `<div class="sf-ai-reason">${escapeHtml(q.rationale)}</div>` : ''}
-          <div class="sf-ai-cross">참고(규칙 기반 교차검증): ${q.deterministicTotal ?? '-'} / 600</div>
+          <div class="sf-ai-cross">참고(AI 추정): ${q.aiTotal ?? '-'} / 600</div>
           <div class="sf-ai-hint">아래 활동·정량 칸에 자동으로 채웠어요. 틀린 곳은 직접 고친 뒤 저장하세요.</div>`;
         statusEl.textContent = '완료!';
       } catch (e) {
