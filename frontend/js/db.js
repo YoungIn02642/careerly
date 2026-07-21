@@ -90,6 +90,12 @@ window.DB = (() => {
     }
   }
 
+  /* 반정형 스펙 텍스트 → AI 분석(활동 정규화·정성 채점).
+     서버가 Gemini 로 처리한다. 키 미설정이면 503 → 에러 메시지를 그대로 던진다. */
+  async function analyzeCas(text) {
+    return api('POST', '/api/cas/analyze', { text });
+  }
+
   // ── 쓰기 (비동기) ──────────────────────────────────────────
   async function createUser({ username, password, name, email, role }) {
     const { user } = await api('POST', '/api/auth/signup', { username, password, name, email, role });
@@ -139,7 +145,7 @@ window.DB = (() => {
   return {
     hydrate, refreshSpecs, refreshUsers,
     currentUser, getAllSpecs, getSpec, getUsers, countByRole, stats,
-    createUser, login, logout, updateUser, upsertSpec, classifyCompany,
+    createUser, login, logout, updateUser, upsertSpec, classifyCompany, analyzeCas,
     seedDemo, seedRandom, clearAll, deleteUser,
   };
 })();

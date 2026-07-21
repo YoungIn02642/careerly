@@ -6,30 +6,32 @@
          '대기업' 의 법적 근거가 이 명단이다. 삼성전자 같은 모회사뿐 아니라
          SK쉴더스·롯데GRS 처럼 이름만으론 알 수 없는 계열사까지 잡힌다.
 
-   ── 이 API 의 함정 ──
-   · 호스트가 apis.data.go.kr 이 아니라 openapi.egroup.go.kr (기업집단포털 자체 도메인)
-   · HTTPS 미지원. HTTP 로만 붙는다.
-   · 파라미터가 ServiceKey (대문자 S), presentnYear(지정년월) 필수
-   · 응답이 XML
-   · data.go.kr 에 [승인] 으로 보여도 이 게이트웨이 반영에 시간이 걸린다(최대 1일).
-     그 사이에는 resultCode 98 'certification fail' 이 뜬다.
+   ── 이 API 의 규격 (상세명세 확인 완료) ──
+   · 호스트는 apis.data.go.kr (HTTPS). egroup.go.kr 이 아니다 — 예전 추정이 틀렸었다.
+   · 오퍼레이션 경로: /appnGroupAffiListApi (.do 없음)
+   · 파라미터: ServiceKey(대문자 S), pageNo, numOfRows, presentnYear
+   · presentnYear 는 '연도' 가 아니라 지정년월 YYYYMM 이다(예: 202505). 지정은 매년 5월.
+     여기에 연도 4자리(2026)를 넣으면 HTTP 500 'Unexpected errors' 가 난다.
+   · unityGrupCode(기업집단코드)는 선택. 안 주면 전체 소속회사가 조회된다.
+   · 응답 XML: <appnGroupAffi> 반복. 회사명은 <entrprsNm>, 그 외 jurirno/bizrno/rprsntvNm/fondDe/grinil.
+   · 성공은 <resultCode>00</resultCode>.
 
-     node scripts/fetch-ftc-groups.js            # 최신 지정년도 자동 탐색
-     node scripts/fetch-ftc-groups.js 2026       # 지정년도 직접 지정
+     node scripts/fetch-ftc-groups.js            # 최신 지정년월 자동 탐색
+     node scripts/fetch-ftc-groups.js 202505     # 지정년월(YYYYMM) 직접 지정
 */
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const fs = require('fs');
 const path = require('path');
 
 const KEY = (process.env.DATA_GO_KR_SERVICE_KEY || '').trim();
-const API = 'http://openapi.egroup.go.kr/1130000/appnGroupAffiList/appnGroupAffiListApi.do';
+const API = 'https://apis.data.go.kr/1130000/appnGroupAffiList/appnGroupAffiListApi';
 const PER_PAGE = 500;
 
 /* 의존성을 늘리지 않으려고 XML 파서를 붙이지 않았다. 이 응답은 중첩이 없는
-   평평한 <item> 목록이라 태그 추출로 충분하다. 구조가 복잡해지면 그때 파서를 넣는다. */
+   평평한 <appnGroupAffi> 목록이라 태그 추출로 충분하다. 구조가 복잡해지면 그때 파서를 넣는다. */
 function parseItems(xml) {
   const items = [];
-  const re = /<item>([\s\S]*?)<\/item>/g;
+  const re = /<appnGroupAffi>([\s\S]*?)<\/appnGroupAffi>/g;
   let m;
   while ((m = re.exec(xml))) {
     const row = {};
@@ -56,30 +58,33 @@ async function call(presentnYear, pageNo) {
   return { xml, items: parseItems(xml), total: Number(tag(xml, 'totalCount') || 0) };
 }
 
-/* 지정년도는 매년 바뀐다. 인자로 안 주면 올해부터 거꾸로 훑어 데이터가 나오는 해를 쓴다. */
+/* 지정은 매년 5월. presentnYear 는 YYYYMM 이다. 인자로 안 주면 올해 5월부터
+   거꾸로 훑어 데이터가 나오는 지정년월을 쓴다. */
 async function resolveYear(explicit) {
   if (explicit) return explicit;
   const thisYear = new Date().getFullYear();
   for (const y of [thisYear, thisYear - 1, thisYear - 2]) {
+    const ym = `${y}05`;
     try {
-      const r = await call(String(y), 1);
-      if (r.items.length) return String(y);
+      const r = await call(ym, 1);
+      if (r.items.length) return ym;
     } catch (e) {
-      if (/98|certification/i.test(e.message)) throw e;   // 인증 문제는 연도를 바꿔도 소용없다
+      if (/98|certification/i.test(e.message)) throw e;   // 인증 문제는 년월을 바꿔도 소용없다
     }
   }
-  throw new Error('데이터가 있는 지정년도를 찾지 못했습니다. 연도를 직접 지정해 보세요.');
+  throw new Error('데이터가 있는 지정년월을 찾지 못했습니다. YYYYMM 을 직접 지정해 보세요.');
 }
 
-/* 응답 필드명이 규격 문서와 실제가 다를 수 있어 후보를 넓게 잡는다 */
-const pickName  = r => r.affiliateNm || r.cmpnyNm || r.corpNm || r.affiNm || null;
-const pickGroup = r => r.grupNm || r.groupNm || r.unityGrupNm || r.appnGrupNm || null;
+/* 상세명세로 확정된 응답 필드명. 소속회사명은 entrprsNm.
+   이 API 응답에는 기업집단명 필드가 없다(소속회사만 평평하게 내려온다). */
+const pickName  = r => r.entrprsNm || null;
+const pickGroup = () => null;
 
 (async () => {
   if (!KEY) throw new Error('DATA_GO_KR_SERVICE_KEY 가 .env 에 없습니다.');
 
   const year = await resolveYear(process.argv[2]);
-  console.log('지정년도:', year);
+  console.log('지정년월:', year);
 
   const rows = [];
   for (let page = 1; page <= 50; page++) {
@@ -110,9 +115,8 @@ const pickGroup = r => r.grupNm || r.groupNm || r.unityGrupNm || r.appnGrupNm ||
   const dest = path.join(__dirname, '..', 'data', 'ftc-large-groups.json');
   fs.writeFileSync(dest, JSON.stringify(out, null, 2));
 
-  const groups = new Set(companies.map(c => c.group).filter(Boolean));
   console.log('\n저장:', dest);
-  console.log('소속회사:', companies.length, '건 / 기업집단:', groups.size, '개');
+  console.log('소속회사:', companies.length, '건');
 })().catch(e => {
   console.error('실패:', e.message);
   if (/98|certification/i.test(e.message)) {

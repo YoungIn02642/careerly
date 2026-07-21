@@ -303,25 +303,44 @@ window.CareerPage = (() => {
   }
 
   // ── 정성 ─────────────────────────────────────────────────
+  /* 정성 스펙은 CAS 가중치가 큰 유형(인턴십 → 공모전·대외활동 → …)부터 보여준다.
+     각 유형 옆의 '가중치' 칩은 CAS 정성 점수에서 그 활동이 갖는 비중(tier)을 뜻한다. */
+  const QUAL_TIER = {
+    1: { label: '최상',   cls: 't1' },
+    2: { label: '높음',   cls: 't2' },
+    3: { label: '중상',   cls: 't3' },
+    4: { label: '보통',   cls: 't4' },
+    5: { label: '보조',   cls: 't5' },
+  };
   function renderQual(agg) {
+    const rows = [...agg.qual].sort((a, b) => (a.tier ?? 9) - (b.tier ?? 9));
+    const benchNote = agg.qualBenchRaw
+      ? `합격자 평균 정성 원점수 <b>${agg.qualBenchRaw}점</b> 기준 · 인턴십 &gt; 공모전·대외활동 순으로 가중`
+      : `CAS 정성 점수는 인턴십 &gt; 공모전·대외활동 순으로 가중됩니다`;
     return `
       <div class="qual-grid">
         <div class="qual-card full">
           <div class="qual-card-header"><i class="ti ti-medal"></i><div class="qual-card-title">정성 스펙 보유율 — 합격자 기준</div></div>
+          <div class="qual-weight-note">${benchNote}</div>
           <div class="qual-card-body">
             <div class="activity-list">
-              ${agg.qual.map(q => `
+              ${rows.map(q => {
+                const t = QUAL_TIER[q.tier] || QUAL_TIER[5];
+                return `
                 <div class="activity-item">
                   <div class="activity-icon">${q.icon}</div>
                   <div class="activity-body">
-                    <div class="activity-name">${q.label}</div>
-                    <div class="activity-desc">${q.help}</div>
+                    <div class="activity-name">${esc(q.label)}
+                      <span class="qual-tier ${t.cls}">가중치 ${t.label}</span>
+                    </div>
+                    <div class="activity-desc">${esc(q.help)}</div>
                   </div>
                   <div class="activity-right">
                     <div class="activity-pct">${q.pct}%</div>
                     <div class="activity-n">${q.n}명</div>
                   </div>
-                </div>`).join('')}
+                </div>`;
+              }).join('')}
             </div>
           </div>
         </div>

@@ -151,7 +151,8 @@ window.Backoffice = (() => {
           <tbody>
             ${specs.map(s => {
               const user = users.find(u => u.username === s.username) || {};
-              const qualCount = Object.values(s.qual || {}).filter(Boolean).length;
+              // 대표 활동 수 (구조화된 activities 우선, 옛 boolean qual 도 환산)
+              const qualCount = (window.CAS ? CAS.normalizeActivities(s) : (s.activities || [])).length;
               return `
                 <tr>
                   <td><b>${esc(user.name || s.username)}</b><div class="bo-dim">${esc(s.username)}</div></td>
@@ -161,7 +162,7 @@ window.Backoffice = (() => {
                   <td>${(s.certs || []).length ? (s.certs || []).map(c => `<span class="bo-tag">${esc(c)}</span>`).join('') : '<span class="bo-dim">—</span>'}</td>
                   <td>${s.scores?.toeic ?? '—'}</td>
                   <td>${s.scores?.opic ?? '—'}</td>
-                  <td><span class="bo-chip-on">${qualCount} / 8</span></td>
+                  <td><span class="bo-chip-on">${qualCount}개 활동</span></td>
                   <td class="bo-dim">${fmtDate(s.updatedAt)}</td>
                 </tr>`;
             }).join('')}

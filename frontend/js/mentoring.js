@@ -301,17 +301,21 @@ function toast(msg){
 function onEnterMentoringPage(page){
   // #profile 로 직접 진입/새로고침하면 그릴 멘토가 없다 → 목록으로 되돌린다.
   if (page==='profile' && !currentMentor) { navigate('search'); return; }
-  if (page==='dashboard') { if (window.CASRadar) CASRadar.render(); animateDashboard(); }
+  if (page==='dashboard') {
+    if (window.CASHero)  CASHero.render();     // 점수·백분위 (막대도 여기서 채운다)
+    if (window.CASRadar) CASRadar.render();
+    animateDashboard();
+  }
   if (page==='search')    renderSearch();
   if (page==='mentoring') renderMentoring();
 }
 
 /* ════════════ DASHBOARD ════════════ */
+/* 백분위 막대는 CASHero 가 실제 점수로 채운다 — 여기서 건드리면 덮어써진다.
+   아래 비교 막대(.cmp-me)는 아직 careerly.html 의 하드코딩 값(data-w)이다. */
 function animateDashboard(){
   requestAnimationFrame(()=>{
     setTimeout(()=>{
-      $('.cas-bar-fill').style.width = '87%';
-      $('.cas-bar-marker').style.left = '87%';
       $$('.cmp-me').forEach(el=>{ el.style.width = el.dataset.w+'%'; });
     }, 80);
   });

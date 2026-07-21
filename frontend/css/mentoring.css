@@ -85,8 +85,9 @@ html { scroll-behavior: smooth; }
 }
 .cas-score-label { font-size: 13px; color: var(--color-text-secondary); margin-bottom: 6px; }
 .cas-score-row { display: flex; align-items: baseline; gap: 6px; }
+/* 만점이 100 → 1000 으로 바뀌어 네 자리가 들어간다. 260px 칼럼에서 넘치지 않게 조금 줄였다. */
 .cas-score-num {
-  font-size: 72px; font-weight: 700; color: var(--brand);
+  font-size: 58px; font-weight: 700; color: var(--brand);
   line-height: 0.9; letter-spacing: -2px; font-feature-settings: "tnum";
 }
 .cas-score-max { font-size: 22px; color: var(--color-text-tertiary); font-weight: 500; }
@@ -97,6 +98,18 @@ html { scroll-behavior: smooth; }
   font-weight: 600; margin-top: 14px;
 }
 .cas-rank i { font-size: 14px; }
+/* 점수 구성(숫자 스펙 + 경험 스펙)과 적용된 비중 설명 */
+.cas-split {
+  margin-top: 10px; font-size: 12px; line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+.cas-split b { color: var(--color-text-primary); font-weight: 600; }
+/* 백분위 막대 아래 한 줄 설명 */
+.cas-dist-help {
+  margin-top: 10px; font-size: 12px; line-height: 1.5;
+  color: var(--color-text-tertiary);
+}
+.cas-dist-help b { color: var(--color-text-secondary); font-weight: 600; }
 .cas-dist-head {
   display: flex; justify-content: space-between; align-items: baseline;
   font-size: 13px; color: var(--color-text-secondary); margin-bottom: 12px;
@@ -205,6 +218,9 @@ html { scroll-behavior: smooth; }
 .cmp-me.quant { background: var(--brand); }
 .cmp-me.qual { background: var(--green); }
 .cmp-me.lacking { background: repeating-linear-gradient(45deg,#E0823F,#E0823F 5px,#eda86f 5px,#eda86f 10px); }
+/* 값이 없거나 비교 대상이 없을 때 — 0 을 띄우면 '0점' 으로 오해한다 */
+.cmp-none { color: var(--color-text-tertiary); font-weight: 500; }
+.cmp-empty { padding: 18px 2px; font-size: 13px; color: var(--color-text-tertiary); }
 
 /* deficit / gap section */
 .gap-card { padding: 24px 26px; }

@@ -6,8 +6,9 @@
 //
 //  CAS 총점 1,000점 = 정량 400점(40%) + 정성 600점(60%)
 //  실무 역량(정성)을 더 높게 본다는 팀 결정에 따른 비율이다.
-//  이 파일은 정량 400점만 다룬다. 정성은 아직 배점이 확정되지 않았다
-//  (7/5 회의록의 '기본 참여 점수 + 역량 키워드 + 성과 가산점' 구조까지만 합의).
+//  정량 400점은 이 파일 위쪽, 정성 600점은 아래쪽에서 다룬다.
+//  정성 배점은 설문(구글폼)의 활동 구조(유형·기간·역할·성과)에 맞춰
+//  '기본 참여 점수 × 성과/기간/역할 가산' 형태로 구현했다(computeQual).
 //
 //  ── 정량 400점의 구성 ──
 //  학점 40% · 어학 35% · 자격증 25%   (사기업 일반 기준)
@@ -201,6 +202,180 @@
 
   const round2 = n => (n == null ? null : Math.round(n * 100) / 100);
 
+  // ════════════════════════════════════════════════════════════
+  //  정성 600점 (CAS 1000점 중 60%)
+  //
+  //  설문(구글폼)에서 선배들이 남기는 "대표 활동"은 다음 4가지 축으로
+  //  구조화되어 있다:  유형 · 기간 · 역할(또는 연구 단계) · 성과
+  //  이 4축을 배수로 곱해 활동 1건의 원점수를 낸다.
+  //
+  //  ── 유형별 기본 배점(활동 1건 기준) — 팀 결정 우선순위 ──
+  //  인턴십을 가장 높게, 그다음 공모전·대외활동(서포터즈/기자단)에 비중을
+  //  크게 준다. 나머지(프로젝트·연구·동아리·교환·봉사·기타)는 규모·기간·
+  //  성과로 변별하므로 기본 배점 차이는 완만하게 둔다.
+  //
+  //  ── 채점 원칙 ──
+  //  정량과 동일하게 "같은 직무 합격자(선배) 평균 대비 상대 위치"로 채점한다.
+  //  합격자 평균 원점수와 같으면 만점의 80%, 1.25배 이상이면 만점.
+  //  (relativeScore 곡선을 그대로 재사용한다.)
+  // ════════════════════════════════════════════════════════════
+  const TOTAL_QUAL = 600;
+
+  //  roleKind: 역할 축의 성격 — team(팀장/팀원/개인) · exec(임원진/일반) ·
+  //            stage(연구 단계) · free(자유서술) · none(역할 없음)
+  const ACTIVITY_TYPES = [
+    { id: 'internship',     label: '인턴십',                 icon: '💼', base: 100, roleKind: 'team',  tier: 1,
+      help: '대부분 직무에서 가장 강력한 차별화 — 전환·정규직 합격에 직결' },
+    { id: 'competition',    label: '공모전·대회',            icon: '🏆', base: 78,  roleKind: 'team',  tier: 2,
+      help: '문제해결·성과를 직접 증명 — 수상 시 가산이 크다' },
+    { id: 'extracurricular',label: '대외활동(서포터즈·기자단)', icon: '🌐', base: 74, roleKind: 'free', tier: 2,
+      help: '분야 관심도·꾸준함·협업 — 자기소개서 소재로 강력' },
+    { id: 'project',        label: '프로젝트',               icon: '🛠️', base: 62,  roleKind: 'team',  tier: 3,
+      help: '캡스톤·해커톤·팀 프로젝트 — 실무 역량 직접 증명' },
+    { id: 'research',       label: '학부연구생·석사·박사',   icon: '🎓', base: 58,  roleKind: 'stage', tier: 3,
+      help: 'R&D·연구직 핵심 경로 — 논문·상위 학위일수록 가산' },
+    { id: 'club',           label: '동아리·학회',            icon: '🏫', base: 46,  roleKind: 'exec',  tier: 4,
+      help: '리더십·지속성 — 임원진 경험은 인성 평가에 유리' },
+    { id: 'exchange',       label: '교환학생·어학연수',      icon: '✈️', base: 40,  roleKind: 'none',  tier: 4,
+      help: '글로벌 역량·자기주도성 — 외국계·해외영업 가산' },
+    { id: 'volunteer',      label: '봉사활동',               icon: '🤝', base: 30,  roleKind: 'none',  tier: 5,
+      help: '인성·지속성 보조 지표' },
+    { id: 'other',          label: '기타',                   icon: '✨', base: 24,  roleKind: 'none',  tier: 5,
+      help: '위 유형에 속하지 않는 경험' },
+  ];
+  const ACTIVITY_BY_ID = Object.fromEntries(ACTIVITY_TYPES.map(t => [t.id, t]));
+
+  // 기간 배수 — 규모·지속성의 대리 지표. 길수록(특히 인턴십) 가치가 크다.
+  const DURATION_MULT = {
+    '1개월 미만': 0.6, '1~3개월': 0.8, '3개월~6개월': 1.0, '6개월~1년': 1.2, '1년이상': 1.35,
+  };
+  // 역할 배수 — 주도성. 팀장·임원진 > 개인 > 팀원·일반
+  const ROLE_MULT = {
+    '팀장': 1.2, '임원진': 1.2, '리더': 1.2,
+    '개인': 1.05,
+    '팀원': 1.0, '동아리원, 일반학회원': 1.0, '일반': 1.0,
+  };
+  // 성과 배수 — 결과의 강도(설문 '성과 또는 결과물' 선택지와 1:1)
+  const OUTCOME_MULT = {
+    '전환, 정규직 합격': 1.4, '수상': 1.3, '논문': 1.3,
+    '발표 또는 산출물 공개(깃헙 등)': 1.15, '산출물 공개(깃헙 등)': 1.15,
+    '결과물 없음': 1.0,
+  };
+  // 연구 단계 배수 (research 전용)
+  const STAGE_MULT = { '학부연구생': 1.0, '석사': 1.15, '박사': 1.3 };
+
+  const DEFAULT_QUAL_BENCH = 295;  // 합격자 평균 정성 원점수 기본값(선배 데이터가 없을 때)
+  const MAX_ACTIVITIES     = 6;    // 상위 몇 건까지 합산할지 (설문 대표활동 최대 9건)
+
+  const mult = (map, key, dflt = 1) => (key != null && map[key] != null ? map[key] : dflt);
+
+  /* 활동 1건의 원점수 = 기본배점 × 기간 × 역할(또는 단계) × 성과 */
+  function scoreActivity(a) {
+    if (!a || !a.type) return 0;
+    const t = ACTIVITY_BY_ID[a.type];
+    if (!t) return 0;
+    let s = t.base;
+    s *= mult(DURATION_MULT, a.duration);
+    s *= (t.roleKind === 'stage') ? mult(STAGE_MULT, a.stage) : mult(ROLE_MULT, a.role);
+    s *= mult(OUTCOME_MULT, a.outcome);
+    return s;
+  }
+
+  /* 활동 배열 → 원점수 합 (상위 MAX_ACTIVITIES 건만) */
+  function qualRaw(activities) {
+    if (!Array.isArray(activities) || !activities.length) return 0;
+    return activities.map(scoreActivity).sort((x, y) => y - x)
+      .slice(0, MAX_ACTIVITIES).reduce((a, b) => a + b, 0);
+  }
+
+  /* 옛 스펙(boolean qual)도 활동 배열로 환산해 대략적으로라도 채점되게 한다.
+     기간·역할·성과가 없으므로 배수는 모두 1로 두어 기본 배점만 반영된다. */
+  const LEGACY_QUAL_MAP = {
+    internship: 'internship', projects: 'project', extracurricular: 'extracurricular',
+    oncampus: 'club', exchange: 'exchange', langStudy: 'exchange', gradSchool: 'research',
+    coreCourses: null,
+  };
+  function normalizeActivities(spec) {
+    if (Array.isArray(spec?.activities)) return spec.activities.filter(a => a && a.type);
+    const q = spec?.qual;
+    if (!q) return [];
+    const acts = [];
+    Object.keys(q).forEach(k => { if (q[k] && LEGACY_QUAL_MAP[k]) acts.push({ type: LEGACY_QUAL_MAP[k] }); });
+    return acts;
+  }
+
+  /* 정성 CAS. benchRaw(합격자 평균 원점수) 대비 상대 위치로 채점.
+       반환: { total, max, raw, benchRaw, ratio, count, byType } */
+  function computeQual({ spec, benchRaw } = {}) {
+    const acts = normalizeActivities(spec);
+    const raw = qualRaw(acts);
+    const bench = (benchRaw && benchRaw > 0) ? benchRaw : DEFAULT_QUAL_BENCH;
+    const ratio = relativeScore(raw, bench) ?? 0;
+
+    const byType = {};
+    acts.forEach(a => {
+      const s = scoreActivity(a);
+      if (s > 0) byType[a.type] = (byType[a.type] || 0) + s;
+    });
+
+    return {
+      total: Math.round(TOTAL_QUAL * ratio),
+      max: TOTAL_QUAL,
+      raw: Math.round(raw),
+      benchRaw: Math.round(bench),
+      ratio,
+      count: acts.length,
+      byType,
+    };
+  }
+
+  // ── 정량:정성 동적 비율 ───────────────────────────────────────
+  /* 기본은 4:6(정량 0.4)이지만, 어느 쪽이 상대적으로 더 강하냐에 따라 비중을
+     4:6 중심으로 양방향 이동시킨다. 정성이 우세하면 최대 3:7(정량 0.3),
+     정량이 우세하면 최대 5:5(정량 0.5). "정성 내용이 더 풍부하고 좋으면
+     정량 비중이 3:7이 될 수도 있어야 한다"는 요구를 이 곡선으로 구현한다.
+
+     성취도(perf) = 달성 점수 / 만점. 두 축을 같은 0~1 척도로 비교한다.
+       d = qualPerf − quantPerf ∈ [−1, 1]
+       d ≥ +SENS → 정성 완전 우세 → 정량 0.3 (3:7)
+       d ≤ −SENS → 정량 완전 우세 → 정량 0.5 (5:5)
+     SENS(민감도)만큼 벌어지면 한쪽 끝에 닿는다. */
+  const SPLIT_BASE = 0.4;    // 기본 정량 비중 (4:6)
+  const SPLIT_SWING = 0.1;   // 한쪽으로 최대 이동폭 (→ 0.3 또는 0.5)
+  const SPLIT_SENS = 0.2;    // 이 성취도 차이에서 이동이 포화된다
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+  /* 두 성취도를 받아 {quant, qual} 비중(합=1)을 낸다. quant ∈ [0.3, 0.5]. */
+  function resolveSplit(quantPerf, qualPerf) {
+    const d = (qualPerf || 0) - (quantPerf || 0);
+    const quant = SPLIT_BASE - SPLIT_SWING * clamp(d / SPLIT_SENS, -1, 1);
+    return { quant, qual: 1 - quant };
+  }
+
+  /* 정량 + 정성 통합 (CAS 1000점, 동적 비율).
+       반환에 quantWeight/qualWeight(적용된 비율)와 각 축의 성취도를 함께 담아
+       화면에서 "정성이 좋아 3:7이 적용됨" 같은 근거를 보여줄 수 있게 한다. */
+  const CAS_TOTAL = TOTAL_QUANT + TOTAL_QUAL;  // 1000
+  function computeTotal({ quant, qual } = {}) {
+    const quantPerf = quant?.max ? (quant.total || 0) / quant.max : 0;
+    const qualPerf  = qual?.max  ? (qual.total  || 0) / qual.max  : 0;
+    const w = resolveSplit(quantPerf, qualPerf);
+
+    const quantPts = Math.round(CAS_TOTAL * w.quant * quantPerf);
+    const qualPts  = Math.round(CAS_TOTAL * w.qual  * qualPerf);
+
+    return {
+      total: quantPts + qualPts,
+      max: CAS_TOTAL,
+      quant: quantPts,
+      qual: qualPts,
+      quantWeight: Math.round(w.quant * 100) / 100,   // 예: 0.3
+      qualWeight:  Math.round(w.qual  * 100) / 100,   // 예: 0.7
+      quantPerf:   Math.round(quantPerf * 100) / 100,
+      qualPerf:    Math.round(qualPerf  * 100) / 100,
+    };
+  }
+
   // ── 전공-직무 관련성 ────────────────────────────────────────
   /* 스펙의 학과(dept)를 전공명으로 바꾼 뒤, NCS 중분류의 '관련 전공' 목록과
      대조한다. ncs.js 는 '컴퓨터공학', '소프트웨어학' 처럼 학과의 '과'를 뗀
@@ -223,6 +398,10 @@
     computeQuant, resolveWeights, langIndex, relativeScore, certScore,
     isMajorRelevant, DEPT_MAJOR,
     TARGETS, TOTAL_QUANT, MIN_N_FOR_RATE,
+    // 정성
+    computeQual, computeTotal, resolveSplit, scoreActivity, qualRaw, normalizeActivities,
+    ACTIVITY_TYPES, TOTAL_QUAL, DURATION_MULT, ROLE_MULT, OUTCOME_MULT, STAGE_MULT,
+    DEFAULT_QUAL_BENCH,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;  // node 테스트용

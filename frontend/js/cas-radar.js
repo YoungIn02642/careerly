@@ -7,7 +7,7 @@
 //
 //  6개 축
 //    정량 : 학점 · 어학 · 자격증        (js/cas.js 의 환산·채점 재사용)
-//    정성 : 프로젝트 · 인턴십 · 대외활동  (합격자 보유율 vs 내 보유 여부)
+//    정성 : 인턴십 · 공모전 · 대외활동  (합격자 보유율 vs 내 보유 여부)
 //
 //  각 축은 0~100. me(내 수준)와 req(합격자/요구 수준)를 같은 척도로 둔다.
 // ════════════════════════════════════════════════════════════
@@ -17,8 +17,8 @@ window.CASRadar = (() => {
     { key: 'gpa',    label: '학점',    kind: 'quant' },
     { key: 'lang',   label: '어학',    kind: 'quant' },
     { key: 'cert',   label: '자격증',  kind: 'quant' },
-    { key: 'projects',       label: '프로젝트', kind: 'qual' },
-    { key: 'internship',     label: '인턴십',   kind: 'qual' },
+    { key: 'internship',      label: '인턴십',   kind: 'qual' },
+    { key: 'competition',     label: '공모전',   kind: 'qual' },
     { key: 'extracurricular', label: '대외활동', kind: 'qual' },
   ];
 
@@ -57,8 +57,8 @@ window.CASRadar = (() => {
           me = clamp(CAS.certScore(spec.certs, agg, catalogIds) * 100);
           req = 100;   // 이 직무 핵심 자격증을 모두 갖춘 상태를 100 으로 본다
           break;
-        default:        // qual: projects / internship / extracurricular
-          me = spec.qual?.[ax.key] ? 100 : 0;
+        default:        // qual: internship / competition / extracurricular
+          me = CAS.normalizeActivities(spec).some(a => a.type === ax.key) ? 100 : 0;
           req = qualPct(agg, ax.key);
       }
       values[ax.key] = { me, req };

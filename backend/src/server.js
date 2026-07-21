@@ -10,6 +10,7 @@ const { DEMO_SEED, generateRandom } = require('./demo-seed');
 const { classify: classifyCompany, stats: classifyStats, CORP_TYPE_ID } = require('./company-classify');
 const recommendationsRouter = require("./routes/recommendations");
 const careerDataRouter = require("./routes/careerData");
+const casAnalyzeRouter = require("./routes/casAnalyze");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -39,6 +40,7 @@ app.get('/', (req, res) => res.sendFile(path.join(FRONTEND_DIR, 'careerly.html')
 app.use(express.static(FRONTEND_DIR));
 app.use("/api/career-data", careerDataRouter);
 app.use("/api/recommendations", recommendationsRouter);
+app.use("/api/cas", casAnalyzeRouter);
 
 function publicUser(user) {
   return {
@@ -208,7 +210,9 @@ app.put('/api/profile', requireAuth, (req, res) => {
 });
 
 /* ── 회원 스펙 (커리어 로드맵 집계의 원천) ─────────────────────
-   userSpecs: [{ userId, dept, field, job, company, corpType, gpa, gpaMax, certs, scores, qual, detail }]
+   userSpecs: [{ userId, dept, field, job, company, corpType, gpa, gpaMax, certs, scores, qual, detail, activities }]
+   activities: [{ type, name, duration, role, stage, outcome }] — 설문(구글폼) 대표활동 구조.
+               CAS 정성 점수(computeQual)의 입력이다. 옛 스펙의 boolean qual 도 함께 호환.
    corpType: 'large' | 'mid' | 'small' | 'public' — 커리어 로드맵의 기업유형 4분류.
              옛 스펙에는 없다(undefined). 그런 스펙은 유형별 집계에서 빠지고
              중분류 전체 집계에만 잡힌다.
@@ -233,7 +237,7 @@ app.get('/api/specs/me', requireAuth, (req, res) => {
 });
 
 app.put('/api/specs/me', requireAuth, (req, res) => {
-  const allowed = ['dept', 'field', 'job', 'company', 'corpType', 'gpa', 'gpaMax', 'certs', 'scores', 'qual', 'detail'];
+  const allowed = ['dept', 'field', 'job', 'company', 'corpType', 'gpa', 'gpaMax', 'certs', 'scores', 'qual', 'detail', 'activities'];
   const db = readDb();
   if (!db.userSpecs) db.userSpecs = [];
 

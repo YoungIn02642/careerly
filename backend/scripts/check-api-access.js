@@ -11,7 +11,7 @@
    각 API 의 규격 문서에서 확인한 실제 주소다. 추측하면 404/500 이 나는데
    이게 '미승인' 과 구분이 안 돼서 한참 헤맨다.
      · 파일데이터 자동변환 → api.odcloud.kr
-     · 공정위 기업집단포털 → openapi.egroup.go.kr (HTTPS 미지원, HTTP 만 됨)
+     · 공정위 기업집단포털 → apis.data.go.kr/1130000/... (예전엔 egroup.go.kr 로 잘못 알았음)
      · 일반 오픈API      → apis.data.go.kr
 */
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
@@ -24,9 +24,9 @@ const TARGETS = [
     name: '공정위 · 지정된 대규모기업집단 소속회사',
     why: '대기업 판별',
     apply: 'https://www.data.go.kr/data/15091891/openapi.do',
-    /* 규격상 ServiceKey(대문자 S) · pageNo · numOfRows · presentnYear 가 모두 필수다.
-       presentnYear(기업집단 지정년월)를 빼면 응답이 달라지므로 넣어서 찌른다. */
-    url: `http://openapi.egroup.go.kr/1130000/appnGroupAffiList/appnGroupAffiListApi.do?ServiceKey=${enc}&pageNo=1&numOfRows=1&presentnYear=2026`,
+    /* 호스트는 apis.data.go.kr, 오퍼레이션은 /appnGroupAffiListApi (상세명세 확인 완료).
+       presentnYear 는 지정년월 YYYYMM(예: 202505) — 연도 4자리를 넣으면 HTTP 500 이 난다. */
+    url: `https://apis.data.go.kr/1130000/appnGroupAffiList/appnGroupAffiListApi?ServiceKey=${enc}&pageNo=1&numOfRows=1&presentnYear=202505`,
   },
   {
     name: '재정경제부 · 공공기관 지정현황',

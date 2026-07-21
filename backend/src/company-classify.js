@@ -9,11 +9,11 @@
    data/ncs-taxonomy.json)과 같은 패턴이다.
 
    조회 순서:
-     1. 대규모기업집단 캐시  → 대기업
-     2. 공공기관 캐시        → 공공기관
-     3. 워크넷 기업구분 캐시 → 해당 구분
-     4. (폴백) 워크넷 실시간 조회
-     5. 기본값               → 중소기업
+     1. 대규모기업집단 캐시    → 대기업
+     2. 공공기관 캐시          → 공공기관
+     3. 지방공공기관 캐시      → 공공기관
+     4. 워크넷 기업구분 캐시   → 해당 구분
+     5. 기본값                 → 중소기업
 
    회사명은 표기가 제각각이라(코스맥스(주) / 한국콜마 주식회사 / SK쉴더스)
    정확 매칭 전에 normalize() 로 표기 차이를 걷어낸다. 유사도 매칭은 쓰지
@@ -101,6 +101,20 @@ function buildCache() {
       if (k) map.set(k, { type: CORP_TYPE.PUBLIC, source: `공공기관:${o.raw || ''}` });
     });
     sources.push(`공공기관 ${publics.organizations.length}건`);
+  }
+
+  /* 지방공기업·지방출자출연기관 → 공공기관
+     위 지정현황은 공공기관운영법 대상(=중앙정부 산하)만 담아서, 지방공기업법·
+     지방출연기관법 대상인 지자체 산하 기관이 통째로 빠져 있다. 그래서
+     서울교통공사·서울시설공단·용인문화재단 같은 곳이 기본값 중소기업으로
+     떨어졌다. scripts/fetch-local-public-orgs.js 가 만든다. */
+  const localPublics = loadJson('local-public-orgs.json');
+  if (localPublics?.organizations?.length) {
+    localPublics.organizations.forEach(o => {
+      const k = normalize(o.name);
+      if (k && !map.has(k)) map.set(k, { type: CORP_TYPE.PUBLIC, source: `${o.kind}:${o.raw || ''}` });
+    });
+    sources.push(`지방공공기관 ${localPublics.organizations.length}건`);
   }
 
   /* 고용24(워크넷) 기업구분 → 구분명 그대로.

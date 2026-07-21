@@ -94,12 +94,8 @@ function makeRandomEntry(seq) {
   if (chance(0.5)) scores.opic = pick(OPIC_POOL);
   if (chance(0.25)) scores.toeicSpeaking = pick(TS_POOL);
 
-  // 정성 스펙: 항목별로 그럴듯한 확률
-  const qual = {
-    extracurricular: chance(0.75), projects: chance(0.7), internship: chance(0.55),
-    oncampus: chance(0.6), coreCourses: chance(0.85), langStudy: chance(0.2),
-    exchange: chance(0.18), gradSchool: chance(0.1),
-  };
+  // 정성 스펙: 설문(구글폼)과 동일한 구조화된 대표 활동
+  const activities = makeRandomActivities();
 
   const name = pick(SURNAMES) + pick(GIVEN);
   return {
@@ -116,10 +112,39 @@ function makeRandomEntry(seq) {
       gpa, gpaMax: 4.5,
       certs: sampleN(a.certs, rint(0, Math.min(3, a.certs.length))),
       scores,
-      qual,
-      detail: {},
+      activities,
     },
   };
+}
+
+/* 대표 활동 1~4개를 그럴듯하게 생성 — CAS 정성 채점(유형·기간·역할·성과)의 입력.
+   유형별 등장 확률은 CAS 가중치 우선순위(인턴십·공모전·대외활동)를 반영한다. */
+const DURATIONS = ['1개월 미만', '1~3개월', '3개월~6개월', '6개월~1년', '1년이상'];
+const OUTCOMES  = ['수상', '논문', '발표 또는 산출물 공개(깃헙 등)', '전환, 정규직 합격', '결과물 없음'];
+const ACT_POOL = [
+  { type: 'internship',     p: 0.6,  roleKind: 'team' },
+  { type: 'competition',    p: 0.45, roleKind: 'team' },
+  { type: 'extracurricular',p: 0.5,  roleKind: 'free' },
+  { type: 'project',        p: 0.55, roleKind: 'team' },
+  { type: 'research',       p: 0.15, roleKind: 'stage' },
+  { type: 'club',           p: 0.4,  roleKind: 'exec' },
+  { type: 'exchange',       p: 0.15, roleKind: 'none' },
+  { type: 'volunteer',      p: 0.25, roleKind: 'none' },
+];
+function makeRandomActivities() {
+  const out = [];
+  for (const t of ACT_POOL) {
+    if (out.length >= 4) break;
+    if (!chance(t.p)) continue;
+    const act = { type: t.type, duration: pick(DURATIONS), outcome: pick(OUTCOMES) };
+    if (t.roleKind === 'team')  act.role  = pick(['팀장', '팀원', '개인']);
+    if (t.roleKind === 'exec')  act.role  = pick(['임원진', '동아리원, 일반학회원']);
+    if (t.roleKind === 'stage') act.stage = pick(['학부연구생', '석사', '박사']);
+    if (t.roleKind === 'free')  act.role  = chance(0.5) ? '리더' : '';
+    out.push(act);
+  }
+  if (!out.length) out.push({ type: 'project', duration: '3개월~6개월', role: '팀원', outcome: '결과물 없음' });
+  return out;
 }
 
 /* 멘티(스펙 없음)는 s:null 로 만든다 */
