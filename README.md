@@ -98,6 +98,15 @@ GET  /api/recommendations
 > 지금 백엔드는 `frontend/` 를 정적 서빙하는 역할만 합니다.
 > localStorage 대신 서버 DB를 쓰려면 `frontend/js/db.js` 를 위 API 호출로 교체해야 합니다.
 
+## 문서
+
+| 문서 | 내용 |
+|---|---|
+| [docs/CAS-정리.md](docs/CAS-정리.md) | CAS 점수 체계 전반 — 배점표·상대채점·정량:정성 비중 |
+| [docs/CAS-정량-가중치.md](docs/CAS-정량-가중치.md) | 학점·어학·자격증 가중치 |
+| [docs/CAS-신규배점-설계안.md](docs/CAS-신규배점-설계안.md) | 배점 개편 설계 이력 |
+| [docs/스펙입력-AI-분석-개선.md](docs/스펙입력-AI-분석-개선.md) | AI 한 번에 입력(규칙 파서 + AI 보조) · 배점 서열 개편 |
+
 ## 개발 상태
 
 완료:
