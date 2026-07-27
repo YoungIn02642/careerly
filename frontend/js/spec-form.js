@@ -183,7 +183,7 @@ window.SpecForm = (() => {
         <!-- AI 자동 입력 -->
         <div class="sf-ai" id="sf-ai">
           <div class="sf-ai-head"><i class="ti ti-sparkles"></i> AI로 한 번에 입력</div>
-          <div class="sf-ai-desc">활동을 자유롭게 적어주세요. 유형·기간·역할이 비어 있어도 AI가 알아서 분류하고 아래 칸을 채워드려요.</div>
+          <div class="sf-ai-desc">활동을 자유롭게 적어주세요. 유형·기간·역할을 적으면 AI가 알아서 분류하고 아래 칸을 채워드려요.</div>
           <textarea id="sf-ai-text" class="sf-ai-text" rows="5" placeholder="예)
 1. 인턴십 국민은행 3개월~6개월, 결과물 없음
 2. 프로젝트 로얄에이전트 6개월~1년, 팀장, 깃헙 공개
@@ -350,7 +350,8 @@ window.SpecForm = (() => {
       const i = el.dataset.i, f = el.dataset.field;
       if (i == null || !f) return;
       actState[+i][f] = el.value;
-      if (f === 'type') paintActivities();   // 유형별 역할/단계 옵션 갱신
+      /* 유형이 바뀌면 역할/단계 옵션이, 회사 규모가 바뀌면 배수 안내가 달라진다. */
+      if (f === 'type' || f === 'companyTier') paintActivities();
     };
     wrap.addEventListener('change', onChange);
     wrap.addEventListener('input', onChange);
@@ -379,8 +380,18 @@ window.SpecForm = (() => {
       if (!text) { statusEl.textContent = '분석할 내용을 입력해 주세요.'; return; }
 
       btn.disabled = true;
-      statusEl.textContent = 'AI가 분석 중…';
       resultEl.hidden = true;
+
+      /* 서버가 알아본 문장은 즉시 끝나지만, 못 알아본 줄이 있으면 로컬 AI(CPU 추론)로
+         넘어가 1분 안팎 걸린다. 멈춘 것처럼 보이지 않게 경과 초를 계속 보여준다. */
+      const startedAt = Date.now();
+      statusEl.textContent = '분석 중… (0초)';
+      const tick = setInterval(() => {
+        const sec = Math.round((Date.now() - startedAt) / 1000);
+        statusEl.textContent = sec < 5
+          ? `분석 중… (${sec}초)`
+          : `AI가 분석 중… (${sec}초) · 처음 보는 활동은 1분 안팎 걸려요`;
+      }, 1000);
       try {
         const r = await DB.analyzeCas(text);
 
@@ -389,6 +400,8 @@ window.SpecForm = (() => {
           actState = r.activities.map(a => ({
             type: a.type, name: a.name, duration: a.duration,
             role: a.role || undefined, stage: a.stage || undefined, outcome: a.outcome,
+            // 서버가 판정한 기업 규모(인턴십 배수). 입력 칸은 없지만 저장까지 들고 간다.
+            companyTier: a.companyTier || undefined, companyName: a.companyName || undefined,
           }));
           paintActivities();
         }
@@ -408,13 +421,24 @@ window.SpecForm = (() => {
           <div class="sf-ai-cross">참고(AI 추정): ${q.aiTotal ?? '-'} / 600
             <span>— AI가 직접 매긴 총점입니다. 채점 기준을 똑같이 적용하지 못해
             위 점수와 차이가 날 수 있어요. 실제 반영되는 건 위 점수입니다.</span></div>
-          <div class="sf-ai-hint">아래 활동·정량 칸에 자동으로 채웠어요. 틀린 곳은 직접 고친 뒤 저장하세요.</div>`;
+          <div class="sf-ai-hint">아래 활동·정량 칸에 자동으로 채웠어요. 기간·역할·성과를 안 적으신 항목은
+            추정값(역할=팀원, 성과=결과물 없음)으로 채웠으니 확인하고 고친 뒤 저장하세요.</div>
+          ${r.notice ? `<div class="sf-ai-hint">${escapeHtml(r.notice)}</div>` : ''}`;
         statusEl.textContent = '완료!';
       } catch (e) {
         statusEl.textContent = '';
         resultEl.hidden = false;
-        resultEl.innerHTML = `<div class="sf-ai-err">${escapeHtml(e.message || 'AI 분석에 실패했습니다.')}</div>`;
+        /* fetch 자체가 실패하면 브라우저가 "Failed to fetch" 라는 원문을 던진다.
+           원인은 대부분 (1) 백엔드 미실행 (2) HTML 을 file:// 로 직접 연 경우다.
+           둘 다 사용자가 고칠 수 있는 문제이므로 안내로 바꿔 보여준다. */
+        const raw = e.message || '';
+        const msg = /failed to fetch|networkerror|load failed/i.test(raw)
+          ? '백엔드 서버에 연결하지 못했어요. `cd backend && npm start` 로 서버를 켠 뒤, '
+            + 'HTML 파일을 직접 여는 대신 http://localhost:3000 으로 접속해 주세요.'
+          : (raw || 'AI 분석에 실패했습니다.');
+        resultEl.innerHTML = `<div class="sf-ai-err">${escapeHtml(msg)}</div>`;
       } finally {
+        clearInterval(tick);
         btn.disabled = false;
       }
     });
@@ -481,7 +505,44 @@ window.SpecForm = (() => {
           </select>
           <button type="button" class="sf-act-remove" data-act-remove data-i="${i}" title="삭제"><i class="ti ti-x"></i></button>
         </div>
+        ${companyTierRow(a, i)}
         ${t ? `<div class="sf-act-help">${escapeHtml(t.help)}</div>` : ''}
+      </div>`;
+  }
+
+  /* 인턴십은 회사 규모가 점수 배수로 들어간다(cas.js COMPANY_MULT).
+
+     ── 예전에는 판정에 성공했을 때만, 그것도 배수가 1 이 아닐 때만 알려줬다 ──
+     그래서 회사명을 못 알아본 경우(활동명이 "하계 인턴십" 처럼 회사명이 없거나
+     명단에 없는 회사)에는 **아무 말 없이 ×1.0** 이 적용됐다. 대기업 인턴을 쓰고도
+     점수가 낮게 나오는데 학생은 이유를 알 수 없었다 — 에러가 안 나니 발견되지도 않는다.
+
+     지금은 인턴십이면 **항상** 상태를 보여주고, 드롭다운으로 직접 고칠 수 있게 한다.
+     '조용히 틀리는 것' 대신 '보이고 고칠 수 있는 것'으로 바꾸는 게 요점이다. */
+  const TIER_LABEL = { large: '대기업', public: '공공기관', mid: '중견기업', small: '중소기업' };
+
+  function companyTierRow(a, i) {
+    if (a.type !== 'internship') return '';
+
+    const tiers = Object.keys(CAS.COMPANY_MULT || {});
+    const mult  = (CAS.COMPANY_MULT || {})[a.companyTier] || 1;
+    const opts  = tiers.map(t =>
+      `<option value="${t}" ${a.companyTier === t ? 'selected' : ''}>${TIER_LABEL[t] || t} ×${CAS.COMPANY_MULT[t]}</option>`
+    ).join('');
+
+    /* 판정 성공 / 실패에 따라 문구만 다르고, 고칠 수단(드롭다운)은 똑같이 준다.
+       판정이 맞아도 학생이 아는 사실(계열사·지사 등)이 더 정확할 수 있다. */
+    const note = a.companyTier
+      ? `<span class="sf-tier-ok">🏢 ${escapeHtml(a.companyName || '회사')} — ${TIER_LABEL[a.companyTier] || a.companyTier}으로 확인 (점수 ×${mult})</span>`
+      : `<span class="sf-tier-warn">⚠️ 회사를 못 찾아 <b>중소기업 기준(×1.0)</b>으로 계산됩니다.
+           대기업·공공기관 인턴이면 직접 골라주세요 — 점수가 최대 ×1.2 까지 달라져요.</span>`;
+
+    return `<div class="sf-act-tier">
+        ${note}
+        <select data-i="${i}" data-field="companyTier" class="sf-tier-select" aria-label="인턴 회사 규모">
+          <option value="">${a.companyTier ? '직접 고치기' : '회사 규모 선택'}</option>
+          ${opts}
+        </select>
       </div>`;
   }
 
@@ -515,6 +576,12 @@ window.SpecForm = (() => {
         if (t && t.roleKind === 'stage') { if (a.stage) o.stage = a.stage; }
         else if (a.role && String(a.role).trim()) o.role = String(a.role).trim();
         if (a.outcome) o.outcome = a.outcome;
+        /* 기업 규모는 화면에 입력 칸이 없고 서버 판정 결과를 그대로 들고 다닌다.
+           여기서 빠뜨리면 저장 후 배수가 사라져 "입력할 때 본 점수"와 달라진다. */
+        if (a.type === 'internship' && a.companyTier) {
+          o.companyTier = a.companyTier;
+          if (a.companyName) o.companyName = a.companyName;
+        }
         return o;
       });
   }

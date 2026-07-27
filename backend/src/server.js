@@ -11,6 +11,8 @@ const { classify: classifyCompany, stats: classifyStats, CORP_TYPE_ID } = requir
 const recommendationsRouter = require("./routes/recommendations");
 const careerDataRouter = require("./routes/careerData");
 const casAnalyzeRouter = require("./routes/casAnalyze");
+const jdCoachRouter = require("./routes/jdCoach");
+const newsRouter = require("./routes/news");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -41,6 +43,8 @@ app.use(express.static(FRONTEND_DIR));
 app.use("/api/career-data", careerDataRouter);
 app.use("/api/recommendations", recommendationsRouter);
 app.use("/api/cas", casAnalyzeRouter);
+app.use("/api/jd", jdCoachRouter);
+app.use("/api/news", newsRouter);
 
 function publicUser(user) {
   return {
@@ -295,12 +299,20 @@ app.get('/api/company/classify', (req, res) => {
   if (!name) return res.status(400).json({ error: '회사명이 필요합니다.' });
 
   const r = classifyCompany(name);
+  /* 판정에 실패했으면 corpType 을 주지 않는다.
+     예전에는 matched:false 여도 'small' 을 내려보냈다. 지금 호출하는 화면은
+     matched 를 보고 걸러내지만, 그걸 잊은 다음 호출자가 생기면 **회사를 못 찾은 것**과
+     **중소기업으로 확인된 것**이 구분되지 않은 채 저장된다. 값 자체를 비워
+     실수할 수 없게 만든다. */
   res.json({
     company: name,
-    corpType: CORP_TYPE_ID[r.type] || 'small',   // 프론트 드롭다운 값과 맞춘다
-    label: r.type,
+    corpType: r.matched ? (CORP_TYPE_ID[r.type] || null) : null,
+    label: r.matched ? r.type : null,
     source: r.source,
-    matched: r.matched,        // false = 명단에 없어 기본값. 회원이 직접 골라야 한다.
+    matched: r.matched,        // false = 명단에 없다. 회원이 직접 골라야 한다.
+    /* 못 찾았을 때 점수 계산에 실제로 쓰이는 값 — 화면에서 "×1.0 으로 계산됩니다" 를
+       설명하려면 이게 필요하다. corpType 과 분리해 두어야 저장으로 새지 않는다. */
+    fallbackCorpType: r.matched ? null : 'small',
   });
 });
 
