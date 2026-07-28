@@ -4,10 +4,11 @@
 const PAGES = [
   'main', 'login', 'signup', 'mypage', 'career', 'backoffice',
   'dashboard', 'search', 'profile', 'mentoring',   // ← 구 mentoring.html
+  'jd',                                            // 자소서 코치 (js/jd-coach.js)
 ];
 
 /* navbar 에서 밑줄로 강조할 페이지 (data-nav 값과 일치) */
-const NAV_HIGHLIGHT = ['career', 'dashboard', 'search', 'mentoring'];
+const NAV_HIGHLIGHT = ['career', 'dashboard', 'jd', 'search', 'mentoring'];
 
 /* 멘토링 계열 화면 — mentoring.js 가 렌더를 담당 */
 const MENTORING_PAGES = ['dashboard', 'search', 'profile', 'mentoring'];
@@ -33,6 +34,7 @@ function showPage(page) {
   if (page === 'career')     { CareerPage.refreshUser(); CareerPage.render(); }
   if (page === 'backoffice') Backoffice.render(document.querySelector('#page-backoffice .bo-wrap'));
   if (page === 'main')       { if (window.renderHome) renderHome(); }
+  if (page === 'jd')         JdCoach.onEnter();
   if (MENTORING_PAGES.includes(page)) Mentoring.onEnter(page);
 
   if (page !== 'main') window.scrollTo({ top: 0 });
@@ -130,6 +132,7 @@ window.handleLogout = handleLogout;
 window.addEventListener('DOMContentLoaded', async () => {
   CareerPage.init();
   Mentoring.init();
+  JdCoach.init();
   const hash = window.location.hash.replace('#', '') || 'main';
   const target = PAGES.includes(hash) ? hash : 'main';
   document.getElementById('page-career').style.display = 'none';

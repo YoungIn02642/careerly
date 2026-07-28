@@ -66,6 +66,52 @@ function verdict(status, body) {
   return [`알 수 없음 (HTTP ${status}) ${b.slice(0, 60)}`, '?'];
 }
 
+/* ── 고용24(워크넷)은 게이트웨이도 키도 완전히 별개다 ──────────────
+   data.go.kr 에 목록이 올라와 있어도 실제 호출은 openapi.work.go.kr 로 가고,
+   인증키도 거기서 따로 발급받는다(DATA_GO_KR_SERVICE_KEY 로는 절대 안 된다).
+   게다가 **서비스(오퍼레이션)마다 따로 신청**해야 해서, 키가 있는데도
+   "유효하지 않은 인증키"가 뜨는 일이 생긴다 — 다른 서비스용 키인 것이다. */
+const WORK24_KEY = (process.env.WORK24_API_KEY || '').trim();
+
+const W24 = 'https://www.work24.go.kr/cm/openApi/call/wk/callOpenApiSvcInfo';
+const w24url = op => `${W24}${op}.do?authKey=${encodeURIComponent(WORK24_KEY)}`
+                   + '&callTp=L&returnType=XML&startPage=1&display=5';
+
+const WORK24_TARGETS = [
+  {
+    name: '고용24 · 공채기업정보 (210L31)',
+    why: '중견기업 판별 — 중견 라벨을 직접 주는 거의 유일한 공개 소스',
+    apply: 'https://www.work24.go.kr → 오픈API 신청',
+    url: w24url('210L31'),
+  },
+  {
+    name: '고용24 · 채용정보 목록 (210L01)',
+    why: '직무 트렌드 — 직무별 역량 요구 빈도',
+    apply: 'https://www.work24.go.kr → 오픈API 신청 (기업·기관 회원 필요)',
+    url: w24url('210L01'),
+  },
+];
+
+function work24Verdict(status, body) {
+  const b = body.replace(/\s+/g, ' ');
+  const msg = (b.match(/<message>([^<]*)<\/message>/) || [])[1] || '';
+
+  /* 이 둘을 구분하는 게 이 스크립트의 핵심이다.
+       · "인증키값이 없습니다"   → 파라미터 이름이 틀렸다(authKey 대소문자 주의)
+       · "유효하지 않은 인증키"  → 키는 넘어갔는데 이 서비스에 안 붙어 있다
+                                 (다른 서비스용 키이거나 신청이 아직 승인 전) */
+  const err = (b.match(/<error>([^<]*)<\/error>/) || [])[1] || '';
+
+  if (/인증키값이 없습니다/.test(msg))            return ['파라미터 이름 오류 — authKey 로 보내야 한다', '✗'];
+  if (/유효하지 않은 인증키/.test(msg))           return ['구 게이트웨이가 모르는 키 — 신 주소(work24.go.kr)로 호출할 것', '✗'];
+  if (/개인회원은 사용할 수 없는/.test(b))        return ['개인회원 계정으로는 불가 — 기업·기관 회원 필요', '✗'];
+  if (/존재하지 않습니다/.test(b))                return ['오퍼레이션 번호가 없음', '✗'];
+  if (/<dhsOpenEmpHireInfo>|<wanted>/.test(b))    return ['승인됨', '✓'];
+  if (/<dhsOpenEmpHireInfoList|<wantedRoot>/.test(b))
+    return [`응답은 왔으나 결과 0건 ${msg || err ? '— ' + (msg || err) : ''}`, '?'];
+  return [`알 수 없음 (HTTP ${status}) ${b.slice(0, 60)}`, '?'];
+}
+
 (async () => {
   if (!KEY) {
     console.error('DATA_GO_KR_SERVICE_KEY 가 .env 에 없습니다.');
@@ -93,6 +139,38 @@ function verdict(status, body) {
   }
 
   console.log(blocked === 0
-    ? '전부 승인됐습니다. 배치 스크립트를 돌릴 수 있습니다.'
+    ? 'data.go.kr 은 전부 승인됐습니다. 배치 스크립트를 돌릴 수 있습니다.'
     : `${blocked}건이 아직 막혀 있습니다. 위 링크에서 활용신청 후 다시 실행해 주세요.`);
+
+  // ── 고용24(워크넷) ──
+  console.log('\n── 고용24(워크넷) · 별도 게이트웨이·별도 인증키 ──\n');
+  if (!WORK24_KEY) {
+    console.log('✗ WORK24_API_KEY 가 .env 에 없습니다.');
+    console.log('   발급: https://openapi.work.go.kr → 오픈API 신청\n');
+    return;
+  }
+  console.log(`인증키: 설정됨 (${WORK24_KEY.length}자)\n`);
+
+  for (const t of WORK24_TARGETS) {
+    let status = 0, body = '';
+    try {
+      const res = await fetch(t.url, { signal: AbortSignal.timeout(15000) });
+      status = res.status;
+      body = await res.text();
+    } catch (e) {
+      body = 'FETCH_ERROR ' + e.message;
+    }
+    const [label, mark] = work24Verdict(status, body);
+    console.log(`${mark} ${t.name}`);
+    console.log(`   용도   : ${t.why}`);
+    console.log(`   상태   : ${label}`);
+    if (mark !== '✓') {
+      console.log(`   신청   : ${t.apply}`);
+      if (label.includes('기업·기관')) {
+        console.log('   참고   : 신청이 [승인] 이어도 회원유형에서 따로 막힌다. 같은 키로');
+        console.log('            공채기업정보(210L31)는 호출되므로 키 문제가 아니다.');
+      }
+    }
+    console.log();
+  }
 })();

@@ -1,0 +1,252 @@
+/* ════════════════════════════════════════════════════════════
+   자소서 코치 (#page-jd) — main.css 의 .page--doc / .card / 변수를 그대로 쓴다.
+   스펙 입력의 AI 패널(.sf-ai*)이 녹색 계열이라, 이 페이지도 "AI 가 도와주는 곳"
+   이라는 신호를 맞추되 카드 본문은 무채색으로 둬서 읽는 데 방해가 없게 한다.
+   ════════════════════════════════════════════════════════════ */
+
+/* ── 입력부 ───────────────────────────────────────────────── */
+.jd-input-card { padding: 20px 22px; }
+
+.jd-note {
+  display: flex; align-items: flex-start; gap: 7px;
+  padding: 10px 12px; margin-bottom: 14px;
+  background: #f8fafc; border: 1px solid var(--border); border-radius: 10px;
+  font-size: 12.5px; color: var(--text-s); line-height: 1.55;
+}
+.jd-note i { margin-top: 1px; flex: none; }
+.jd-note--on { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
+.jd-note--on b { color: #15803d; }
+.jd-link { color: var(--brand); font-weight: 600; cursor: pointer; text-decoration: underline; }
+
+.jd-label { display: block; font-size: 13px; font-weight: 700; color: var(--text-p); margin-bottom: 6px; }
+.jd-text {
+  width: 100%; padding: 12px 14px; box-sizing: border-box;
+  border: 1px solid var(--border); border-radius: 10px;
+  font-family: inherit; font-size: 13.5px; line-height: 1.65; color: var(--text-p);
+  resize: vertical;
+}
+.jd-text:focus { outline: none; border-color: #16a34a; }
+
+.jd-actions { display: flex; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+.jd-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 16px; border: none; border-radius: 9px;
+  background: #16a34a; color: #fff; font-family: inherit; font-size: 13.5px; font-weight: 700;
+  cursor: pointer;
+}
+.jd-btn:hover { background: #15803d; }
+.jd-btn:disabled { opacity: .6; cursor: default; }
+.jd-btn-ghost {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 14px; border: 1px solid var(--border); border-radius: 9px;
+  background: #fff; color: var(--text-s); font-family: inherit; font-size: 13px; cursor: pointer;
+}
+.jd-btn-ghost:hover { border-color: #16a34a; color: #15803d; }
+.jd-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12.5px; color: var(--text-s); cursor: pointer; user-select: none;
+}
+.jd-status { font-size: 12.5px; color: var(--text-s); }
+
+/* ── 결과 요약 ─────────────────────────────────────────────── */
+.jd-summary {
+  margin-top: 18px; padding: 18px 20px;
+  background: #fff; border: 1px solid var(--border); border-radius: 14px;
+}
+.jd-summary-h { font-size: 16px; font-weight: 700; color: var(--text-p); }
+.jd-summary-h b { color: #16a34a; }
+.jd-summary-sub { margin-top: 3px; font-size: 12px; color: var(--text-s); }
+
+.jd-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+.jd-chip {
+  padding: 6px 12px; border: 1px solid #bbf7d0; border-radius: 999px;
+  background: #f0fdf4; color: #15803d;
+  font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.jd-chip:hover { background: #dcfce7; }
+
+.jd-notice { margin-top: 10px; font-size: 12.5px; color: #b45309; }
+/* 대필이 아니라는 안내 — 눈에 띄어야 하지만 오류처럼 보이면 안 된다. */
+.jd-disclaimer {
+  display: flex; align-items: flex-start; gap: 7px;
+  margin-top: 12px; padding: 10px 12px;
+  background: #fffbeb; border: 1px solid #fde68a; border-radius: 9px;
+  font-size: 12.5px; color: #92400e; line-height: 1.55;
+}
+.jd-disclaimer i { margin-top: 1px; flex: none; }
+
+/* ── 역량 카드 ─────────────────────────────────────────────── */
+.jd-cards { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
+
+.jd-card {
+  padding: 20px 22px; background: #fff;
+  border: 1px solid var(--border); border-radius: 14px;
+}
+.jd-card.is-flash { animation: jd-flash 1.1s ease-out; }
+@keyframes jd-flash {
+  from { border-color: #16a34a; box-shadow: 0 0 0 4px rgba(22, 163, 74, .14); }
+  to   { border-color: var(--border); box-shadow: none; }
+}
+
+.jd-card-h { display: flex; align-items: center; gap: 9px; }
+.jd-card-h h3 { margin: 0; font-size: 17px; font-weight: 800; color: var(--text-p); }
+.jd-idx {
+  display: grid; place-items: center; width: 24px; height: 24px; flex: none;
+  background: #16a34a; color: #fff; border-radius: 7px; font-size: 12.5px; font-weight: 700;
+}
+/* 규칙 추출과 AI 추출을 구분해 보여준다 — 신뢰도가 다르므로 사용자가 알아야 한다. */
+.jd-src {
+  margin-left: auto; padding: 3px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+}
+.jd-src--rule { background: #eef2ff; color: #4338ca; }
+.jd-src--ai   { background: #fef3c7; color: #92400e; }
+
+/* ── 시장 빈도 (워크넷 채용공고 집계) ─────────────────────────
+   흔함/보통/희소를 색으로 구분한다 — 자소서 전략이 갈리는 지점이라
+   숫자만큼이나 "그래서 어떻게 쓰라"가 중요하다. */
+.jd-market {
+  display: flex; align-items: center; gap: 14px;
+  margin-top: 12px; padding: 12px 14px;
+  border: 1px solid var(--border); border-radius: 10px; background: #f8fafc;
+}
+.jd-market-num { font-size: 26px; font-weight: 800; line-height: 1; color: var(--text-p); }
+.jd-market-num span { font-size: 14px; font-weight: 700; margin-left: 1px; }
+.jd-market-h { font-size: 12.5px; font-weight: 700; color: var(--text-p); }
+.jd-market-note { margin-top: 3px; font-size: 12px; color: var(--text-s); line-height: 1.55; }
+.jd-market--common { background: #f8fafc; }
+.jd-market--common .jd-market-num { color: #64748b; }
+.jd-market--normal { background: #eff6ff; border-color: #bfdbfe; }
+.jd-market--normal .jd-market-num { color: #2563eb; }
+/* 희소 = 차별점 → 가장 눈에 띄게 */
+.jd-market--rare { background: #f0fdf4; border-color: #bbf7d0; }
+.jd-market--rare .jd-market-num { color: #16a34a; }
+
+.jd-market-src {
+  margin-top: 8px; padding: 8px 10px;
+  background: #f8fafc; border-radius: 8px;
+  font-size: 11.5px; color: var(--text-s); line-height: 1.55;
+}
+
+.jd-reads { margin: 12px 0 0; font-size: 13px; color: var(--text-s); line-height: 1.65; }
+.jd-reads b { color: var(--text-p); }
+
+/* 공고 원문 근거 — 오탐을 사용자가 걸러내는 근거라 반드시 보인다. */
+.jd-quotes { margin-top: 12px; }
+.jd-quotes-h { font-size: 11.5px; font-weight: 700; color: var(--text-s); letter-spacing: .02em; }
+.jd-quotes blockquote {
+  margin: 5px 0 0; padding: 7px 12px;
+  background: #f8fafc; border-left: 3px solid var(--brand); border-radius: 0 7px 7px 0;
+  font-size: 12.5px; color: var(--text-s); line-height: 1.6;
+}
+
+.jd-lead {
+  margin: 14px 0 0; padding: 11px 13px;
+  background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px;
+  font-size: 13px; color: #15803d; line-height: 1.65;
+}
+.jd-lead b { color: #14532d; }
+
+.jd-block { margin-top: 14px; }
+.jd-block-h {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12.5px; font-weight: 700; color: var(--text-p);
+}
+.jd-block-h i { color: var(--brand); }
+.jd-block--avoid .jd-block-h i { color: #dc2626; }
+.jd-block--mine  .jd-block-h i { color: #16a34a; }
+
+.jd-frame {
+  margin: 6px 0 0; padding: 12px 14px;
+  background: #f8fafc; border: 1px solid var(--border); border-radius: 10px;
+  font-size: 13px; color: var(--text-p); line-height: 1.85;
+}
+
+.jd-list { margin: 6px 0 0; padding-left: 18px; }
+.jd-list li { font-size: 12.5px; color: var(--text-s); line-height: 1.7; }
+.jd-block--avoid .jd-list li { color: #b91c1c; }
+
+.jd-mine { list-style: none; margin: 7px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.jd-mine li {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding: 8px 12px; background: #f8fafc; border: 1px solid var(--border); border-radius: 9px;
+}
+/* 가장 강한 소재(배점 서열 1위)를 눈에 띄게 — 하나만 골라 쓰라는 안내와 맞춘다. */
+.jd-mine li.is-top { background: #f0fdf4; border-color: #bbf7d0; }
+.jd-mine-name { font-size: 13px; font-weight: 700; color: var(--text-p); }
+.jd-mine-meta { font-size: 11.5px; color: var(--text-s); }
+
+/* 근거가 없는 역량 — 지금 만들어야 할 경험이라는 신호 */
+.jd-gap {
+  display: flex; align-items: flex-start; gap: 7px;
+  margin-top: 14px; padding: 10px 12px;
+  background: #fef2f2; border: 1px solid #fecaca; border-radius: 9px;
+  font-size: 12.5px; color: #b91c1c; line-height: 1.6;
+}
+.jd-gap i { margin-top: 1px; flex: none; }
+
+.jd-followup {
+  margin-top: 14px; padding: 10px 12px;
+  background: #eef2ff; border-radius: 9px;
+  font-size: 12.5px; color: #4338ca; line-height: 1.6;
+}
+.jd-followup b { color: #312e81; }
+
+/* ── 이 회사, 지금 (지원동기 소재) ───────────────────────────
+   직무역량 카드와 시각적으로 구분한다 — 다른 자소서 문항에 쓰는 재료다. */
+.jd-news-card { margin-top: 18px; border-left: 3px solid var(--brand); }
+.jd-news-h {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 15px; font-weight: 800; color: var(--text-p);
+}
+.jd-news-h i { color: var(--brand); }
+.jd-news-desc { margin: 6px 0 12px; font-size: 12.5px; color: var(--text-s); line-height: 1.6; }
+.jd-company-input {
+  flex: 1 1 220px; padding: 9px 12px;
+  border: 1px solid var(--border); border-radius: 9px;
+  font-family: inherit; font-size: 13.5px; color: var(--text-p);
+}
+.jd-company-input:focus { outline: none; border-color: #16a34a; }
+.jd-news-empty {
+  margin-top: 14px; padding: 12px 14px;
+  background: #f8fafc; border: 1px solid var(--border); border-radius: 10px;
+  font-size: 12.5px; color: var(--text-s); line-height: 1.6;
+}
+
+/* 키워드 칩 — 몇 건의 기사에서 나왔는지를 항상 같이 보여준다(근거 추적). */
+.jd-kws { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
+.jd-kw {
+  display: inline-flex; align-items: baseline; gap: 5px;
+  padding: 5px 11px; border-radius: 999px;
+  background: #eef2ff; border: 1px solid #c7d2fe; color: #3730a3;
+  font-size: 12.5px; font-weight: 600; cursor: default;
+}
+.jd-kw b { font-size: 10.5px; font-weight: 700; color: #6366f1; }
+.jd-kw-note { margin-top: 8px; font-size: 12px; color: var(--text-s); line-height: 1.6; }
+
+.jd-articles { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.jd-article {
+  display: flex; gap: 9px; padding: 10px 12px;
+  background: #f8fafc; border: 1px solid var(--border); border-radius: 9px;
+}
+.jd-article-n {
+  display: grid; place-items: center; flex: none; width: 20px; height: 20px;
+  background: var(--brand); color: #fff; border-radius: 6px; font-size: 11px; font-weight: 700;
+}
+.jd-article-body { min-width: 0; }
+.jd-article a { font-size: 13px; font-weight: 600; color: var(--text-p); text-decoration: none; line-height: 1.5; }
+.jd-article a:hover { color: var(--brand); text-decoration: underline; }
+.jd-article-sum { margin-top: 3px; font-size: 11.5px; color: var(--text-s); line-height: 1.55; }
+.jd-article-date { margin-top: 3px; font-size: 11px; color: var(--text-s); opacity: .8; }
+
+.jd-err {
+  margin-top: 16px; padding: 14px 16px;
+  background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px;
+  font-size: 13px; color: #dc2626; line-height: 1.6;
+}
+
+@media (max-width: 640px) {
+  .jd-input-card, .jd-card, .jd-summary { padding: 16px; }
+  .jd-actions { gap: 8px; }
+  .jd-btn, .jd-btn-ghost { flex: 1 1 auto; justify-content: center; }
+}

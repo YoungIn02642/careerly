@@ -289,8 +289,9 @@ function starsHTML(n){
   for (let i=1;i<=5;i++) h += `<i class="ti ti-star-filled ${i<=Math.round(n)?'fill':''}"></i>`;
   return h+'</span>';
 }
-function toast(msg){
-  const t = $('#toast'); t.innerHTML = `<i class="ti ti-circle-check-filled"></i>${msg}`;
+function toast(msg, opts){
+  const icon = (opts && opts.icon === false) ? '' : '<i class="ti ti-circle-check-filled"></i>';
+  const t = $('#toast'); t.innerHTML = `${icon}${msg}`;
   t.classList.add('on'); clearTimeout(t._tm);
   t._tm = setTimeout(()=>t.classList.remove('on'), 2600);
 }
@@ -302,12 +303,57 @@ function onEnterMentoringPage(page){
   // #profile 로 직접 진입/새로고침하면 그릴 멘토가 없다 → 목록으로 되돌린다.
   if (page==='profile' && !currentMentor) { navigate('search'); return; }
   if (page==='dashboard') {
+    // 내 CAS 점수·비교·부족항목은 전부 '내 스펙' 기반이라 로그인이 없으면 보여줄 게 없다.
+    if (!ensureLoginGate('page-dashboard', {
+      title: '로그인하고 내 CAS 점수를 확인하세요',
+      desc:  '스펙을 입력하면 같은 길을 간 선배 데이터와 비교해 역량 점수와 백분위를 계산해 드려요.',
+    })) return;
     if (window.CASHero)  CASHero.render();     // 점수·백분위 (막대도 여기서 채운다)
     if (window.CASRadar) CASRadar.render();
     animateDashboard();
   }
   if (page==='search')    renderSearch();
-  if (page==='mentoring') renderMentoring();
+  if (page==='mentoring') {
+    // 내 멘토링 내역·메모·평점은 개인 데이터다. 비로그인 상태에서 예시(SEED)가
+    // 마치 내 기록처럼 보이던 문제 → 로그인 게이트로 가린다.
+    if (!ensureLoginGate('page-mentoring', {
+      title: '로그인하고 내 멘토링 내역을 확인하세요',
+      desc:  '신청한 멘토링과 메모·평점은 로그인 후 내 계정에서 볼 수 있어요.',
+    })) return;
+    renderMentoring();
+  }
+}
+
+/* 로그인 게이트 — 개인 데이터 페이지(내 CAS·내 멘토링)를 비로그인 시 블러 처리하고
+   가운데에 로그인 버튼을 띄운다. 로그인 상태면 블러·오버레이를 걷어내고 true 를 준다.
+   showPage 가 진입할 때마다 부르므로 상태가 바뀌면 스스로 정리된다. */
+function ensureLoginGate(pageId, opts){
+  const page = document.getElementById(pageId);
+  if (!page) return true;
+  const wrap = page.querySelector('.wrap');
+  const loggedIn = !!(window.DB && DB.currentUser());
+
+  if (loggedIn){
+    if (wrap) wrap.classList.remove('login-locked');
+    const ov = page.querySelector('.login-gate');
+    if (ov) ov.remove();
+    return true;
+  }
+
+  if (wrap) wrap.classList.add('login-locked');
+  if (!page.querySelector('.login-gate')){
+    const ov = document.createElement('div');
+    ov.className = 'login-gate';
+    ov.innerHTML = `
+      <div class="login-gate-card">
+        <div class="login-gate-ic"><i class="ti ti-lock"></i></div>
+        <div class="login-gate-title">${opts.title}</div>
+        <div class="login-gate-desc">${opts.desc}</div>
+        <button class="login-gate-btn" onclick="navigate('login')"><i class="ti ti-login"></i>로그인하러 가기</button>
+      </div>`;
+    page.appendChild(ov);
+  }
+  return false;
 }
 
 /* ════════════ DASHBOARD ════════════ */
@@ -626,6 +672,13 @@ function selectFormat(i){
   $('#req-cost').textContent = FORMATS[i].price;
 }
 function submitRequest(){
+  // 멘토 신청은 내 계정으로 남는 개인 행동이라 로그인이 필요하다.
+  // 비로그인 상태에서 눌러도 그냥 신청돼 버리던 문제 → 로그인 페이지로 보낸다.
+  if (!(window.DB && DB.currentUser())){
+    toast('로그인 후 멘토링을 신청할 수 있어요', { icon: false });
+    setTimeout(()=>navigate('login'), 700);
+    return;
+  }
   toast(`${currentMentor.name} 멘토에게 신청을 보냈어요`);
   setTimeout(()=>navigate('mentoring'), 800);
 }

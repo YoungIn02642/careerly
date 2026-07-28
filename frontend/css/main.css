@@ -839,6 +839,24 @@ input.input-error { border-color: var(--c-red); }
 }
 .sf-act-remove:hover { border-color: #ef4444; color: #ef4444; }
 .sf-act-help { font-size: 11.5px; color: var(--text-s); margin-top: 7px; line-height: 1.45; }
+
+/* 인턴십 회사 규모 — 판정 성공/실패를 항상 보여주고 그 자리에서 고칠 수 있게 한다.
+   실패했을 때 아무 표시가 없으면 ×1.0 이 조용히 적용돼 학생이 손해를 본다. */
+.sf-act-tier {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 7px; padding: 8px 10px;
+  background: #fafafa; border: 1px solid var(--border); border-radius: 8px;
+  font-size: 11.5px; line-height: 1.5;
+}
+.sf-tier-ok   { color: var(--text-s); flex: 1 1 240px; }
+.sf-tier-warn { color: #b45309; flex: 1 1 240px; }
+.sf-tier-warn b { color: #92400e; }
+.sf-tier-select {
+  flex: none; padding: 5px 8px; font-size: 11.5px; font-family: var(--font);
+  border: 1px solid var(--border); border-radius: 7px; background: #fff; color: var(--text-p);
+}
+/* 판정 실패 행은 배경으로도 구분해 스크롤 중에 눈에 걸리게 한다. */
+.sf-act-tier:has(.sf-tier-warn) { background: #fffbeb; border-color: #fde68a; }
 .sf-act-add {
   margin-top: 10px; padding: 10px 14px; width: 100%;
   border: 1.5px dashed var(--border); border-radius: 10px; background: #fafafa;
@@ -1413,3 +1431,50 @@ body.nav-drawer-open { overflow: hidden; }
 /* ── MENTORING FRAME ────────────────────────────────────── */
 #page-mentoring { padding: 0; }
 #page-mentoring.active { display: block; }
+
+/* ── LOGIN GATE (내 CAS·내 멘토링 비로그인 잠금) ──────────────
+   개인 데이터 페이지를 블러 처리하고 가운데 로그인 버튼을 띄운다.
+   오버레이가 페이지 기준으로 앉도록 해당 페이지에 position:relative 를 준다. */
+#page-dashboard, #page-mentoring { position: relative; }
+.login-locked {
+  filter: blur(6px);
+  pointer-events: none;
+  user-select: none;
+}
+.login-gate {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 140px;
+  z-index: 20;
+}
+.login-gate-card {
+  background: #fff;
+  border: 1px solid var(--line, #E5E5EA);
+  border-radius: 18px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.12);
+  padding: 32px 34px;
+  max-width: 380px;
+  width: calc(100% - 48px);
+  text-align: center;
+}
+.login-gate-ic {
+  width: 56px; height: 56px;
+  margin: 0 auto 14px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: #EEEDFE; color: #534AB7;
+  font-size: 26px;
+}
+.login-gate-title { font-size: 18px; font-weight: 700; color: var(--text-p, #1a1a1a); }
+.login-gate-desc { margin: 8px 0 20px; font-size: 13.5px; line-height: 1.6; color: var(--text-s, #6b7280); }
+.login-gate-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #534AB7; color: #fff;
+  border: none; border-radius: 10px;
+  padding: 12px 22px; font-size: 14px; font-weight: 600;
+  cursor: pointer;
+}
+.login-gate-btn:hover { background: #43399e; }

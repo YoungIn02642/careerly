@@ -63,14 +63,47 @@ ok('공기업이면 학점 배점 0', CAS.computeQuant({spec:{gpa:4.5,gpaMax:4.5
 
 console.log('\n── 7. 정성: 유형 가중치 우선순위 ──');
 const A = (type, extra={}) => ({ type, ...extra });
-// 같은 조건(기간·성과 없음)일 때 유형 기본배점 순위: 인턴십 > 공모전 ≈ 대외활동 > 프로젝트 > … > 기타
+/* 같은 조건(기간·성과 없음)일 때 유형 기본배점 순위.
+   합의된 서열: 인턴십 > 공모전 > 프로젝트 ≥ 대외활동 > 교내활동 > 어학연수 > 동아리 > 봉사 > 기타
+   (프로젝트는 실무 역량을 직접 증명하므로 대외활동보다 위에 둔다) */
+const order = ['internship', 'competition', 'project', 'extracurricular',
+               'campus', 'exchange', 'club', 'volunteer', 'other'];
+ok('유형 기본배점이 합의된 서열대로 내림차순',
+   order.every((id, i) => i === 0 ||
+     CAS.scoreActivity(A(order[i - 1])) >= CAS.scoreActivity(A(id))),
+   `→ ${order.map(id => `${id}:${Math.round(CAS.scoreActivity(A(id)))}`).join(' ')}`);
 ok('인턴십이 가장 높다',
    CAS.scoreActivity(A('internship')) > CAS.scoreActivity(A('competition')));
 ok('공모전 > 프로젝트', CAS.scoreActivity(A('competition')) > CAS.scoreActivity(A('project')));
-ok('대외활동 > 프로젝트', CAS.scoreActivity(A('extracurricular')) > CAS.scoreActivity(A('project')));
+ok('교내활동 > 어학연수 > 동아리',
+   CAS.scoreActivity(A('campus')) > CAS.scoreActivity(A('exchange')) &&
+   CAS.scoreActivity(A('exchange')) > CAS.scoreActivity(A('club')));
 ok('공모전·대외활동 > 봉사활동',
    CAS.scoreActivity(A('competition')) > CAS.scoreActivity(A('volunteer')) &&
    CAS.scoreActivity(A('extracurricular')) > CAS.scoreActivity(A('volunteer')));
+
+/* 학위 기준점 — "석사는 웬만한 대기업 인턴십, 박사는 그보다 위" */
+const LONG = { duration: '1년이상', outcome: '결과물 없음' };
+const 석사 = CAS.scoreActivity({ type: 'research', stage: '석사', ...LONG });
+const 박사 = CAS.scoreActivity({ type: 'research', stage: '박사', ...LONG });
+const 대기업인턴반년 = CAS.scoreActivity(
+  { type: 'internship', duration: '3개월~6개월', role: '팀원', outcome: '결과물 없음', companyTier: 'large' });
+const 대기업인턴1년 = CAS.scoreActivity(
+  { type: 'internship', role: '팀원', companyTier: 'large', ...LONG });
+ok('석사 ≈ 대기업 인턴 3~6개월 (±15%)',
+   Math.abs(석사 - 대기업인턴반년) / 대기업인턴반년 < 0.15,
+   `→ 석사 ${Math.round(석사)} vs 인턴 ${Math.round(대기업인턴반년)}`);
+ok('박사 > 대기업 인턴 1년', 박사 > 대기업인턴1년,
+   `→ 박사 ${Math.round(박사)} vs 인턴 ${Math.round(대기업인턴1년)}`);
+
+/* 기업 규모 배수 — 인턴십에만 적용되고, 값이 없으면 기존과 동일(×1.0) */
+const 인턴 = t => CAS.scoreActivity(
+  { type: 'internship', duration: '3개월~6개월', role: '팀원', outcome: '결과물 없음', companyTier: t });
+ok('대기업 > 중견 > 중소 인턴', 인턴('large') > 인턴('mid') && 인턴('mid') > 인턴('small'));
+ok('기업규모 미상이면 중소와 같다(옛 데이터 점수 불변)', 인턴(undefined) === 인턴('small'));
+ok('기업규모는 인턴십에만 적용',
+   CAS.scoreActivity({ type: 'project', duration: '3개월~6개월', role: '팀원', outcome: '결과물 없음', companyTier: 'large' })
+   === CAS.scoreActivity({ type: 'project', duration: '3개월~6개월', role: '팀원', outcome: '결과물 없음' }));
 
 console.log('\n── 8. 정성: 기간·역할·성과 배수 ──');
 ok('기간이 길수록 높다',

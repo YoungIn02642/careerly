@@ -228,14 +228,21 @@
       help: '대부분 직무에서 가장 강력한 차별화 — 전환·정규직 합격에 직결' },
     { id: 'competition',    label: '공모전·대회',            icon: '🏆', base: 78,  roleKind: 'team',  tier: 2,
       help: '문제해결·성과를 직접 증명 — 수상 시 가산이 크다' },
-    { id: 'extracurricular',label: '대외활동(서포터즈·기자단)', icon: '🌐', base: 74, roleKind: 'free', tier: 2,
+    /* 대외활동 배점은 원래 74 였다. 공모전(78) 바로 아래라 "대외활동 1건 = 동아리
+       회장 1년"이 되어 과대평가였다 → 56 으로 내렸다. 교내 프로그램·비교과는
+       모집 경쟁과 대외 노출이 대외활동보다 낮아 별도 유형(42)으로 분리했다. */
+    { id: 'extracurricular',label: '대외활동(서포터즈·기자단)', icon: '🌐', base: 58, roleKind: 'free', tier: 3,
       help: '분야 관심도·꾸준함·협업 — 자기소개서 소재로 강력' },
     { id: 'project',        label: '프로젝트',               icon: '🛠️', base: 62,  roleKind: 'team',  tier: 3,
       help: '캡스톤·해커톤·팀 프로젝트 — 실무 역량 직접 증명' },
     { id: 'research',       label: '학부연구생·석사·박사',   icon: '🎓', base: 58,  roleKind: 'stage', tier: 3,
       help: 'R&D·연구직 핵심 경로 — 논문·상위 학위일수록 가산' },
-    { id: 'club',           label: '동아리·학회',            icon: '🏫', base: 46,  roleKind: 'exec',  tier: 4,
+    /* 동아리는 원래 46 이라 교환학생(40)보다 높았다. 서열 기준(인턴십 > 공모전 ≥ 대외활동 >
+       교내활동 > 어학연수 > 동아리·봉사)에 맞춰 34 로 내렸다. */
+    { id: 'club',           label: '동아리·학회',            icon: '🏫', base: 34,  roleKind: 'exec',  tier: 5,
       help: '리더십·지속성 — 임원진 경험은 인성 평가에 유리' },
+    { id: 'campus',         label: '교내활동·비교과',        icon: '🏛️', base: 44,  roleKind: 'free',  tier: 4,
+      help: '교내 프로그램·비교과 과정 — 성실성 보조 지표(대외활동보다 낮게 반영)' },
     { id: 'exchange',       label: '교환학생·어학연수',      icon: '✈️', base: 40,  roleKind: 'none',  tier: 4,
       help: '글로벌 역량·자기주도성 — 외국계·해외영업 가산' },
     { id: 'volunteer',      label: '봉사활동',               icon: '🤝', base: 30,  roleKind: 'none',  tier: 5,
@@ -262,7 +269,17 @@
     '결과물 없음': 1.0,
   };
   // 연구 단계 배수 (research 전용)
-  const STAGE_MULT = { '학부연구생': 1.0, '석사': 1.15, '박사': 1.3 };
+  /* 원래 1.0 / 1.15 / 1.3 이라 석사(90) · 박사(102)가 대기업 인턴 3개월(96)에도
+     못 미쳤다. "석사는 웬만한 대기업 인턴십, 박사는 그보다 위"라는 기준에 맞춰 넓혔다.
+     1년이상 기준 — 학부연구생 78 · 석사 125(≈ 대기업 인턴 3~6개월 120) · 박사 172(> 대기업 인턴 1년 162). */
+  const STAGE_MULT = { '학부연구생': 1.0, '석사': 1.6, '박사': 2.2 };
+
+  /* 기업 규모 배수 (internship 전용) — 같은 3개월이라도 대기업 인턴과 소규모 인턴의
+     시장 가치가 다르다. activity.companyTier 는 백엔드 company-classify 가 활동명에서
+     회사를 찾아 넣어준다(찾지 못하면 없음 → ×1.0). 저장된 옛 스펙에는 이 값이
+     없으므로 기본 1.0 이 적용되어 점수가 바뀌지 않는다.
+     'public'(공공기관)은 채용 선호도상 대기업과 같이 본다. */
+  const COMPANY_MULT = { large: 1.2, public: 1.2, mid: 1.1, small: 1.0 };
 
   const DEFAULT_QUAL_BENCH = 295;  // 합격자 평균 정성 원점수 기본값(선배 데이터가 없을 때)
   const MAX_ACTIVITIES     = 6;    // 상위 몇 건까지 합산할지 (설문 대표활동 최대 9건)
@@ -278,6 +295,7 @@
     s *= mult(DURATION_MULT, a.duration);
     s *= (t.roleKind === 'stage') ? mult(STAGE_MULT, a.stage) : mult(ROLE_MULT, a.role);
     s *= mult(OUTCOME_MULT, a.outcome);
+    if (a.type === 'internship') s *= mult(COMPANY_MULT, a.companyTier);
     return s;
   }
 
@@ -401,7 +419,7 @@
     // 정성
     computeQual, computeTotal, resolveSplit, scoreActivity, qualRaw, normalizeActivities,
     ACTIVITY_TYPES, TOTAL_QUAL, DURATION_MULT, ROLE_MULT, OUTCOME_MULT, STAGE_MULT,
-    DEFAULT_QUAL_BENCH,
+    COMPANY_MULT, DEFAULT_QUAL_BENCH,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;  // node 테스트용

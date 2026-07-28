@@ -96,6 +96,24 @@ window.DB = (() => {
     return api('POST', '/api/cas/analyze', { text });
   }
 
+  /* 회사 최근 기사 + 기사에서 반복된 키워드 (자소서 '지원동기' 문항 소재).
+     자소서 코치의 역량 분석과는 **독립적으로** 호출한다 — 뉴스가 안 떠도 역량 카드는
+     그대로 나와야 하고, 반대로 공고 없이 회사 이름만으로도 쓸 수 있어야 한다. */
+  async function companyNews(name) {
+    return api('GET', '/api/news/company?name=' + encodeURIComponent(name));
+  }
+
+  /* 직무기술서(채용공고) → 요구역량 + 자소서 작성 가이드.
+     내 활동을 함께 보내면 역량마다 "이 경험으로 쓰라"까지 붙는다. 로그인하지 않았거나
+     스펙이 없으면 활동 없이 호출되고, 가이드는 일반 골격만 나온다(빈 화면이 되지 않는다). */
+  async function coachJd(text, { useAi = true } = {}) {
+    return api('POST', '/api/jd/coach', {
+      text,
+      activities: _mySpec?.activities || [],
+      useAi,
+    });
+  }
+
   // ── 쓰기 (비동기) ──────────────────────────────────────────
   async function createUser({ username, password, name, email, role }) {
     const { user } = await api('POST', '/api/auth/signup', { username, password, name, email, role });
@@ -145,7 +163,7 @@ window.DB = (() => {
   return {
     hydrate, refreshSpecs, refreshUsers,
     currentUser, getAllSpecs, getSpec, getUsers, countByRole, stats,
-    createUser, login, logout, updateUser, upsertSpec, classifyCompany, analyzeCas,
+    createUser, login, logout, updateUser, upsertSpec, classifyCompany, analyzeCas, coachJd, companyNews,
     seedDemo, seedRandom, clearAll, deleteUser,
   };
 })();
