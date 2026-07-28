@@ -16,7 +16,7 @@
    또한 cas.js 의 결정론 채점을 교차검증값으로 함께 반환한다. */
 const express = require('express');
 const CAS = require('../../../frontend/js/cas.js');   // 채점 루브릭·결정론 채점 재사용
-const { ruleParse, durationFromSnippets, typicalDuration, normalizeRole } = require('../spec-parse');
+const { ruleParse, parseDuration, outcomeFromText, durationFromSnippets, typicalDuration, normalizeRole } = require('../spec-parse');
 const { classify: classifyCompany, CORP_TYPE_ID } = require('../company-classify');
 
 const router = express.Router();
@@ -107,14 +107,20 @@ ${rubricText()}
    점수·루브릭·정량 스키마가 빠져 위 SYSTEM 의 1/5 길이다. CPU 추론에서는
    프롬프트 길이가 그대로 대기시간이라, 이것만으로 체감 속도가 크게 달라진다.
    점수는 어차피 서버가 cas.js 로 다시 매기므로 모델에게 시킬 이유가 없다. */
-const SYSTEM_CLASSIFY = `한국 대학생의 활동 한 줄을 분류해 JSON 만 출력한다.
+const SYSTEM_CLASSIFY = `한국 대학생이 쓴 경력 문장을 활동 단위로 나눠 분류하고 JSON 만 출력한다.
+한 줄에 활동이 여러 개 들어 있을 수 있다(줄글 한 문단이 통째로 올 수 있다).
+그럴 때는 활동마다 따로 항목을 만들고, 기간·역할·성과는 반드시 그 활동에 적힌 것만 쓴다
+— 다른 활동의 기간이나 수상 실적을 끌어다 붙이지 않는다. 적혀 있지 않으면 null 로 둔다.
 type: ${TYPE_IDS.join(' | ')}
 duration: ${DURATIONS.join(' | ')} (안 적혀 있으면 null)
+durationText: 원문에 적힌 기간 표현을 그대로 옮긴다 (예 "6개월간", "2년", 없으면 null)
 role: ${ROLES.join(' | ')} (안 적혀 있으면 "팀원")
 stage: ${STAGES.join(' | ')} (type=research 일 때만, 아니면 null)
 outcome: ${OUTCOMES.join(' | ')} (안 적혀 있으면 "결과물 없음")
+outcomeText: 그 성과의 근거가 된 원문 표현을 그대로 옮긴다 (예 "대상을 받았습니다", 없으면 null)
+  — 원문에 없는 성과를 지어내지 않는다. 특히 "정규직 전환"은 그렇게 적혀 있을 때만 쓴다.
 name 은 기간·역할·성과 표현을 뺀 활동 이름만 남긴다.
-출력: {"activities":[{"type":..,"name":..,"duration":..,"role":..,"stage":..,"outcome":..,"assumed":true}]}`;
+출력: {"activities":[{"type":..,"name":..,"duration":..,"durationText":..,"role":..,"stage":..,"outcome":..,"outcomeText":..,"assumed":true}]}`;
 
 /* ── 기간 미기입 보완: 웹에서 그 활동을 찾아본다 ─────────────────
    "2026년 AI챔피언 해커톤 대회 우수상" 처럼 기간이 없는 줄은 모델이 순전히 상상으로
@@ -174,6 +180,18 @@ const DEFAULT_ROLE    = '팀원';
 const DEFAULT_STAGE   = '학부연구생';
 const DEFAULT_OUTCOME = '결과물 없음';
 
+/* 성과는 배수로 점수를 직접 밀어올린다("전환, 정규직 합격"이 가장 크다). 그런데 모델은
+   근거 없이 이걸 붙이는 일이 있다 — 실측: "6개월간 인턴을 하며 백엔드 개발을 했고" 뿐인
+   문장에 5회 중 3회 '전환, 정규직 합격'을 달았다(점수 144 → 168).
+   그래서 원문 근거(outcomeText)를 함께 받아, 근거가 없으면 성과를 인정하지 않는다.
+   근거는 있는데 규칙이 분류하지 못하는 표현(예 "특허 출원")이면 모델 판단을 살린다 —
+   막으려는 건 '없는 근거를 지어내는 것'이지 '드문 성과'가 아니다. */
+function resolveOutcome(a) {
+  const evidence = a?.outcomeText ? String(a.outcomeText).trim() : '';
+  if (!evidence) return DEFAULT_OUTCOME;
+  return outcomeFromText(evidence) || inList(a?.outcome, OUTCOMES) || DEFAULT_OUTCOME;
+}
+
 function coerceActivity(a) {
   const type = inList(a?.type, TYPE_IDS);
   if (!type) return null;                       // 유형이 유효하지 않으면 채점 불가
@@ -182,14 +200,20 @@ function coerceActivity(a) {
   const role  = inList(a?.role, ROLES);
   const stage = inList(a?.stage, STAGES);
 
+  /* 기간 구간은 모델에게 고르게 하지 않는다 — 라벨이 경계에서 겹쳐서('3개월~6개월'과
+     '6개월~1년' 둘 다 "6개월"을 포함) 같은 입력에도 답이 갈린다. 실측: "6개월간"에
+     '6개월~1년'을 골랐다. 규칙 파서는 경계를 위쪽 포함으로 보므로 '3개월~6개월'이 맞다.
+     모델에게는 원문 표현(durationText)만 받고 구간은 parseDuration 이 정한다. rescore() 와 같은 원칙. */
+  const fromText = a?.durationText ? parseDuration(String(a.durationText)) : null;
+
   return {
     type,
     name: String(a?.name || '').trim(),
-    duration: inList(a?.duration, DURATIONS),   // 기간은 추정 근거가 없으면 비워 둔다
+    duration: fromText || inList(a?.duration, DURATIONS),   // 기간은 추정 근거가 없으면 비워 둔다
     // 유형마다 고를 수 있는 역할이 다르다(연구=단계, 교환학생=없음, 동아리=임원진/동아리원).
     role:  normalizeRole(roleKind, role),
     stage: roleKind === 'stage' ? (stage || DEFAULT_STAGE) : null,
-    outcome: inList(a?.outcome, OUTCOMES) || DEFAULT_OUTCOME,
+    outcome: resolveOutcome(a),
     assumed: !!a?.assumed,
     reason: String(a?.reason || ''),
   };
@@ -291,9 +315,20 @@ router.post('/analyze', async (req, res) => {
           .filter(Boolean)
           .filter(a => !activities.some(r => sameActivity(r, a)));
         activities = activities.concat(aiActs);
+
+        /* 활동이 여러 개 섞여 있어 규칙이 단정하지 않은 줄이 있었다. AI 가 답했으므로
+           그쪽을 쓰고 규칙의 예비 해석은 버린다. 단 AI 가 그 줄에서 아무것도 못 건졌으면
+           예비라도 있는 편이 낫다(빈손으로 돌려주지 않는다). */
+        if (!aiActs.length && rule.fallbackActivities.length) {
+          activities = activities.concat(
+            rule.fallbackActivities.filter(f => !activities.some(r => sameActivity(r, f))));
+        }
       } catch (e) {
         /* AI 가 죽어도 규칙으로 읽은 활동은 돌려준다 — 전체 실패보다 낫다.
+           단정하지 않기로 했던 줄도 이때는 예비 해석을 쓴다(없는 것보다 낫다).
            규칙도 아무것도 못 읽었을 때만 진짜 오류로 올린다. */
+        activities = activities.concat(
+          rule.fallbackActivities.filter(f => !activities.some(r => sameActivity(r, f))));
         if (!activities.length) throw e;
         aiError = e.message;
         console.warn('CAS analyze — AI 보조 실패, 규칙 결과만 반환:', e?.message);
@@ -337,9 +372,9 @@ router.post('/analyze', async (req, res) => {
   } catch (e) {
     console.error('CAS analyze 실패:', e?.message);
     const status = e?.status || 502;
-    // 503 은 "설정이 덜 됨"이라 사용자에게 그대로 보여줘야 한다.
+    // 503(설정이 덜 됨)·429(쿼터 초과)는 사용자가 할 일이 있으므로 문구를 그대로 보여준다.
     res.status(status).json({
-      error: status === 503 ? e.message : 'AI 분석에 실패했습니다.',
+      error: (status === 503 || status === 429) ? e.message : 'AI 분석에 실패했습니다.',
       detail: e?.message,
     });
   }
