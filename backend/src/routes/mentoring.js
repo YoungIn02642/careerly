@@ -15,7 +15,7 @@
    여기서 db.users 를 조회하도록 바꾼다. */
 const express = require('express');
 const { nanoid } = require('nanoid');
-const { readDb, writeDb } = require('../store');
+const { query, queryOne } = require('../mysql');
 
 const router = express.Router();
 
@@ -45,66 +45,50 @@ router.get('/formats', (req, res) => res.json({ formats: FORMATS }));
 
 /* 내 신청 목록. 멘티는 자기가 보낸 것, 멘토는 자기가 받은 것을 본다.
    지금은 멘토가 시드라 받은 요청 조회는 아직 쓰이지 않는다. */
-router.get('/requests', requireAuth, (req, res) => {
-  const db = readDb();
-  const list = (db.mentoringRequests || [])
-    .filter(r => r.menteeId === req.user.id)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  res.json({ requests: list });
+router.get('/requests', requireAuth, async (req, res) => {
+  const rows = await query(
+    'SELECT * FROM mentoring_requests WHERE mentee_id=? ORDER BY created_at DESC',
+    [req.user.id]);
+  res.json({ requests: rows.map(toRequest) });
 });
 
-router.post('/requests', requireAuth, (req, res) => {
+router.post('/requests', requireAuth, async (req, res) => {
   const { mentorId, mentorName, format, message } = req.body || {};
   const f = formatById(format);
   if (!mentorId || !f) {
     return res.status(400).json({ error: '멘토와 멘토링 형식을 선택해주세요.' });
   }
-
-  const db = readDb();
-  if (!db.mentoringRequests) db.mentoringRequests = [];
+  const msg = (message || '').trim();
 
   /* 같은 멘토에게 결제 전 신청이 이미 있으면 새로 만들지 않고 그것을 갱신한다.
      아니면 결제창을 닫을 때마다 미결제 주문이 쌓인다. */
-  const open = db.mentoringRequests.find(r =>
-    r.menteeId === req.user.id && r.mentorId === mentorId && r.status === 'pending');
+  const open = await queryOne(
+    "SELECT id FROM mentoring_requests WHERE mentee_id=? AND mentor_id=? AND status='pending'",
+    [req.user.id, mentorId]);
 
-  const now = new Date().toISOString();
-  let reqRow;
+  let id;
   if (open) {
-    reqRow = open;
-    reqRow.format = f.id;
-    reqRow.formatName = f.name;
-    reqRow.amount = f.amount;
-    reqRow.message = (message || '').trim();
-    reqRow.updatedAt = now;
+    id = open.id;
+    await query(
+      'UPDATE mentoring_requests SET format=?, format_name=?, amount=?, message=? WHERE id=?',
+      [f.id, f.name, f.amount, msg, id]);
   } else {
-    reqRow = {
-      id: nanoid(),
-      menteeId: req.user.id,
-      mentorId,
-      mentorName: (mentorName || '').trim() || null,
-      format: f.id,
-      formatName: f.name,
-      amount: f.amount,              // ← 서버가 정한 금액. 클라이언트 값은 쓰지 않는다
-      message: (message || '').trim(),
-      status: 'pending',
-      payment: null,
-      createdAt: now,
-      updatedAt: now,
-    };
-    db.mentoringRequests.push(reqRow);
+    id = nanoid();
+    await query(
+      `INSERT INTO mentoring_requests
+         (id, mentee_id, mentor_id, mentor_name, format, format_name, amount, message, status)
+       VALUES (?,?,?,?,?,?,?,?,'pending')`,
+      [id, req.user.id, mentorId, (mentorName || '').trim() || null,
+       f.id, f.name, f.amount, msg]);   // ← 금액은 서버가 정한 값. 클라이언트 값은 쓰지 않는다
   }
-  writeDb(db);
 
-  /* orderId 는 결제사에 넘길 주문번호다. 신청 id 를 그대로 쓰면 재결제 때 중복되므로
-     매번 새로 만들고, 승인 시 이 값으로 신청을 되찾는다. */
-  res.status(201).json({ request: reqRow });
+  const row = await queryOne('SELECT * FROM mentoring_requests WHERE id=?', [id]);
+  res.status(201).json({ request: toRequest(row) });
 });
 
-router.post('/requests/:id/cancel', requireAuth, (req, res) => {
-  const db = readDb();
-  const row = (db.mentoringRequests || []).find(r => r.id === req.params.id);
-  if (!row || row.menteeId !== req.user.id) {
+router.post('/requests/:id/cancel', requireAuth, async (req, res) => {
+  const row = await queryOne('SELECT * FROM mentoring_requests WHERE id=?', [req.params.id]);
+  if (!row || row.mentee_id !== req.user.id) {
     return res.status(404).json({ error: '신청을 찾을 수 없습니다.' });
   }
   if (!OPEN_STATUSES.includes(row.status)) {
@@ -116,10 +100,24 @@ router.post('/requests/:id/cancel', requireAuth, (req, res) => {
     return res.status(409).json({ error: '결제가 완료된 신청은 아직 취소할 수 없어요. 멘토에게 문의해 주세요.' });
   }
 
-  row.status = 'cancelled';
-  row.updatedAt = new Date().toISOString();
-  writeDb(db);
-  res.json({ message: '신청을 취소했습니다.', request: row });
+  await query("UPDATE mentoring_requests SET status='cancelled' WHERE id=?", [row.id]);
+  const updated = await queryOne('SELECT * FROM mentoring_requests WHERE id=?', [row.id]);
+  res.json({ message: '신청을 취소했습니다.', request: toRequest(updated) });
 });
 
-module.exports = { router, FORMATS, formatById };
+/* DB 는 snake_case, 화면은 camelCase 를 기대한다(예전 파일 DB 가 그랬다).
+   변환을 여기서만 하고 화면 코드는 그대로 둔다. */
+function toRequest(r) {
+  if (!r) return null;
+  const payment = typeof r.payment === 'string'
+    ? (() => { try { return JSON.parse(r.payment); } catch { return null; } })()
+    : r.payment;
+  return {
+    id: r.id, menteeId: r.mentee_id, mentorId: r.mentor_id, mentorName: r.mentor_name,
+    format: r.format, formatName: r.format_name, amount: Number(r.amount),
+    message: r.message, status: r.status, orderId: r.order_id, payment: payment ?? null,
+    createdAt: r.created_at, updatedAt: r.updated_at,
+  };
+}
+
+module.exports = { router, FORMATS, formatById, toRequest };
