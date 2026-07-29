@@ -1,0 +1,24 @@
+{
+  "name": "careerly",
+  "version": "1.0.0",
+  "private": true,
+  "description": "대학생 커리어 빌딩 플랫폼 — 저장소 루트. 실제 서버 코드는 backend/ 에 있다.",
+  "//": [
+    "이 파일은 배포 때문에 있다. 서버는 backend/ 안에 있지만 backend/ 만 떼어 배포하면 안 된다.",
+    "  - routes/casAnalyze.js 가 frontend/js/cas.js 를 읽는다 (배점 상수의 단일 출처)",
+    "  - server.js 가 express.static 으로 frontend/ 를 통째로 서빙한다",
+    "backend 만 올렸다가 'Cannot find module ../../../frontend/js/cas.js' 로 죽었다.",
+    "workspaces 를 쓰면 루트에서 npm ci 한 번으로 backend 의존성까지 깔린다."
+  ],
+  "workspaces": [
+    "backend"
+  ],
+  "scripts": {
+    "start": "node backend/src/server.js",
+    "dev": "npm --workspace backend run dev",
+    "test": "for f in test/*.test.js; do node \"$f\" | tail -1; done"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
