@@ -14,12 +14,33 @@
 */
 const mysql = require('mysql2/promise');
 
+/* 접속 문자열을 로그에 찍을 때 비밀번호를 가린다. 배포 로그는 팀원도 보고
+   화면 캡처로 오간다 — 진단하자고 비밀번호를 흘리면 안 된다. */
+function mask(url) {
+  return String(url).replace(/:\/\/([^:@/]*):([^@/]*)@/, '://$1:****@');
+}
+
 function config() {
   const url = (process.env.MYSQL_URL || process.env.DATABASE_URL || '').trim();
   if (url) {
-    const u = new URL(url);
+    const name = process.env.MYSQL_URL ? 'MYSQL_URL' : 'DATABASE_URL';
+    let u;
+    try {
+      u = new URL(url);
+    } catch {
+      /* 배포에서 실제로 겪었다. Railway 변수에 ${{MySQL.MYSQL_URL}} 를 손으로
+         타이핑했는데 참조가 풀리지 않아 그 글자가 그대로 값이 됐다. new URL 이
+         여기서 던지면 assertConnection 의 try 바깥이라 '[mysql] 연결 실패' 조차
+         안 찍히고, 로그만 봐선 무엇이 잘못됐는지 알 방법이 없다. */
+      throw new Error(
+        `${name} 을 주소로 읽을 수 없습니다: ${mask(url)}\n` +
+        `        mysql://사용자:비밀번호@호스트:포트/DB 형태여야 합니다.\n` +
+        `        값에 '\${{' 가 그대로 남아 있다면 서비스 참조가 풀리지 않은 것입니다 —\n` +
+        `        참조는 같은 프로젝트 안에서만 풀립니다. 앱과 MySQL 이 같은 프로젝트에 있는지 확인하세요.`
+      );
+    }
     return {
-      _from: process.env.MYSQL_URL ? 'MYSQL_URL' : 'DATABASE_URL',
+      _from: name,
       host: u.hostname,
       port: Number(u.port || 3306),
       user: decodeURIComponent(u.username),

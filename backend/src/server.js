@@ -594,7 +594,11 @@ assertConnection()
       console.log(`Careerly backend running on http://localhost:${PORT}`);
     });
   })
-  .catch(() => {
-    console.error('DB 에 연결하지 못해 서버를 시작하지 않습니다. .env 의 접속 정보를 확인하세요.');
+  .catch((e) => {
+    /* 에러를 버리면 안 된다. 접속 정보 자체가 깨진 경우(URL 파싱 실패)는
+       assertConnection 의 로그까지 가지도 못해서, 이 줄만 찍히고 원인이
+       사라진다. 배포에서 그것 때문에 한참 헤맸다. */
+    console.error('DB 에 연결하지 못해 서버를 시작하지 않습니다. 접속 정보를 확인하세요.');
+    console.error(`        ${e.message}`);
     process.exit(1);
   });
