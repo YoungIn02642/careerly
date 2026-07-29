@@ -83,9 +83,16 @@ careerly
 │  │  ├─ work24-companies.json # 고용24 공채기업 2,102건 (중견 1,444) ← 중견기업 판별
 │  │  └─ raw/                  # 지방공기업 CSV 원본 (EUC-KR)
 │  └─ scripts/                 # 수집(fetch-*.js) · 집계(build-*.js)
-├─ docs/                       # 설계 문서 5종
-└─ test/  cas.test.js (47) · jd-competency.test.js (22) · job-trends.test.js (12)
+├─ docs/                       # 설계 문서
+│  └─ 화면-구조-지도.md         # ★ "이 화면 HTML 어디 있지?" — 페이지·JS·CSS·API 지도
+└─ test/  cas.test.js (47) · jd-competency.test.js (22) · jd-questions.test.js (23)
+          job-trends.test.js (12) · news.test.js (32) · spec-parse.test.js (37)
+          wage-jobs.test.js (16)
 ```
+
+> **화면을 고치기 전에 `docs/화면-구조-지도.md` 를 볼 것.**
+> 단일 문서 SPA 라 HTML 이 한 파일에 몰려 있고, 그중 스펙 입력·멘토 상세·백오피스는
+> **HTML 이 빈 껍데기고 JS 가 내용을 만든다.** 모르면 한참 헤맨다.
 
 ---
 
