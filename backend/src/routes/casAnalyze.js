@@ -17,7 +17,8 @@
 const express = require('express');
 const CAS = require('../../../frontend/js/cas.js');   // 채점 루브릭·결정론 채점 재사용
 const { ruleParse, parseDuration, outcomeFromText, durationFromSnippets, typicalDuration, normalizeRole } = require('../spec-parse');
-const { classify: classifyCompany, CORP_TYPE_ID } = require('../company-classify');
+const { CORP_TYPE_ID } = require('../company-classify');
+const catalog = require('../catalog-db');
 
 const router = express.Router();
 
@@ -265,14 +266,14 @@ function localRationale(activities) {
    기존 company-classify 로 판정해 붙인다. "삼성전자 하계인턴" 처럼 활동명에 수식어가
    섞여 있으므로 어절을 앞에서부터 잘라가며 등록된 회사명을 찾는다.
    못 찾으면 tier 를 붙이지 않는다 → ×1.0 이라 기존 점수와 같다. */
-function attachCompanyTier(activities) {
+async function attachCompanyTier(activities) {
   for (const a of activities) {
     if (a.type !== 'internship' || a.companyTier) continue;
 
     const words = String(a.name || '').split(/\s+/).filter(Boolean);
     for (let n = words.length; n >= 1; n--) {
       const cand = words.slice(0, n).join(' ');
-      const hit = classifyCompany(cand);
+      const hit = await catalog.classifyCompany(cand);
       if (hit && hit.matched) {
         a.companyTier = CORP_TYPE_ID[hit.type];
         a.companyName = cand;
@@ -336,7 +337,7 @@ router.post('/analyze', async (req, res) => {
     }
 
     await fillDurations(activities);
-    attachCompanyTier(activities);          // 인턴십 기업 규모 배수
+    await attachCompanyTier(activities);    // 인턴십 기업 규모 배수 (DB 조회라 비동기)
     activities = activities.map(rescore);
 
     /* 화면에 띄우는 정성 총점은 이 값이다(프론트 spec-form.js).

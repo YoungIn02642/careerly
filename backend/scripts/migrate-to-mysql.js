@@ -202,7 +202,12 @@ async function migrateCatalog() {
   for (const [norm, v] of map) {
     if (!v.name) continue;
     companies.push({
-      norm_name: norm, name: v.name,
+      norm_name: norm,
+      /* 법인 등기명 그대로 넣으면 화면에 '(주)카카오' 가 뜬다. 고른 값이 그대로
+         스펙에 저장되는데 학생이 이력서에 그렇게 적지는 않는다.
+         정렬(짧은 이름 우선)도 법인격 때문에 밀린다 — 삼성물산(주)이 삼성출판사보다
+         길어져서 계열사가 모회사를 제친다. */
+      name: cc.displayName(v.name),
       corp_type: cc.CORP_TYPE_ID[v.type] || null, source: (v.source || '').slice(0, 190),
     });
   }

@@ -8,10 +8,10 @@ const { nanoid } = require('nanoid');
 const repo = require('./repo');
 const { query, assertConnection } = require('./mysql');
 const { DEMO_SEED, generateRandom } = require('./demo-seed');
-const { classify: classifyCompany, suggest: suggestCompany, stats: classifyStats, CORP_TYPE_ID } = require('./company-classify');
-const { catalog: certCatalog, searchCerts } = require('./cert-catalog');
-const { catalog: jobCatalog } = require('./wage-jobs');
-const { catalog: majorCatalog, deptOf, searchMajors } = require('./major-catalog');
+const { CORP_TYPE_ID } = require('./company-classify');
+/* 카탈로그 조회는 DB 에서 한다. 파일 기반 모듈(cert-catalog·major-catalog·
+   company-classify·wage-jobs)은 수집·이관 전용으로 남는다 — catalog-db.js 머리주석 참고. */
+const catalog = require('./catalog-db');
 const OAuth = require('./oauth');
 const recommendationsRouter = require("./routes/recommendations");
 const careerDataRouter = require("./routes/careerData");
@@ -394,11 +394,11 @@ app.get('/api/stats', async (req, res) => {
    공식 명단(공정위 대규모기업집단 / 공공기관 지정현황) 기반 조회.
    로컬 캐시만 보므로 외부 API 를 부르지 않는다 — 입력할 때마다 호출돼도 즉시 답한다.
    판정은 추천일 뿐이라 회원이 화면에서 고쳐 저장할 수 있다. */
-app.get('/api/company/classify', (req, res) => {
+app.get('/api/company/classify', async (req, res) => {
   const name = String(req.query.name || '').trim();
   if (!name) return res.status(400).json({ error: '회사명이 필요합니다.' });
 
-  const r = classifyCompany(name);
+  const r = await catalog.classifyCompany(name);
   /* 판정에 실패했으면 corpType 을 주지 않는다.
      예전에는 matched:false 여도 'small' 을 내려보냈다. 지금 호출하는 화면은
      matched 를 보고 걸러내지만, 그걸 잊은 다음 호출자가 생기면 **회사를 못 찾은 것**과
@@ -418,30 +418,30 @@ app.get('/api/company/classify', (req, res) => {
 
 /* 회사명 자동완성 — '삼성' → 삼성전자 · 삼성물산 …
    분류와 같은 로컬 캐시를 보므로 입력 중 타이핑마다 불러도 외부 API 를 타지 않는다. */
-app.get('/api/company/suggest', (req, res) => {
+app.get('/api/company/suggest', async (req, res) => {
   const q = String(req.query.q || '').trim();
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 8, 1), 20);
-  res.json({ query: q, items: q ? suggestCompany(q, limit) : [] });
+  res.json({ query: q, items: q ? await catalog.suggestCompanies(q, limit) : [] });
 });
 
 // 분류 캐시 상태 — 배치를 돌렸는지 확인용
-app.get('/api/company/stats', (req, res) => res.json(classifyStats()));
+app.get('/api/company/stats', async (req, res) => res.json(await catalog.companyStats()));
 
 /* ── 자격증 카탈로그 ────────────────────────────────────────────
    스펙 입력 화면의 자격증 선택 목록. 국가자격(큐넷 API 캐시) + 민간자격(수기).
    650종 남짓 · 60KB 정도라 페이징 없이 통째로 준다 — 프론트가 한 번 받아
    메모리에서 검색하면 입력 중 서버를 다시 부를 일이 없다.
    내용이 하루에도 바뀌는 데이터가 아니므로 캐시를 길게 잡는다. */
-app.get('/api/certs', (req, res) => {
+app.get('/api/certs', async (req, res) => {
   res.set('Cache-Control', 'no-cache');   // ETag 로 재검증 — 아래 /api/jobs 주석 참고
-  res.json(certCatalog());
+  res.json(await catalog.certCatalog());
 });
 
 /* 자격증 검색 — /api/company/suggest · /api/majors/suggest 와 같은 규약(q · limit → items). */
-app.get('/api/certs/suggest', (req, res) => {
+app.get('/api/certs/suggest', async (req, res) => {
   const q = String(req.query.q || '').trim();
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 8, 1), 20);
-  res.json({ query: q, items: q ? searchCerts(q, limit) : [] });
+  res.json({ query: q, items: q ? await catalog.searchCerts(q, limit) : [] });
 });
 
 /* ── 직업 분류 (커리어 로드맵) ──────────────────────────────────
@@ -457,9 +457,9 @@ app.get('/api/certs/suggest', (req, res) => {
    그래서 'no-cache' 로 둔다. 이름과 달리 '캐시 금지'가 아니라 **쓰기 전에 물어보라**는
    뜻이다. express 가 붙여 주는 ETag 로 재검증해서, 안 바뀌었으면 304(본문 없음)로
    끝나고 바뀌었을 때만 200KB 를 다시 받는다. 대역폭은 거의 그대로면서 갱신은 즉시 된다. */
-app.get('/api/jobs', (req, res) => {
+app.get('/api/jobs', async (req, res) => {
   res.set('Cache-Control', 'no-cache');
-  res.json(jobCatalog());
+  res.json(await catalog.jobCatalog());
 });
 
 /* ── 학과 카탈로그 ────────────────────────────────────────────
@@ -468,9 +468,9 @@ app.get('/api/jobs', (req, res) => {
 
    dept 는 careerly 통계를 묶는 키다. 학과명만 저장하면 스펙이 수천 갈래로 흩어져
    합격자 평균이 무의미해지므로, 학과명과 함께 어느 분류로 묶이는지도 같이 준다. */
-app.get('/api/majors', (req, res) => {
+app.get('/api/majors', async (req, res) => {
   res.set('Cache-Control', 'no-cache');
-  res.json(majorCatalog());
+  res.json(await catalog.majorCatalog());
 });
 
 /* 학과 검색 — 입력할 때마다 부른다(프론트가 debounce 로 묶는다).
@@ -479,17 +479,17 @@ app.get('/api/majors', (req, res) => {
 
    지금 카탈로그는 193개라 목록을 통째로 내려도 되지만, 커리어넷 학과정보 키가 나오면
    수천 개가 된다. 그때 구조를 다시 바꾸지 않도록 처음부터 서버 검색으로 둔다. */
-app.get('/api/majors/suggest', (req, res) => {
+app.get('/api/majors/suggest', async (req, res) => {
   const q = String(req.query.q || '').trim();
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 8, 1), 20);
-  res.json({ query: q, items: q ? searchMajors(q, limit) : [] });
+  res.json({ query: q, items: q ? await catalog.searchMajors(q, limit) : [] });
 });
 
 /* 목록에 없는 학과명을 직접 적었을 때 어느 분류로 묶일지 알려준다.
    못 맞추면 dept:null — 화면이 '직접 골라주세요'로 빠진다. */
-app.get('/api/majors/classify', (req, res) => {
+app.get('/api/majors/classify', async (req, res) => {
   const name = String(req.query.name || '').trim();
-  res.json({ major: name, dept: deptOf(name) });
+  res.json({ major: name, dept: await catalog.deptOfMajor(name) });
 });
 
 /* ── 백오피스 (개발 전용) ──────────────────────────────────────

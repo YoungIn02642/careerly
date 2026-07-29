@@ -247,4 +247,4 @@ function stats() {
   return { cached: c.map.size, sources: c.sources };
 }
 
-module.exports = { classify, suggest, normalize, stats, reloadCache, CORP_TYPE, CORP_TYPE_ID, DEFAULT_TYPE };
+module.exports = { classify, suggest, normalize, displayName, stats, reloadCache, CORP_TYPE, CORP_TYPE_ID, DEFAULT_TYPE };
