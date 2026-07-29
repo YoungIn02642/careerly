@@ -7,7 +7,10 @@ const bcrypt = require('bcryptjs');
 const { nanoid } = require('nanoid');
 const { readDb, writeDb } = require('./store');
 const { DEMO_SEED, generateRandom } = require('./demo-seed');
-const { classify: classifyCompany, stats: classifyStats, CORP_TYPE_ID } = require('./company-classify');
+const { classify: classifyCompany, suggest: suggestCompany, stats: classifyStats, CORP_TYPE_ID } = require('./company-classify');
+const { catalog: certCatalog } = require('./cert-catalog');
+const { catalog: jobCatalog } = require('./wage-jobs');
+const { catalog: majorCatalog, deptOf } = require('./major-catalog');
 const recommendationsRouter = require("./routes/recommendations");
 const careerDataRouter = require("./routes/careerData");
 const casAnalyzeRouter = require("./routes/casAnalyze");
@@ -94,7 +97,7 @@ app.get('/api/health', (req, res) => {
 });
 
 app.post('/api/auth/signup', async (req, res) => {
-  const { username, password, name, email, role } = req.body || {};
+  const { username, password, name, email, role, nickname } = req.body || {};
 
   if (!username || !password || !name || !email) {
     return res.status(400).json({ error: '필수 입력값이 누락되었습니다.' });
@@ -110,6 +113,12 @@ app.post('/api/auth/signup', async (req, res) => {
   }
   if (!isValidEmail(email)) {
     return res.status(400).json({ error: '올바른 이메일 형식이 아닙니다.' });
+  }
+  /* 닉네임은 선택. 안 보내면 null 로 두고 화면이 이름을 가려서 쓴다.
+     화면 곳곳에 이름 대신 들어가는 값이라 길이만 막아둔다. */
+  const trimmedNickname = typeof nickname === 'string' ? nickname.trim() : '';
+  if (trimmedNickname && (trimmedNickname.length < 2 || trimmedNickname.length > 12)) {
+    return res.status(400).json({ error: '닉네임은 2~12자여야 합니다.' });
   }
 
   const db = readDb();
@@ -131,12 +140,12 @@ app.post('/api/auth/signup', async (req, res) => {
     name: name.trim(),
     email: normalizedEmail,
     role,
-    nickname: null,
+    nickname: trimmedNickname || null,
     createdAt: new Date().toISOString(),
   };
 
   db.users.push(user);
-  db.profiles.push({ userId: user.id, nickname: null });
+  db.profiles.push({ userId: user.id, nickname: user.nickname });
   writeDb(db);
 
   res.status(201).json({ message: '회원가입이 완료되었습니다.', user: publicUser(user) });
@@ -241,7 +250,18 @@ app.get('/api/specs/me', requireAuth, (req, res) => {
 });
 
 app.put('/api/specs/me', requireAuth, (req, res) => {
-  const allowed = ['dept', 'field', 'job', 'company', 'corpType', 'gpa', 'gpaMax', 'certs', 'scores', 'qual', 'detail', 'activities'];
+  /* 허용 목록 방식이라 **새 필드를 여기 추가하지 않으면 조용히 버려진다.**
+     화면에서는 저장한 것처럼 보이는데 다시 열면 비어 있어 원인을 찾기 어렵다.
+     스펙 입력 폼에 칸을 늘렸다면 반드시 여기도 같이 늘릴 것.
+       major             — 학생이 적은 학과명(자유). dept 는 그걸 묶는 통계 분류다
+       careers           — 멘토의 경력 [{company,start,end,current,position,job,desc}]
+       interestCompanies — 멘티의 관심 기업 (이름 배열)
+       certMeta          — 직접 입력한 자격증의 발급기관·취득일 { 이름: {issuer,date} } */
+  const allowed = [
+    'dept', 'major', 'field', 'job', 'company', 'corpType', 'gpa', 'gpaMax',
+    'certs', 'certMeta', 'scores', 'qual', 'detail', 'activities',
+    'careers', 'interestCompanies',
+  ];
   const db = readDb();
   if (!db.userSpecs) db.userSpecs = [];
 
@@ -316,8 +336,62 @@ app.get('/api/company/classify', (req, res) => {
   });
 });
 
+/* 회사명 자동완성 — '삼성' → 삼성전자 · 삼성물산 …
+   분류와 같은 로컬 캐시를 보므로 입력 중 타이핑마다 불러도 외부 API 를 타지 않는다. */
+app.get('/api/company/suggest', (req, res) => {
+  const q = String(req.query.q || '').trim();
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 8, 1), 20);
+  res.json({ query: q, items: q ? suggestCompany(q, limit) : [] });
+});
+
 // 분류 캐시 상태 — 배치를 돌렸는지 확인용
 app.get('/api/company/stats', (req, res) => res.json(classifyStats()));
+
+/* ── 자격증 카탈로그 ────────────────────────────────────────────
+   스펙 입력 화면의 자격증 선택 목록. 국가자격(큐넷 API 캐시) + 민간자격(수기).
+   650종 남짓 · 60KB 정도라 페이징 없이 통째로 준다 — 프론트가 한 번 받아
+   메모리에서 검색하면 입력 중 서버를 다시 부를 일이 없다.
+   내용이 하루에도 바뀌는 데이터가 아니므로 캐시를 길게 잡는다. */
+app.get('/api/certs', (req, res) => {
+  res.set('Cache-Control', 'no-cache');   // ETag 로 재검증 — 아래 /api/jobs 주석 참고
+  res.json(certCatalog());
+});
+
+/* ── 직업 분류 (커리어 로드맵) ──────────────────────────────────
+   한국고용직업분류 대분류 10 → 중분류 35 → 직업 461 (임금·전망 포함).
+   200KB 남짓이라 초기 로딩에 얹지 않고, 로드맵 화면을 처음 열 때만 받아 간다.
+
+   ── max-age 를 길게 주면 안 된다 (실측으로 데였다) ──
+   처음엔 'public, max-age=86400' 을 줬다. 분류와 임금이 하루에 바뀌는 값이 아니라서
+   맞다고 봤는데, **응답에 필드를 하나 추가했더니 화면에 undefined 가 떴다.**
+   max-age 가 살아 있는 동안 브라우저는 서버에 묻지도 않고 옛 본문을 쓴다 —
+   서버를 재시작해도, 코드를 고쳐도 하루 동안 반영되지 않는다.
+
+   그래서 'no-cache' 로 둔다. 이름과 달리 '캐시 금지'가 아니라 **쓰기 전에 물어보라**는
+   뜻이다. express 가 붙여 주는 ETag 로 재검증해서, 안 바뀌었으면 304(본문 없음)로
+   끝나고 바뀌었을 때만 200KB 를 다시 받는다. 대역폭은 거의 그대로면서 갱신은 즉시 된다. */
+app.get('/api/jobs', (req, res) => {
+  res.set('Cache-Control', 'no-cache');
+  res.json(jobCatalog());
+});
+
+/* ── 학과 카탈로그 ────────────────────────────────────────────
+   스펙 입력의 '학과' 검색 목록. 지금은 손으로 추린 임시 목록이고,
+   커리어넷 학과정보 키가 나오면 수집 스크립트로 교체한다(major-catalog.js 주석).
+
+   dept 는 careerly 통계를 묶는 키다. 학과명만 저장하면 스펙이 수천 갈래로 흩어져
+   합격자 평균이 무의미해지므로, 학과명과 함께 어느 분류로 묶이는지도 같이 준다. */
+app.get('/api/majors', (req, res) => {
+  res.set('Cache-Control', 'no-cache');
+  res.json(majorCatalog());
+});
+
+/* 목록에 없는 학과명을 직접 적었을 때 어느 분류로 묶일지 알려준다.
+   못 맞추면 dept:null — 화면이 '직접 골라주세요'로 빠진다. */
+app.get('/api/majors/classify', (req, res) => {
+  const name = String(req.query.name || '').trim();
+  res.json({ major: name, dept: deptOf(name) });
+});
 
 /* ── 백오피스 (개발 전용) ──────────────────────────────────────
    회원 목록 조회·삭제, 데모 시드, 전체 초기화. 인증·권한 체계가 아직 없으므로

@@ -31,6 +31,9 @@ function showPage(page) {
   updateNavActive(NAV_HIGHLIGHT.includes(navKey) ? navKey : '');
 
   if (page === 'mypage')     initMypage();
+  /* 회원 유형 선택은 DOM 에 그대로 남는다. 멘토를 골라 두고 나갔다 돌아오면
+     라디오는 멘토인데 안내 문구만 멘티로 남으므로 들어올 때 맞춰 준다. */
+  if (page === 'signup')     syncNicknamePlaceholder();
   if (page === 'career')     { CareerPage.refreshUser(); CareerPage.render(); }
   if (page === 'backoffice') Backoffice.render(document.querySelector('#page-backoffice .bo-wrap'));
   if (page === 'main')       { if (window.renderHome) renderHome(); }
@@ -194,10 +197,30 @@ function clearFieldErr(id) {
   if (input) input.classList.remove('input-error');
   if (err) err.style.display = 'none';
 }
-['username','password','password-confirm','name','email'].forEach(id => {
+['username','password','password-confirm','name','nickname','email'].forEach(id => {
   document.addEventListener('input', e => {
     if (e.target.id === 'su-' + id) clearFieldErr(id);
   });
+});
+
+/* 닉네임이 '누구에게' 보이는지는 회원 유형에 따라 반대다.
+   멘티가 쓰는 닉네임은 선배(멘토)가 보고, 멘토가 쓰는 닉네임은 후배(멘티)가 본다.
+   유형을 고를 때마다 안내 문구를 뒤집어 준다. */
+const NICKNAME_PLACEHOLDER = {
+  mentee: '선배들에게 표시될 이름',
+  mentor: '후배들에게 표시될 이름',
+};
+
+function syncNicknamePlaceholder() {
+  const role = document.querySelector('input[name="role"]:checked')?.value;
+  const el = document.getElementById('su-nickname');
+  if (el) el.placeholder = NICKNAME_PLACEHOLDER[role] || NICKNAME_PLACEHOLDER.mentee;
+}
+
+/* 회원 유형은 라디오라 change 로 잡는다. 문서 전체에 위임해 두면 회원가입 화면이
+   보이기 전에 바인딩해도 안전하다. */
+document.addEventListener('change', e => {
+  if (e.target.name === 'role') syncNicknamePlaceholder();
 });
 
 function validateSignup() {
@@ -219,6 +242,14 @@ function validateSignup() {
   else if (p !== pc) { showFieldErr('password-confirm', '비밀번호가 일치하지 않습니다.'); valid = false; }
 
   if (!n) { showFieldErr('name', '이름을 입력해주세요.'); valid = false; }
+
+  /* 닉네임은 선택 — 비워두면 이름을 가려서 쓴다(maskName). 적었다면 길이만 본다.
+     화면 곳곳에 이름 대신 들어가는 값이라 너무 길면 레이아웃이 깨진다. */
+  const nick = document.getElementById('su-nickname').value.trim();
+  if (nick && (nick.length < 2 || nick.length > 12)) {
+    showFieldErr('nickname', '닉네임은 2~12자로 입력해주세요.'); valid = false;
+  }
+
   if (!em) { showFieldErr('email', '이메일을 입력해주세요.'); valid = false; }
   else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) { showFieldErr('email', '올바른 이메일 형식을 입력해주세요.'); valid = false; }
   return valid;
@@ -234,6 +265,7 @@ async function handleSignup() {
       username: document.getElementById('su-username').value.trim(),
       password: document.getElementById('su-password').value,
       name:     document.getElementById('su-name').value.trim(),
+      nickname: document.getElementById('su-nickname').value.trim() || null,
       email:    document.getElementById('su-email').value.trim(),
       role,
     });
@@ -319,14 +351,14 @@ function updateMainStats() {
 function filterMajors(q) {
   const query = q.trim();
   let shown = 0;
-  document.querySelectorAll('#ncs-list .ncs-item').forEach(el => {
+  document.querySelectorAll('#job-major-list .job-major-item').forEach(el => {
     // 분류명("금융·보험")과 번호("03") 어느 쪽으로도 찾을 수 있게 한다.
     const name = el.querySelector('.dept-label').textContent;
-    const num  = el.querySelector('.ncs-num').textContent;
+    const num  = el.querySelector('.jm-code').textContent;
     const hit  = !query || name.includes(query) || num.includes(query);
     el.style.display = hit ? '' : 'none';
     if (hit) shown++;
   });
-  document.getElementById('ncs-list-empty').style.display = shown ? 'none' : 'block';
+  document.getElementById('job-major-list-empty').style.display = shown ? 'none' : 'block';
 }
 window.filterMajors = filterMajors;

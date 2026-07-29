@@ -90,6 +90,65 @@ window.DB = (() => {
     }
   }
 
+  /* 회사명 자동완성 — '삼성' → 삼성전자 · 삼성물산 …
+     서버가 로컬 캐시만 보므로 입력 중 호출해도 빠르다. 실패는 빈 목록으로 삼켜서
+     자동완성이 안 뜰 뿐 직접 입력은 계속되게 한다. */
+  async function suggestCompanies(q, limit = 8) {
+    if (!q || !q.trim()) return [];
+    try {
+      const r = await api('GET', `/api/company/suggest?q=${encodeURIComponent(q.trim())}&limit=${limit}`);
+      return r.items || [];
+    } catch {
+      return [];
+    }
+  }
+
+  /* 직업 분류 카탈로그(한국고용직업분류 · 임금·전망 포함). 커리어 로드맵이 처음
+     열릴 때 한 번만 받는다. 200KB 라 초기 로딩에 얹지 않는다. */
+  let _jobsPromise = null;
+  function jobCatalog() {
+    if (!_jobsPromise) {
+      _jobsPromise = api('GET', '/api/jobs')
+        .catch(e => { _jobsPromise = null; throw e; });   // 실패하면 다시 시도할 수 있게
+    }
+    return _jobsPromise;
+  }
+
+  /* 학과 카탈로그. 스펙 입력 화면에서만 쓰므로 그때 한 번 받는다. */
+  let _majorsPromise = null;
+  function majorCatalog() {
+    if (!_majorsPromise) {
+      _majorsPromise = api('GET', '/api/majors')
+        .then(r => r.majors || [])
+        .catch(() => { _majorsPromise = null; return []; });
+    }
+    return _majorsPromise;
+  }
+
+  /* 목록에 없는 학과명 → 집계 분류. 규칙은 서버에 한 벌만 둔다
+     (프론트에도 복사하면 둘이 어긋났을 때 통계가 조용히 갈린다). */
+  async function classifyMajor(name) {
+    if (!name || !name.trim()) return null;
+    try {
+      return await api('GET', `/api/majors/classify?name=${encodeURIComponent(name.trim())}`);
+    } catch {
+      return null;
+    }
+  }
+
+  /* 자격증 카탈로그(국가자격 613종 + 민간자격). 한 번 받아 두고 계속 쓴다 —
+     입력 중 검색은 전부 메모리에서 하므로 타이핑마다 서버를 부르지 않는다.
+     실패하면 빈 목록을 주고 호출부는 직접 입력으로 넘어간다(화면이 멈추지 않게). */
+  let _certsPromise = null;
+  function certCatalog() {
+    if (!_certsPromise) {
+      _certsPromise = api('GET', '/api/certs')
+        .then(r => r.certs || [])
+        .catch(() => { _certsPromise = null; return []; });   // 다음 호출에서 다시 시도
+    }
+    return _certsPromise;
+  }
+
   /* 반정형 스펙 텍스트 → AI 분석(활동 정규화·정성 채점).
      서버가 Gemini 로 처리한다. 키 미설정이면 503 → 에러 메시지를 그대로 던진다. */
   async function analyzeCas(text) {
@@ -163,7 +222,8 @@ window.DB = (() => {
   return {
     hydrate, refreshSpecs, refreshUsers,
     currentUser, getAllSpecs, getSpec, getUsers, countByRole, stats,
-    createUser, login, logout, updateUser, upsertSpec, classifyCompany, analyzeCas, coachJd, companyNews,
+    createUser, login, logout, updateUser, upsertSpec, classifyCompany, suggestCompanies, certCatalog, jobCatalog, majorCatalog, classifyMajor,
+    analyzeCas, coachJd, companyNews,
     seedDemo, seedRandom, clearAll, deleteUser,
   };
 })();

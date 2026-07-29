@@ -46,6 +46,11 @@
   const TOEFL_CURVE = [[40, 30], [60, 55], [80, 75], [100, 88], [120, 100]];
   const OPIC_INDEX  = { NL: 20, NM: 30, NH: 40, IL: 50, IM1: 58, IM2: 64, IM3: 70, IH: 80, AL: 92 };
   const TS_INDEX    = { NL: 20, NM: 30, NH: 42, IL: 55, IM: 72, IH: 85, AL: 95 };
+  /* TEPS 는 2018 개편 후 600점 만점. 공식 대응표가 없어 TEPS 관리위원회가 공개한
+     등급 구간(1+급 ≈ 상위권)을 기준점 삼아 TOEIC 곡선과 같은 자리에 맞췄다.
+     G-TELP 는 채용에서 사실상 Level 2 만 쓰이므로 100점 만점 기준 하나만 둔다. */
+  const TEPS_CURVE  = [[200, 20], [300, 45], [327, 60], [364, 75], [387, 80], [419, 88], [453, 94], [600, 100]];
+  const GTELP_CURVE = [[30, 20], [50, 45], [65, 60], [72, 75], [77, 80], [85, 88], [92, 94], [100, 100]];
 
   function interpolate(curve, x) {
     if (x <= curve[0][0]) return curve[0][1];
@@ -65,10 +70,38 @@
     const vals = [];
     if (typeof scores.toeic === 'number') vals.push(interpolate(TOEIC_CURVE, scores.toeic));
     if (typeof scores.toefl === 'number') vals.push(interpolate(TOEFL_CURVE, scores.toefl));
+    if (typeof scores.teps  === 'number') vals.push(interpolate(TEPS_CURVE,  scores.teps));
+    if (typeof scores.gtelp === 'number') vals.push(interpolate(GTELP_CURVE, scores.gtelp));
     if (scores.opic          && OPIC_INDEX[scores.opic]          != null) vals.push(OPIC_INDEX[scores.opic]);
     if (scores.toeicSpeaking && TS_INDEX[scores.toeicSpeaking]   != null) vals.push(TS_INDEX[scores.toeicSpeaking]);
     return vals.length ? Math.max(...vals) : null;
   }
+
+  /* ── 어학 시험 카탈로그 ───────────────────────────────────────
+     스펙 입력 화면이 어떤 시험을 보여줄지, 어떤 입력 위젯을 쓸지의 단일 출처.
+     여기 없는 시험은 langIndex() 도 못 읽으므로 둘을 같이 고쳐야 한다.
+     kind: 'score' = 숫자 입력(만점 max), 'level' = 등급 선택(levels). */
+  const LANG_TESTS = [
+    { id: 'toeic',         label: 'TOEIC',            kind: 'score', max: 990, placeholder: '예: 920' },
+    { id: 'opic',          label: 'OPIc',             kind: 'level', levels: Object.keys(OPIC_INDEX) },
+    { id: 'toeicSpeaking', label: 'TOEIC Speaking',   kind: 'level', levels: Object.keys(TS_INDEX) },
+    { id: 'toefl',         label: 'TOEFL (iBT)',      kind: 'score', max: 120, placeholder: '예: 105' },
+    { id: 'teps',          label: 'TEPS',             kind: 'score', max: 600, placeholder: '예: 387' },
+    { id: 'gtelp',         label: 'G-TELP (Level 2)', kind: 'score', max: 100, placeholder: '예: 77' },
+  ];
+
+  /* 제2외국어 — 점수가 아니라 등급으로만 받는다.
+     CAS 어학 점수는 영어 기준(langIndex)이라 여기 값은 **점수에 반영되지 않는다**.
+     프로필·비교 화면에 보여주기 위한 기록용이며, 반영하려면 별도 배점 설계가 필요하다. */
+  const FOREIGN_TESTS = [
+    { id: 'jlpt',    label: 'JLPT (일본어)',        levels: ['N5', 'N4', 'N3', 'N2', 'N1'] },
+    { id: 'hsk',     label: 'HSK (중국어)',         levels: ['1급', '2급', '3급', '4급', '5급', '6급'] },
+    { id: 'hskk',    label: 'HSKK (중국어 회화)',   levels: ['초급', '중급', '고급'] },
+    { id: 'delf',    label: 'DELF·DALF (프랑스어)', levels: ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'] },
+    { id: 'dele',    label: 'DELE (스페인어)',      levels: ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'] },
+    { id: 'goethe',  label: 'Goethe-Zertifikat (독일어)', levels: ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'] },
+    { id: 'torfl',   label: 'TORFL (러시아어)',     levels: ['기초', '1단계', '2단계', '3단계', '4단계'] },
+  ];
 
   // ── 상대 채점 ───────────────────────────────────────────────
   /* 내 값과 합격자 평균의 비율로 0~1 을 낸다.
@@ -416,6 +449,7 @@
     computeQuant, resolveWeights, langIndex, relativeScore, certScore,
     isMajorRelevant, DEPT_MAJOR,
     TARGETS, TOTAL_QUANT, MIN_N_FOR_RATE,
+    LANG_TESTS, FOREIGN_TESTS,
     // 정성
     computeQual, computeTotal, resolveSplit, scoreActivity, qualRaw, normalizeActivities,
     ACTIVITY_TYPES, TOTAL_QUAL, DURATION_MULT, ROLE_MULT, OUTCOME_MULT, STAGE_MULT,

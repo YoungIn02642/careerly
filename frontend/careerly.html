@@ -415,6 +415,13 @@
         <span class="field-error" id="err-su-name"></span>
       </div>
       <div class="form-group">
+        <label>닉네임</label>
+        <!-- placeholder 는 선택한 회원 유형에 따라 app.js 가 바꾼다 (멘티↔멘토) -->
+        <input type="text" id="su-nickname" placeholder="선배들에게 표시될 이름" autocomplete="nickname" />
+        <span class="field-error" id="err-su-nickname"></span>
+        <span class="field-hint">선택 사항. 다른 회원에게 실명 대신 표시됩니다. 나중에 마이페이지에서 바꿀 수 있어요.</span>
+      </div>
+      <div class="form-group">
         <label>이메일 주소</label>
         <input type="email" id="su-email" placeholder="example@email.com" autocomplete="email" />
         <span class="field-error" id="err-su-email"></span>
@@ -634,6 +641,7 @@
       <div class="tabs-bar" id="mentoring-tabs">
         <span class="tab" data-tab="ongoing" onclick="switchTab('ongoing')">진행 중<span class="cnt" id="tabcnt-ongoing">2</span></span>
         <span class="tab on" data-tab="completed" onclick="switchTab('completed')">완료<span class="cnt" id="tabcnt-completed">5</span></span>
+        <span class="tab" data-tab="applied" onclick="switchTab('applied')">내가 신청<span class="cnt" id="tabcnt-applied">0</span></span>
         <span class="tab" data-tab="received" onclick="switchTab('received')">받은 요청<span class="cnt" id="tabcnt-received">1</span></span>
       </div>
       <div id="mentoring-body"></div>
@@ -709,40 +717,74 @@
         내 활동이 입력돼 있으면 어떤 경험을 소재로 쓸지까지 짚어드립니다.</p>
     </div>
 
+    <!-- ── 입력 4분할 ─────────────────────────────────────────
+         공고·직무기술서·회사·자소서 문항은 근거가 서로 다르다. 한 칸에 몰아 받으면
+         무엇이 어느 문항의 근거인지 섞여서, 분석 결과도 "그래서 어디에 쓰라는 것"인지
+         알 수 없게 된다. 넣는 자리부터 나눠 받는다. -->
     <div class="card jd-input-card">
-      <div class="jd-note" id="jd-spec-note"></div>
+      <div class="jd-steps">
+        <div class="jd-step">
+          <label class="jd-label" for="jd-company">
+            <span class="jd-step-n">1</span> 지원 회사
+            <span class="jd-opt">지원동기 문항의 근거가 됩니다</span>
+          </label>
+          <input type="text" id="jd-company" class="jd-company-input" list="jd-company-options"
+                 placeholder="회사명 (예: 삼성전자)" autocomplete="off" />
+          <datalist id="jd-company-options"></datalist>
+        </div>
 
-      <label class="jd-label" for="jd-text">채용공고 · 직무기술서 붙여넣기</label>
-      <textarea id="jd-text" class="jd-text" rows="12"
-        placeholder="공고의 [주요업무] · [자격요건] · [우대사항] 부분을 그대로 붙여넣어 주세요.&#10;길수록 정확해집니다."></textarea>
+        <div class="jd-step">
+          <label class="jd-label" for="jd-text">
+            <span class="jd-step-n">2</span> 채용공고
+            <span class="jd-opt">필수</span>
+          </label>
+          <textarea id="jd-text" class="jd-text" rows="8"
+            placeholder="공고 본문을 그대로 붙여넣어 주세요. 모집분야·근무조건·전형절차가 섞여 있어도 됩니다."></textarea>
+        </div>
+
+        <div class="jd-step">
+          <label class="jd-label" for="jd-jd">
+            <span class="jd-step-n">3</span> 직무기술서 (JD)
+            <span class="jd-opt">선택 · 따로 있으면 여기에</span>
+          </label>
+          <textarea id="jd-jd" class="jd-text" rows="8"
+            placeholder="[주요업무] · [자격요건] · [우대사항] 처럼 직무 자체를 설명하는 문서가 따로 있으면 붙여넣어 주세요.&#10;공고와 함께 읽고 역량을 뽑습니다."></textarea>
+        </div>
+
+        <div class="jd-step">
+          <label class="jd-label" for="jd-questions">
+            <span class="jd-step-n">4</span> 자소서 문항
+            <span class="jd-opt">선택 · 한 줄에 하나씩</span>
+          </label>
+          <textarea id="jd-questions" class="jd-text" rows="6"
+            placeholder="1. 지원 동기와 입사 후 포부를 기술해 주십시오.&#10;2. 직무 수행에 필요한 역량을 갖추기 위해 노력한 경험을 서술해 주십시오.&#10;3. 협업 과정에서 갈등을 해결한 경험을 기술해 주십시오."></textarea>
+          <div class="jd-hint">문항을 넣으면 <b>문항마다</b> 어떤 역량·소재를 쓸지 따로 정리해 드려요.</div>
+        </div>
+      </div>
 
       <div class="jd-actions">
-        <button type="button" class="jd-btn" id="jd-run"><i class="ti ti-wand"></i> 역량 분석하기</button>
+        <button type="button" class="jd-btn" id="jd-run"><i class="ti ti-wand"></i> 한 번에 분석하기</button>
         <button type="button" class="jd-btn-ghost" id="jd-sample"><i class="ti ti-file-text"></i> 예시 넣어보기</button>
         <label class="jd-toggle" title="끄면 공고 키워드만으로 즉시 분석합니다">
           <input type="checkbox" id="jd-use-ai" checked> AI 보강 사용
         </label>
         <span class="jd-status" id="jd-status"></span>
       </div>
-    </div>
-
-    <div id="jd-result" hidden></div>
-
-    <!-- ── 지원동기 문항용 · 위 역량 분석과 독립적으로 동작한다 ──
-         직무역량 문항은 '공고'가, 지원동기 문항은 '회사의 최근 소식'이 근거다.
-         둘을 한 점수로 섞지 않고 문항별로 나눠 붙인다. -->
-    <div class="card jd-input-card jd-news-card">
-      <div class="jd-news-h"><i class="ti ti-news"></i> 이 회사, 지금</div>
-      <p class="jd-news-desc">지원하는 회사의 <b>최근 기사</b>와 거기서 반복되는 <b>키워드</b>를 찾아드려요.
-        "왜 우리 회사인가" 문항은 홈페이지 비전이 아니라 <b>지금 이 회사가 하고 있는 일</b>에서 나옵니다.</p>
-
-      <div class="jd-actions">
-        <input type="text" id="jd-company" class="jd-company-input" placeholder="회사명 (예: 아주산업)"
-               autocomplete="off" />
-        <button type="button" class="jd-btn" id="jd-news-run"><i class="ti ti-search"></i> 소식 찾기</button>
+      <div class="jd-actions jd-actions--news">
+        <span class="jd-news-inline"><i class="ti ti-news"></i> 회사 소식은 분석과 함께 찾습니다</span>
+        <button type="button" class="jd-btn-ghost" id="jd-news-run"><i class="ti ti-search"></i> 소식만 다시 찾기</button>
         <span class="jd-status" id="jd-news-status"></span>
       </div>
+    </div>
 
+    <div id="jd-questions-result" hidden></div>
+    <div id="jd-result" hidden></div>
+
+    <!-- 지원동기 문항의 근거 — 공고가 아니라 '회사의 최근 소식'에서 나온다. -->
+    <div class="card jd-input-card jd-news-card" id="jd-news-card" hidden>
+      <div class="jd-news-h"><i class="ti ti-news"></i> 이 회사, 지금</div>
+      <p class="jd-news-desc">최근 5주를 한 주씩 끊어 <b>그 주에 가장 크게 다뤄진 기사</b>를 한 건씩 모았어요.
+        "왜 우리 회사인가" 문항은 홈페이지 비전이 아니라 <b>지금 이 회사가 하고 있는 일</b>에서 나옵니다.</p>
       <div id="jd-news-result" hidden></div>
     </div>
   </div>
@@ -767,10 +809,10 @@
         </div>
       </div>
 
-      <div class="sidebar-section">NCS 24개 직업 대분류</div>
-      <!-- 목록은 CareerPage.init() 이 NCS.MAJORS 로부터 렌더한다 -->
-      <div class="dept-list" id="ncs-list"></div>
-      <div class="sidebar-empty" id="ncs-list-empty">검색 결과가 없습니다</div>
+      <div class="sidebar-section">1차 분류</div>
+      <!-- 목록은 CareerPage.paintSidebar() 가 KECO(임금직업정보) 분류로부터 렌더한다 -->
+      <div class="dept-list" id="job-major-list"></div>
+      <div class="sidebar-empty" id="job-major-list-empty">검색 결과가 없습니다</div>
     </aside>
     <main class="career-main" id="career-main"></main>
   </div>
@@ -778,7 +820,9 @@
 
 <!-- ══ MODULES ══ -->
 <script src="js/db.js"></script>
+<!-- ncs.js: 커리어 로드맵은 keco.js 로 옮겼지만, job-trends 집계가 아직 NCS 분류를 쓴다 -->
 <script src="js/ncs.js"></script>
+<script src="js/keco.js"></script>
 <script src="js/aggregation.js"></script>
 <script src="js/cas.js"></script>
 <script src="js/cas-radar.js"></script>
