@@ -104,6 +104,9 @@ async function callEndpoint(ep, company) {
   if (!res.ok) {
     const err = new Error(`${ep.label} 오류 ${res.status}: ${body.slice(0, 150)}`);
     err.status = res.status;
+    /* 네이버는 사유를 본문에 적어 준다(errorCode/errorMessage). 상태 코드만으론
+       '키가 틀림'과 '권한 없음'이 구분되지 않는 경우가 있어 같이 남긴다. */
+    err.detail = body.replace(/\s+/g, ' ').slice(0, 120);
     err.authFailed = res.status === 401 || res.status === 403;
     throw err;
   }
@@ -129,6 +132,7 @@ async function fromNaver(company, mode) {
   const candidates = [...preferred, ...ENDPOINTS.filter(e => !preferred.includes(e))];
 
   let lastErr = null;
+  const tried = [];        // 어느 발급처가 어떤 응답을 줬는지 모아 둔다(진단용)
   for (const ep of candidates) {
     if (preferred.length && ep.id !== mode && !lastErr?.authFailed) break;
     try {
@@ -144,13 +148,19 @@ async function fromNaver(company, mode) {
       return items;
     } catch (e) {
       lastErr = e;
+      tried.push(`${ep.label}: ${e.status || '연결실패'} ${e.detail || ''}`.trim());
+      console.warn(`[news] ${ep.label} 실패 — ${e.message}`);
       if (!e.authFailed) break;          // 인증 문제가 아니면 다른 발급처를 시도해도 소용없다
     }
   }
 
+  /* 양쪽 다 거절당했을 때 '인증 실패'만 알려주면 다음에 뭘 고쳐야 할지 알 수 없다.
+     실제로 배포에서 이 메시지만 보고 키를 세 번 갈아 끼웠다. 상태 코드가 사유를
+     가른다 — 401 은 키가 틀린 것, 403 은 그 키에 검색 권한이 없는 것,
+     404 는 주소가 맞지 않는 것이다. 응답 본문 앞부분까지 그대로 보여준다. */
   const err = new Error(lastErr?.authFailed
-    ? '네이버 뉴스 검색 인증에 실패했습니다. Client ID 와 Secret 을 같은 콘솔 화면에서 함께 복사했는지 확인해 주세요. '
-      + '(NCP NAVER API Hub · 개발자센터 검색 API 양쪽 모두 시도했습니다)'
+    ? '네이버 뉴스 검색 인증에 실패했습니다.\n' + tried.map(t => '  · ' + t).join('\n')
+      + '\n  401=키가 틀림 · 403=그 키에 검색 권한 없음 · 404=주소 불일치'
     : (lastErr?.message || '네이버 뉴스 검색에 실패했습니다.'));
   err.status = lastErr?.authFailed ? 503 : 502;
   throw err;
