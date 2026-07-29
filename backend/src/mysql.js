@@ -19,6 +19,7 @@ function config() {
   if (url) {
     const u = new URL(url);
     return {
+      _from: process.env.MYSQL_URL ? 'MYSQL_URL' : 'DATABASE_URL',
       host: u.hostname,
       port: Number(u.port || 3306),
       user: decodeURIComponent(u.username),
@@ -27,6 +28,7 @@ function config() {
     };
   }
   return {
+    _from: 'DB_HOST 등 개별 변수(기본값)',
     host: (process.env.DB_HOST || '127.0.0.1').trim(),
     port: Number(process.env.DB_PORT || 3306),
     user: (process.env.DB_USER || 'root').trim(),
@@ -39,7 +41,7 @@ let _pool = null;
 
 function pool() {
   if (_pool) return _pool;
-  const c = config();
+  const { _from, ...c } = config();   // _from 은 진단용이라 드라이버에 넘기지 않는다
   _pool = mysql.createPool({
     ...c,
     waitForConnections: true,
@@ -96,6 +98,15 @@ async function assertConnection() {
   } catch (e) {
     console.error(`[mysql] 연결 실패 — ${c.user}@${c.host}:${c.port}/${c.database}`);
     console.error(`        ${e.message}`);
+    console.error(`        접속 정보 출처: ${c._from}`);
+    /* 배포 환경에서 실제로 겪은 함정이다. Railway 에서 MYSQL_URL 을
+       ${{MySQL.MYSQL_URL}} 로 걸었는데 서비스 이름이 달라 치환이 안 됐고,
+       값이 빈 문자열이 되면서 로컬 기본값(127.0.0.1)으로 조용히 떨어졌다.
+       주소만 보면 '왜 localhost 로 붙지?' 하고 한참 헤맨다. */
+    if (c._from !== 'MYSQL_URL' && c._from !== 'DATABASE_URL') {
+      console.error('        MYSQL_URL 이 비어 있습니다. 배포 환경이라면 이게 원인입니다 —');
+      console.error('        참조(${{서비스이름.MYSQL_URL}})의 서비스 이름이 실제와 같은지 확인하세요.');
+    }
     throw e;
   }
 }
