@@ -652,6 +652,12 @@ window.SpecForm = (() => {
 
       if (r?.dept) {
         sel.value = r.dept;
+        /* 값을 코드로 바꾸면 change 가 저절로 나지 않는다. 그래서 여기에 걸어 둔
+           fillFieldJob(진출분야·세부직무 채우기)·paintCertReco 가 안 돌았고,
+           학과를 골라도 '희망 진출분야'가 계속 비어 있었다. 직접 부르지 않고
+           이벤트를 쏘는 이유는, 나중에 change 에 뭘 더 붙여도 같이 따라오게
+           하기 위해서다(직접 부르면 또 빠뜨린다). */
+        sel.dispatchEvent(new Event('change'));
         const label = DEPTS.find(d => d.id === r.dept)?.label || r.dept;
         hint.className = 'sf-hint-inline sf-hint-ok';
         hint.textContent = `${label} 통계로 묶여요. 다르면 아래에서 직접 고치세요.`;
@@ -898,17 +904,32 @@ window.SpecForm = (() => {
     wrap.innerHTML = certState.map((c, i) => certRowHtml(c, i)).join('');
   }
 
-  function certRowHtml(name, i) {
+  /* 배지만 따로 만든다. 입력 중에는 이것만 갈아끼워야 하기 때문이다 — 아래 주석 참고. */
+  function certBadgeHtml(name) {
     const manual = certMeta[name];
     const known = certKnown.has(name) ? certKnown.get(name) : undefined;
 
     /* 아직 확인 전(undefined)이면 '목록에 없음' 이라고 단정하지 않는다 —
        확인 중일 뿐인데 학생에게 오타라고 알리는 꼴이 된다. */
-    const badge = !name ? ''
+    return !name ? ''
       : manual ? `<span class="sf-cert-badge sf-cert-badge--ok">직접 입력</span>`
       : known === undefined ? ''
       : known ? `<span class="sf-cert-badge sf-cert-badge--ok">${escapeHtml(known)}</span>`
       : `<span class="sf-cert-badge sf-cert-badge--free">목록에 없음</span>`;
+  }
+
+  /* 배지 한 칸만 바꾼다. paintCerts() 는 목록을 innerHTML 로 통째로 갈아서
+     입력칸과 검색 메뉴까지 새로 만든다 — 타이핑 중에 부르면 방금 연 드롭다운이
+     사라지고 포커스도 날아간다. 첫 글자를 치는 순간 배지 상태가 반드시
+     '미확인 → 확정'으로 바뀌므로 자동완성이 뜨자마자 닫히는 것처럼 보였다. */
+  function paintCertBadge(i) {
+    const slot = document.getElementById(`sf-cert-badge-${i}`);
+    if (slot) slot.innerHTML = certBadgeHtml(certState[i]);
+  }
+
+  function certRowHtml(name, i) {
+    const manual = certMeta[name];
+    const badge = `<span class="sf-cert-badge-slot" id="sf-cert-badge-${i}">${certBadgeHtml(name)}</span>`;
 
     /* 직접 입력한 자격증은 발급기관·취득일을 함께 보여준다. 목록에서 고른 것은
        그 정보가 카탈로그에 없으므로 묻지 않는다(공식 자격은 이름만으로 특정된다). */
@@ -965,7 +986,7 @@ window.SpecForm = (() => {
     const exact = hits.find(c => c.name === q);
     const had = certKnown.get(q);
     certKnown.set(q, exact ? (exact.sub || '') : null);
-    if (had !== certKnown.get(q)) setTimeout(paintCerts, 0);
+    if (had !== certKnown.get(q)) paintCertBadge(i);   // 목록 전체를 다시 그리지 않는다
 
     openSearchMenu(menu, hits.map(c => ({ value: c.name, sub: c.sub })), {
       onPick: (v, item) => {
@@ -1391,8 +1412,11 @@ window.SpecForm = (() => {
       saveBtn.disabled = false;
     }
 
-    success.style.display = 'block';
-    setTimeout(() => { success.style.display = 'none'; }, 2500);
+    /* 페이지 맨 위 초록 상자로 알리던 것을 토스트로 바꿨다. 저장 버튼은 폼
+       아래쪽에 있어서, 눌러도 화면 위에서 뜬 안내가 안 보였다(스크롤해 올라가야
+       했다). 멘토 신청 안내와 같은 방식으로 통일한다. */
+    if (typeof toast === 'function') toast('스펙 정보를 저장했어요');
+    else { success.style.display = 'block'; setTimeout(() => { success.style.display = 'none'; }, 2500); }
     updateNavAuth();
   }
 

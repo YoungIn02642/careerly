@@ -350,7 +350,49 @@ function onEnterMentoringPage(page){
       desc:  '신청한 멘토링과 메모·평점은 로그인 후 내 계정에서 볼 수 있어요.',
     })) return;
     renderMentoring();
+    /* 먼저 그리고 나서 서버 것으로 덮는다. 기다렸다 그리면 페이지가 잠깐 비어
+       깜빡인다. 실패해도 화면은 이미 떠 있다. */
+    syncApplied();
   }
+}
+
+/* '내가 신청' 목록을 서버에서 가져온다.
+   신청은 POST /api/mentoring/requests 로 DB 에 잘 들어가는데, 화면은
+   localStorage 만 보고 있어서 방금 보낸 신청이 목록에 안 뜨는 문제가 있었다.
+   기기를 바꾸면 아예 사라지기도 했다. 이 목록의 진실은 서버다 — 결제·상태가
+   서버에서 바뀌기 때문이다. 받아온 것으로 통째로 교체한다. */
+async function syncApplied(){
+  try {
+    const { requests } = await api('GET', '/api/mentoring/requests');
+    STATE.applied = requests.filter(r => OPEN_ON_SCREEN.includes(r.status)).map(toCard);
+    saveState();
+    renderMentoring();
+  } catch (e) {
+    /* 로그인이 풀렸거나 네트워크가 끊긴 경우다. 마지막으로 받아 둔 목록을
+       그대로 두는 편이 빈 화면보다 낫다. */
+    console.warn('[mentoring] 신청 목록을 가져오지 못했습니다:', e.message);
+  }
+}
+
+/* 멘토 응답을 기다리는 동안만 이 목록에 있다. 완료·취소된 것은 빼야
+   '신청 취소' 버튼이 이미 끝난 건에도 붙지 않는다. */
+const OPEN_ON_SCREEN = ['pending', 'paid'];
+const PAL_KEYS = Object.keys(PALETTE);
+
+function toCard(r){
+  return {
+    id:     r.id,
+    status: r.status,
+    mentor: r.mentorName || '멘토',
+    /* 이름마다 색을 고정한다. 매번 랜덤이면 새로고침할 때 아바타 색이 바뀐다. */
+    pal:    PAL_KEYS[[...(r.mentorName || '')].reduce((a,c)=>a+c.charCodeAt(0),0) % PAL_KEYS.length],
+    sub:    r.formatName || '',
+    topic:  r.message ? '' : '멘토링 신청',
+    want:   r.formatName || '',
+    cost:   r.amount ? `${Number(r.amount).toLocaleString()}원` : '',
+    when:   (r.createdAt || '').slice(0, 10),
+    msg:    r.message || '',
+  };
 }
 
 /* 로그인 게이트 — 개인 데이터 페이지(내 CAS·내 멘토링)를 비로그인 시 블러 처리하고
@@ -898,12 +940,26 @@ function renderApplied(){
       </div>
     </div>`).join('');
 }
-function cancelApplied(i){
+/* 서버에도 알려야 한다. 화면에서만 지우면 새로고침할 때 syncApplied 가 다시
+   받아 와 되살아나고, 멘토 쪽에는 여전히 요청이 남는다. */
+async function cancelApplied(i){
   const a = STATE.applied[i];
   if (!a) return;
+
+  if (a.id) {
+    try {
+      await api('POST', `/api/mentoring/requests/${a.id}/cancel`);
+    } catch (e) {
+      /* 결제까지 끝난 건은 서버가 막는다(409). 그 사유를 그대로 보여준다 —
+         화면에서만 지워 놓고 취소된 척하면 안 된다. */
+      toast(e.message || '신청을 취소하지 못했어요', { icon: false });
+      return;
+    }
+  }
+
   STATE.applied.splice(i,1);
   saveState(); renderMentoring();
-  toast(`${maskName(a.mentor)} 멘토 신청을 취소했어요`);
+  toast(`${maskName(a.mentor)} 멘토 신청을 취소했어요`, { icon: false });
 }
 
 function renderReceived(){

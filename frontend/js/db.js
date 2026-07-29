@@ -174,8 +174,11 @@ window.DB = (() => {
   }
 
   // ── 쓰기 (비동기) ──────────────────────────────────────────
-  async function createUser({ username, password, name, email, role }) {
-    const { user } = await api('POST', '/api/auth/signup', { username, password, name, email, role });
+  /* nickname 을 빠뜨리지 말 것. 화면·서버 양쪽 다 받는데 여기서만 안 실어
+     보내서, 가입할 때 적은 닉네임이 조용히 사라지고 스펙 입력창에서 다시
+     적어야 했다. 인자에서 흘리는 실수라 에러도 안 난다. */
+  async function createUser({ username, password, name, nickname, email, role }) {
+    const { user } = await api('POST', '/api/auth/signup', { username, password, name, nickname, email, role });
     return user;
   }
 
