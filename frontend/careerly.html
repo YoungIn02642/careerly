@@ -347,6 +347,13 @@
         <input type="password" id="login-password" placeholder="비밀번호를 입력하세요" autocomplete="current-password" />
       </div>
       <button class="btn-submit dark" id="login-btn" onclick="handleLogin()">로그인</button>
+
+      <!-- 버튼은 서버에 키가 설정된 제공자만 렌더한다 (app.js paintSocialButtons) -->
+      <div class="social-login" id="login-social" hidden>
+        <div class="social-sep"><span>또는</span></div>
+        <div class="social-btns" id="login-social-btns"></div>
+      </div>
+
       <div class="footer-links">
         <span>아직 회원이 아니신가요?</span>
         <a onclick="navigate('signup')">회원가입</a>
@@ -427,10 +434,62 @@
         <span class="field-error" id="err-su-email"></span>
       </div>
       <button class="btn-submit" id="signup-btn" onclick="handleSignup()">회원가입</button>
+
+      <div class="social-login" id="signup-social" hidden>
+        <div class="social-sep"><span>또는 간편 가입</span></div>
+        <div class="social-btns" id="signup-social-btns"></div>
+      </div>
+
       <div class="footer-links">
         <span>이미 계정이 있으신가요?</span>
         <a onclick="navigate('login')">로그인</a>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ ONBOARDING — 소셜 가입 직후 추가입력 ══
+     네이버·카카오는 멘토/멘티 구분과 닉네임을 주지 않는다. 역할 없이는 스펙 폼도
+     통계도 성립하지 않아서, 가입 직후 한 번만 받는다. -->
+<div class="page" id="page-onboarding">
+  <div class="auth-page">
+    <div class="auth-card auth-card--wide">
+      <span class="auth-logo">CAREERLY</span>
+      <p class="auth-page-title">거의 다 됐어요</p>
+      <p class="auth-page-sub" id="ob-greeting">회원 유형만 골라주시면 시작할 수 있어요.</p>
+      <div class="error-box" id="ob-error"></div>
+
+      <div class="role-pick">
+        <div class="role-pick-label">회원 유형을 선택해주세요</div>
+        <div class="role-cards">
+          <label class="role-card" data-role="mentee">
+            <input type="radio" name="ob-role" value="mentee" checked />
+            <div class="role-card-emoji">🎓</div>
+            <div class="role-card-body">
+              <div class="role-card-name">멘티<span class="role-card-tag">재학생</span></div>
+              <div class="role-card-desc">선배 데이터를 보며 커리어를 설계해요</div>
+            </div>
+            <i class="ti ti-circle-check role-check"></i>
+          </label>
+          <label class="role-card" data-role="mentor">
+            <input type="radio" name="ob-role" value="mentor" />
+            <div class="role-card-emoji">👔</div>
+            <div class="role-card-body">
+              <div class="role-card-name">멘토<span class="role-card-tag">취업한 선배</span></div>
+              <div class="role-card-desc">스펙·취업 경험을 후배에게 공유해요</div>
+            </div>
+            <i class="ti ti-circle-check role-check"></i>
+          </label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>닉네임 <span class="sf-optional">선택</span></label>
+        <input type="text" id="ob-nickname" placeholder="선배들에게 표시될 이름" autocomplete="nickname" />
+        <span class="field-hint">비워두면 나중에 마이페이지에서 정할 수 있어요.</span>
+      </div>
+
+      <button class="btn-submit dark" id="ob-btn" onclick="handleOnboarding()">시작하기</button>
     </div>
   </div>
 </div>

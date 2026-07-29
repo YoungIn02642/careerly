@@ -2,7 +2,7 @@
 //  CAREERLY — App Bootstrap (라우터 + 인증)
 // ════════════════════════════════════════════════════════════
 const PAGES = [
-  'main', 'login', 'signup', 'mypage', 'career', 'backoffice',
+  'main', 'login', 'signup', 'onboarding', 'mypage', 'career', 'backoffice',
   'dashboard', 'search', 'profile', 'mentoring',   // ← 구 mentoring.html
   'jd',                                            // 자소서 코치 (js/jd-coach.js)
 ];
@@ -34,6 +34,8 @@ function showPage(page) {
   /* 회원 유형 선택은 DOM 에 그대로 남는다. 멘토를 골라 두고 나갔다 돌아오면
      라디오는 멘토인데 안내 문구만 멘티로 남으므로 들어올 때 맞춰 준다. */
   if (page === 'signup')     syncNicknamePlaceholder();
+  if (page === 'onboarding') enterOnboarding();
+  if (page === 'login')      showLoginError();
   if (page === 'career')     { CareerPage.refreshUser(); CareerPage.render(); }
   if (page === 'backoffice') Backoffice.render(document.querySelector('#page-backoffice .bo-wrap'));
   if (page === 'main')       { if (window.renderHome) renderHome(); }
@@ -123,6 +125,91 @@ function updateNavActive(key) {
 }
 window.updateNavActive = updateNavActive;
 
+// ════════════════════════════════════════════════════════════
+//   SOCIAL LOGIN
+// ════════════════════════════════════════════════════════════
+/* 버튼은 서버에 키가 설정된 제공자만 그린다. 키 없이 버튼만 있으면 눌렀을 때
+   에러 화면으로 떨어져서, 사용자는 서비스가 고장 난 줄 안다. */
+const SOCIAL_STYLE = {
+  naver: { label: '네이버로 시작하기', cls: 'naver', mark: 'N' },
+  kakao: { label: '카카오로 시작하기', cls: 'kakao', mark: 'K' },
+};
+
+async function paintSocialButtons() {
+  let providers = [];
+  try {
+    providers = (await (await fetch('/api/auth/providers')).json()).providers || [];
+  } catch { return; }             // 서버가 안 뜬 상태 — 일반 로그인은 그대로 쓴다
+  if (!providers.length) return;
+
+  const html = providers.map(p => {
+    const s = SOCIAL_STYLE[p.id] || { label: `${p.label}로 시작하기`, cls: '', mark: '' };
+    /* 링크로 둔다. OAuth 는 브라우저가 제공자 사이트로 실제 이동해야 해서
+       fetch 로는 안 된다(리다이렉트를 따라갈 수 없다). */
+    return `<a class="social-btn ${s.cls}" href="/api/auth/${p.id}">
+        <span class="social-mark">${s.mark}</span>${s.label}
+      </a>`;
+  }).join('');
+
+  ['login', 'signup'].forEach(page => {
+    const wrap = document.getElementById(`${page}-social`);
+    const box  = document.getElementById(`${page}-social-btns`);
+    if (!wrap || !box) return;
+    box.innerHTML = html;
+    wrap.hidden = false;
+  });
+}
+
+/* 소셜 로그인 실패는 서버가 #login?error=... 로 알려준다(콜백은 SPA 밖에서 돌아온다). */
+function showLoginError() {
+  const m = window.location.hash.match(/[?&]error=([^&]+)/);
+  if (!m) return;
+  const box = document.getElementById('login-error');
+  if (box) {
+    box.textContent = decodeURIComponent(m[1]);
+    box.style.display = 'block';
+  }
+  // 한 번 보여준 에러가 주소에 남아 새로고침 때마다 다시 뜨지 않게 지운다
+  history.replaceState({ page: 'login' }, '', '#login');
+}
+
+function enterOnboarding() {
+  const user = DB.currentUser();
+  const greet = document.getElementById('ob-greeting');
+  if (user && greet) {
+    greet.textContent = `${user.name}님, 회원 유형만 골라주시면 시작할 수 있어요.`;
+  }
+  const err = document.getElementById('ob-error');
+  if (err) err.style.display = 'none';
+}
+
+/* 온보딩의 닉네임 안내도 회원가입과 같은 규칙으로 뒤집는다(멘티↔멘토). */
+document.addEventListener('change', e => {
+  if (e.target.name !== 'ob-role') return;
+  const el = document.getElementById('ob-nickname');
+  if (el) el.placeholder = NICKNAME_PLACEHOLDER[e.target.value] || NICKNAME_PLACEHOLDER.mentee;
+});
+
+async function handleOnboarding() {
+  const err  = document.getElementById('ob-error');
+  const btn  = document.getElementById('ob-btn');
+  const role = document.querySelector('input[name="ob-role"]:checked')?.value;
+  const nickname = document.getElementById('ob-nickname').value.trim();
+  err.style.display = 'none';
+
+  btn.disabled = true;
+  try {
+    await DB.completeOnboarding({ role, nickname: nickname || null });
+    navigate('main');
+  } catch (e) {
+    err.textContent = e.message;
+    err.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+  }
+}
+window.handleOnboarding = handleOnboarding;
+
 async function handleLogout() {
   try { await DB.logout(); }
   catch (e) { console.error('로그아웃 실패', e); }
@@ -146,8 +233,12 @@ window.addEventListener('DOMContentLoaded', async () => {
   try { await DB.hydrate(); }
   catch (e) { console.error('서버 상태를 불러오지 못했습니다.', e); }
 
-  showPage(target);
+  /* 소셜 가입 직후 새로고침하면 역할이 없는 채로 다른 화면에 들어갈 수 있다.
+     그 상태로는 스펙 폼도 통계도 성립하지 않으므로 추가입력으로 돌려보낸다. */
+  const me = DB.currentUser();
+  showPage(me?.needsOnboarding ? 'onboarding' : target);
   updateNavAuth();
+  paintSocialButtons();
 });
 
 // ════════════════════════════════════════════════════════════

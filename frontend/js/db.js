@@ -188,6 +188,15 @@ window.DB = (() => {
     return user;
   }
 
+  /* 소셜 가입 직후 멘토/멘티·닉네임을 채운다. 성공하면 캐시된 회원 정보도 갱신해야
+     화면이 곧바로 로그인 상태(역할 포함)로 보인다. */
+  async function completeOnboarding({ role, nickname }) {
+    const { user } = await api('POST', '/api/auth/onboarding', { role, nickname });
+    _me = user;
+    await refreshSpecs();
+    return user;
+  }
+
   async function logout() {
     await api('POST', '/api/auth/logout');
     _me = null;
@@ -222,7 +231,7 @@ window.DB = (() => {
   return {
     hydrate, refreshSpecs, refreshUsers,
     currentUser, getAllSpecs, getSpec, getUsers, countByRole, stats,
-    createUser, login, logout, updateUser, upsertSpec, classifyCompany, suggestCompanies, suggestCerts, suggestMajors, classifyMajor, jobCatalog,
+    createUser, login, logout, completeOnboarding, updateUser, upsertSpec, classifyCompany, suggestCompanies, suggestCerts, suggestMajors, classifyMajor, jobCatalog,
     analyzeCas, coachJd, companyNews,
     seedDemo, seedRandom, clearAll, deleteUser,
   };

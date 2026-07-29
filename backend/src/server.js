@@ -11,6 +11,7 @@ const { classify: classifyCompany, suggest: suggestCompany, stats: classifyStats
 const { catalog: certCatalog, searchCerts } = require('./cert-catalog');
 const { catalog: jobCatalog } = require('./wage-jobs');
 const { catalog: majorCatalog, deptOf, searchMajors } = require('./major-catalog');
+const OAuth = require('./oauth');
 const recommendationsRouter = require("./routes/recommendations");
 const careerDataRouter = require("./routes/careerData");
 const casAnalyzeRouter = require("./routes/casAnalyze");
@@ -57,6 +58,10 @@ function publicUser(user) {
     email: user.email,
     role: user.role || null,        // 'mentor' (졸업 선배) | 'mentee' (재학 후배)
     nickname: user.nickname ?? null,
+    provider: user.provider || null,          // 'naver' | 'kakao' | null(일반 가입)
+    /* 소셜 가입 직후엔 역할이 없다. 화면이 추가입력으로 보낼지 판단하는 값이라
+       명시적으로 내려준다 — role 이 null 인 것을 화면마다 따로 해석하면 어긋난다. */
+    needsOnboarding: !user.role,
   };
 }
 
@@ -162,6 +167,12 @@ app.post('/api/auth/login', async (req, res) => {
   if (!user) {
     return res.status(401).json({ error: '아이디 또는 비밀번호가 올바르지 않습니다.' });
   }
+  /* 소셜 계정은 passwordHash 가 없다. 그대로 bcrypt.compare 에 넘기면 예외가 나
+     500 이 떨어진다. 어느 방식으로 가입했는지 알려주는 편이 사용자에게도 낫다. */
+  if (!user.passwordHash) {
+    const label = OAuth.PROVIDERS[user.provider]?.label || '소셜';
+    return res.status(401).json({ error: `${label} 로그인으로 가입한 계정이에요. ${label} 버튼으로 로그인해 주세요.` });
+  }
 
   const ok = await bcrypt.compare(password, user.passwordHash);
   if (!ok) {
@@ -180,6 +191,123 @@ app.post('/api/auth/login', async (req, res) => {
     maxAge: ONE_DAY,
   });
   res.json({ message: '로그인 성공', user: publicUser(user) });
+});
+
+/* ── 소셜 로그인 ─────────────────────────────────────────────
+   흐름과 보안 판단은 src/oauth.js 머리주석에 있다.
+
+   콜백은 화면을 직접 그리지 않고 프론트로 리다이렉트한다. SPA 라서 서버가 HTML 을
+   따로 만들면 화면이 두 벌이 된다. 결과는 해시로만 알린다.
+     #onboarding  — 가입은 됐고 멘토/멘티·닉네임을 아직 안 받음
+     #main        — 기존 계정으로 로그인 완료
+     #login?error= — 실패 (사유를 화면이 보여준다) */
+function startSession(res, db, user) {
+  const token = nanoid(48);
+  db.sessions = db.sessions.filter(s => s.expiresAt > Date.now() && s.userId !== user.id);
+  db.sessions.push({ token, userId: user.id, createdAt: Date.now(), expiresAt: Date.now() + ONE_DAY });
+  res.cookie(SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: ONE_DAY,
+  });
+}
+
+// 화면이 어떤 소셜 버튼을 보여줄지 — 키가 없는 제공자는 버튼도 띄우지 않는다
+app.get('/api/auth/providers', (req, res) => res.json({ providers: OAuth.enabledProviders() }));
+
+/* :provider 는 /api/auth/me · /api/auth/providers 까지 삼킨다.
+   **모르는 이름이면 반드시 next() 로 흘려보내야** 로그인 상태 조회가 살아남는다.
+   (여기서 404 를 돌려주면 GET /api/auth/me 가 죽어 로그인이 통째로 깨진다.) */
+app.get('/api/auth/:provider', (req, res, next) => {
+  const name = req.params.provider;
+  if (!OAuth.PROVIDERS[name]) return next();
+  if (!OAuth.isEnabled(name)) {
+    return res.redirect('/#login?error=' + encodeURIComponent(
+      `${OAuth.PROVIDERS[name].label} 로그인이 아직 설정되지 않았어요.`));
+  }
+  const state = OAuth.issueState(res);
+  res.redirect(OAuth.buildAuthUrl(name, req, state));
+});
+
+app.get('/api/auth/:provider/callback', async (req, res, next) => {
+  const name = req.params.provider;
+  if (!OAuth.PROVIDERS[name]) return next();
+  const fail = msg => res.redirect('/#login?error=' + encodeURIComponent(msg));
+
+  if (!OAuth.isEnabled(name)) return fail('지원하지 않는 로그인 방식입니다.');
+  if (req.query.error) return fail('로그인이 취소되었습니다.');
+  if (!OAuth.verifyState(req, res)) return fail('로그인 요청이 만료되었어요. 다시 시도해 주세요.');
+  if (!req.query.code) return fail('인증 코드를 받지 못했습니다.');
+
+  try {
+    const token = await OAuth.exchangeCode(name, req, req.query.code, req.query.state);
+    const profile = await OAuth.fetchProfile(name, token);
+
+    const db = readDb();
+    let user = db.users.find(u => u.provider === name && u.providerId === profile.id);
+
+    if (!user) {
+      /* 같은 이메일의 일반 계정이 있으면 자동으로 잇지 않는다 — 이유는 oauth.js 주석.
+         연결 기능을 만들기 전까지는 안내로 막는다. */
+      const email = (profile.email || '').toLowerCase();
+      if (email && db.users.some(u => u.email === email)) {
+        return fail('이미 같은 이메일로 가입된 계정이 있어요. 아이디로 로그인해 주세요.');
+      }
+
+      user = {
+        id: nanoid(),
+        /* 소셜 계정은 아이디·비밀번호가 없다. username 은 화면·조회에서 키로 쓰이므로
+           겹치지 않게 만들어 둔다. passwordHash 가 없으므로 일반 로그인은 통과하지 못한다. */
+        username: `${name}_${profile.id}`,
+        passwordHash: null,
+        provider: name,
+        providerId: profile.id,
+        name: profile.name || `${OAuth.PROVIDERS[name].label} 사용자`,
+        email: email || null,
+        role: null,              // 멘토/멘티는 다음 화면에서 받는다
+        nickname: null,
+        createdAt: new Date().toISOString(),
+      };
+      db.users.push(user);
+      db.profiles.push({ userId: user.id, nickname: null });
+    }
+
+    startSession(res, db, user);
+    writeDb(db);
+
+    // 역할이 없으면 추가입력 화면으로 — 역할 없이는 스펙 폼도 통계도 성립하지 않는다
+    res.redirect(user.role ? '/#main' : '/#onboarding');
+  } catch (e) {
+    console.warn('소셜 로그인 실패:', e.message);
+    fail(e.message || '로그인에 실패했습니다.');
+  }
+});
+
+/* 소셜 가입 직후 받는 값. 이미 역할이 정해진 계정은 여기서 바꾸지 못하게 한다 —
+   역할이 바뀌면 그동안 쌓인 스펙이 어느 통계에 속하는지 흔들린다. */
+app.post('/api/auth/onboarding', requireAuth, (req, res) => {
+  const { role, nickname } = req.body || {};
+  if (!['mentor', 'mentee'].includes(role)) {
+    return res.status(400).json({ error: '회원 유형(멘토/멘티)을 선택해주세요.' });
+  }
+  const nick = typeof nickname === 'string' ? nickname.trim() : '';
+  if (nick && (nick.length < 2 || nick.length > 12)) {
+    return res.status(400).json({ error: '닉네임은 2~12자여야 합니다.' });
+  }
+
+  const db = readDb();
+  const user = db.users.find(u => u.id === req.user.id);
+  if (!user) return res.status(404).json({ error: '회원을 찾을 수 없습니다.' });
+  if (user.role) return res.status(409).json({ error: '이미 회원 유형이 정해진 계정입니다.' });
+
+  user.role = role;
+  if (nick) user.nickname = nick;
+  const profile = db.profiles.find(p => p.userId === user.id);
+  if (profile) profile.nickname = user.nickname;
+  writeDb(db);
+
+  res.json({ message: '가입이 완료되었습니다.', user: publicUser(user) });
 });
 
 app.post('/api/auth/logout', (req, res) => {
