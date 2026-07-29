@@ -592,6 +592,16 @@ assertConnection()
   .then(() => {
     app.listen(PORT, () => {
       console.log(`Careerly backend running on http://localhost:${PORT}`);
+      /* 선택 기능은 키가 없으면 조용히 꺼진 채로 돈다. 화면에서는 '되는 것 같은데
+         이상한' 모습으로만 나타나서(뉴스가 웹 폴백으로 빠지는 식) 원인을 찾기
+         어렵다. 무엇이 켜졌는지 부팅할 때 한 줄로 남긴다. 키 값은 찍지 않는다. */
+      const on = v => v ? '켜짐' : '꺼짐';
+      console.log('[기능] '
+        + `결제 ${on(process.env.TOSS_SECRET_KEY && process.env.TOSS_CLIENT_KEY)} · `
+        + `네이버로그인 ${on(process.env.NAVER_LOGIN_CLIENT_ID)} · `
+        + `카카오로그인 ${on(process.env.KAKAO_REST_API_KEY)} · `
+        + `AI ${on(process.env.GROQ_API_KEY)} · `
+        + `뉴스 ${require('./news').provider()}`);
     });
   })
   .catch((e) => {

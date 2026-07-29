@@ -13,7 +13,12 @@ router.get('/company', async (req, res) => {
 
   try {
     const data = await NEWS.companyNews(name);
-    res.json({ ...data, guide: NEWS.MOTIVE_GUIDE });
+    /* 어느 경로로 가져왔는지 함께 준다(키 값이 아니라 경로 이름이라 비밀이 아니다).
+       배포에서 키를 넣었는데도 계속 웹 폴백이 돌던 적이 있는데, 응답만 봐선
+       구분이 안 됐다 — 기사는 어느 쪽이든 나오기 때문이다. 웹 폴백은 기사
+       날짜가 없어 주간 대표기사가 통째로 비고, 키워드에 사이트 이름 조각이
+       섞인다. 그래서 '되는데 이상하다'로 보인다. */
+    res.json({ ...data, provider: NEWS.provider(), guide: NEWS.MOTIVE_GUIDE });
   } catch (e) {
     const status = e?.status || 502;
     console.warn('회사 뉴스 조회 실패:', e?.message);
