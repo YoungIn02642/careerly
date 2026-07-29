@@ -595,6 +595,17 @@ assertConnection()
       /* 선택 기능은 키가 없으면 조용히 꺼진 채로 돈다. 화면에서는 '되는 것 같은데
          이상한' 모습으로만 나타나서(뉴스가 웹 폴백으로 빠지는 식) 원인을 찾기
          어렵다. 무엇이 켜졌는지 부팅할 때 한 줄로 남긴다. 키 값은 찍지 않는다. */
+      /* Raw Editor 에서 'KEY=값' 줄을 통째로 값 칸에 붙여넣는 실수가 실제로 있었다.
+         TOSS_CLIENT_KEY 값이 'TOSS_CLIENT_KEY=test_ck_...' 가 돼서 결제창이 뜨지
+         않았는데, 값이 비어 있지는 않아 화면상으로는 '켜짐'으로 보였다.
+         키 값에 자기 이름이 들어갈 일은 없으므로 여기서 잡는다. */
+      Object.entries(process.env).forEach(([k, v]) => {
+        if (typeof v === 'string' && v.startsWith(k + '=')) {
+          console.warn(`[설정] ${k} 값에 변수 이름이 같이 들어갔습니다. `
+            + `'${k}=' 를 떼고 값만 넣으세요.`);
+        }
+      });
+
       const on = v => v ? '켜짐' : '꺼짐';
       console.log('[기능] '
         + `결제 ${on(process.env.TOSS_SECRET_KEY && process.env.TOSS_CLIENT_KEY)} · `
