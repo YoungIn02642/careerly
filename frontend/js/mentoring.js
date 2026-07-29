@@ -600,10 +600,12 @@ function initChipsDrag(){
 /* ════════════ MENTOR PROFILE ════════════ */
 let currentMentor = null;
 let selectedFormat = 0;
+/* 화면 표시용. **청구 금액의 단일 출처는 서버**(routes/mentoring.js FORMATS)다.
+   id 가 서버와 맞아야 신청이 만들어진다 — 여기 값을 바꿔도 결제 금액은 안 바뀐다. */
 const FORMATS = [
-  { ic:'ti-video', name:'화상 30분', price:'20,000원', cost:20000 },
-  { ic:'ti-users', name:'대면 60분', price:'45,000원', cost:45000 },
-  { ic:'ti-message-2', name:'텍스트', price:'12,000원', cost:12000 },
+  { id:'video30',  ic:'ti-video',     name:'화상 30분', price:'20,000원', cost:20000 },
+  { id:'onsite60', ic:'ti-users',     name:'대면 60분', price:'45,000원', cost:45000 },
+  { id:'text',     ic:'ti-message-2', name:'텍스트',    price:'12,000원', cost:12000 },
 ];
 function openProfile(id){
   currentMentor = MENTORS.find(m=>m.id===id);
@@ -708,25 +710,78 @@ function submitRequest(){
     setTimeout(()=>navigate('login'), 700);
     return;
   }
+  payAndApply();
+}
+
+/* ── 신청 → 결제 ──────────────────────────────────────────────
+   신청은 서버에 만들고(금액도 서버가 정한다), 결제창은 토스페이먼츠 SDK 가 띄운다.
+   결제창이 성공해도 **그때는 아직 결제가 끝난 게 아니다** — 서버가 승인 API 를
+   호출해야 돈이 움직인다. 그래서 성공 콜백에서 곧바로 서버 승인을 부른다.
+
+   결제가 꺼져 있으면(키 미설정) 결제 없이 신청만 남긴다. 개발 중에 결제 키가 없다고
+   멘토링 흐름 전체를 못 써 보면 곤란하다. */
+async function payAndApply(){
   const m = currentMentor;
   const f = FORMATS[selectedFormat] || FORMATS[0];
   const msg = ($('#req-msg')?.value || '').trim();
-  const now = new Date();
-  const stamp = `${now.getFullYear()}.${String(now.getMonth()+1).padStart(2,'0')}.${String(now.getDate()).padStart(2,'0')}`;
+  const btn = $('.btn-submit-req');
+  if (btn) btn.disabled = true;
 
-  /* 같은 멘토에게 두 번 신청하면 목록에 두 줄이 쌓인다. 멘토가 아직 답을 안 한
-     상태에서 또 누른 것이므로, 새로 쌓지 않고 최신 내용으로 덮어쓴다. */
-  STATE.applied = STATE.applied.filter(a => a.mentorId !== m.id);
-  STATE.applied.unshift({
-    mentorId: m.id, mentor: m.name, sub: `${m.cohort} ${m.company}`, pal: m.pal,
-    topic: `${m.role} ${f.name}`, want: f.name, cost: f.price,
-    msg, when: `신청일 ${stamp}`,
-  });
-  saveState();
+  try {
+    const { request } = await api('POST', '/api/mentoring/requests', {
+      mentorId: m.id, mentorName: m.name, format: f.id, message: msg,
+    });
 
-  toast(`${maskName(m.name)} 멘토에게 신청을 보냈어요`);
+    const cfg = await api('GET', '/api/payments/config');
+    if (!cfg.enabled) {
+      toast(`${maskName(m.name)} 멘토에게 신청을 보냈어요 (결제 미설정)`);
+      return goApplied();
+    }
+    if (!window.TossPayments) {
+      toast('결제 모듈을 불러오지 못했어요. 새로고침 후 다시 시도해 주세요.');
+      return;
+    }
+
+    const order = await api('POST', '/api/payments/prepare', { requestId: request.id });
+
+    /* successUrl/failUrl 대신 Promise 방식을 쓴다. 리다이렉트로 돌아오면 SPA 가
+       상태를 잃어서 어느 신청의 결제였는지 다시 찾아야 한다. */
+    const toss = TossPayments(cfg.clientKey);
+    await toss.requestPayment('카드', {
+      amount: order.amount,               // 서버가 정한 금액
+      orderId: order.orderId,
+      orderName: order.orderName,
+      customerName: order.customerName,
+      successUrl: location.origin + '/#mentoring',
+      failUrl: location.origin + '/#mentoring',
+    });
+    /* 여기까지 왔다는 건 결제창이 닫혔다는 뜻이다. 승인은 successUrl 로 돌아온 뒤
+       app.js 의 결제 복귀 처리(handlePaymentReturn)가 이어서 한다. */
+  } catch (e) {
+    /* 사용자가 결제창을 닫은 것은 오류가 아니다 — 에러 메시지를 띄우면 놀란다. */
+    if (e?.code === 'USER_CANCEL') toast('결제를 취소했어요');
+    else toast(e.message || '신청에 실패했어요');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function goApplied(){
   mentoringTab = 'applied';           // 신청 직후엔 그 목록을 보여준다
-  setTimeout(()=>navigate('mentoring'), 800);
+  setTimeout(()=>navigate('mentoring'), 600);
+}
+
+/* mentoring.js 는 DB 를 거치지 않고 직접 부른다 — 이 화면만 쓰는 엔드포인트라
+   데이터 레이어에 올리면 db.js 가 화면별 함수로 불어난다. */
+async function api(method, path, body){
+  const res = await fetch(path, {
+    method, credentials: 'include',
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(()=>null);
+  if (!res.ok) throw new Error(data?.error || `요청 실패 (${res.status})`);
+  return data;
 }
 
 /* ════════════ MY MENTORING ════════════ */

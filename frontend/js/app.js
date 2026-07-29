@@ -210,6 +210,45 @@ async function handleOnboarding() {
 }
 window.handleOnboarding = handleOnboarding;
 
+// ════════════════════════════════════════════════════════════
+//   PAYMENT RETURN
+// ════════════════════════════════════════════════════════════
+/* 결제창이 성공하면 토스가 successUrl 로 돌아오면서 paymentKey·orderId·amount 를
+   쿼리에 붙여 준다. **그 시점은 아직 결제가 아니다** — 서버가 승인 API 를 불러야
+   돈이 움직인다. 그래서 돌아오자마자 서버 승인을 요청한다.
+
+   승인 결과를 기다리는 동안 사용자가 새로고침하면 같은 승인이 두 번 갈 수 있다.
+   서버가 이미 결제된 주문을 성공으로 돌려주므로(payments.js) 중복은 안전하다. */
+async function handlePaymentReturn() {
+  const q = new URLSearchParams(location.search);
+  const paymentKey = q.get('paymentKey');
+  const orderId = q.get('orderId');
+  const amount = q.get('amount');
+
+  // 실패로 돌아온 경우 토스는 code·message 를 준다
+  const failCode = q.get('code');
+  if (failCode) {
+    cleanPaymentQuery();
+    alert(q.get('message') || '결제에 실패했어요.');
+    return;
+  }
+  if (!paymentKey || !orderId || !amount) return;
+
+  cleanPaymentQuery();
+  try {
+    await DB.confirmPayment({ paymentKey, orderId, amount: Number(amount) });
+    alert('결제가 완료되었습니다. 멘토의 응답을 기다려 주세요.');
+  } catch (e) {
+    alert(e.message || '결제 승인에 실패했어요.');
+  }
+  navigate('mentoring');
+}
+
+/* 결제 정보가 주소창에 남으면 새로고침할 때마다 승인을 다시 시도한다. */
+function cleanPaymentQuery() {
+  history.replaceState(history.state, '', location.pathname + location.hash);
+}
+
 async function handleLogout() {
   try { await DB.logout(); }
   catch (e) { console.error('로그아웃 실패', e); }
@@ -239,6 +278,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   showPage(me?.needsOnboarding ? 'onboarding' : target);
   updateNavAuth();
   paintSocialButtons();
+  handlePaymentReturn();   // 결제창에서 돌아왔으면 승인까지 이어서 한다
 });
 
 // ════════════════════════════════════════════════════════════

@@ -197,6 +197,12 @@ window.DB = (() => {
     return user;
   }
 
+  /* 결제 승인 — 결제창에서 돌아온 값을 서버로 넘겨 확정한다.
+     승인은 반드시 서버가 한다(프론트에서 '성공' 이라고 말만 하면 통과하면 안 된다). */
+  async function confirmPayment({ paymentKey, orderId, amount }) {
+    return api('POST', '/api/payments/confirm', { paymentKey, orderId, amount });
+  }
+
   async function logout() {
     await api('POST', '/api/auth/logout');
     _me = null;
@@ -231,7 +237,7 @@ window.DB = (() => {
   return {
     hydrate, refreshSpecs, refreshUsers,
     currentUser, getAllSpecs, getSpec, getUsers, countByRole, stats,
-    createUser, login, logout, completeOnboarding, updateUser, upsertSpec, classifyCompany, suggestCompanies, suggestCerts, suggestMajors, classifyMajor, jobCatalog,
+    createUser, login, logout, completeOnboarding, confirmPayment, updateUser, upsertSpec, classifyCompany, suggestCompanies, suggestCerts, suggestMajors, classifyMajor, jobCatalog,
     analyzeCas, coachJd, companyNews,
     seedDemo, seedRandom, clearAll, deleteUser,
   };
