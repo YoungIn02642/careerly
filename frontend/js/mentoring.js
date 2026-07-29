@@ -316,6 +316,8 @@ function starsHTML(n){
   for (let i=1;i<=5;i++) h += `<i class="ti ti-star-filled ${i<=Math.round(n)?'fill':''}"></i>`;
   return h+'</span>';
 }
+/* 기본 아이콘이 체크(성공) 표시다. **실패·취소·입력 안내에는 { icon: false } 를 줄 것** —
+   "결제를 취소했어요" 옆에 초록 체크가 붙으면 결제가 된 것처럼 읽힌다. */
 function toast(msg, opts){
   const icon = (opts && opts.icon === false) ? '' : '<i class="ti ti-circle-check-filled"></i>';
   const t = $('#toast'); t.innerHTML = `${icon}${msg}`;
@@ -738,7 +740,7 @@ async function payAndApply(){
       return goApplied();
     }
     if (!window.TossPayments) {
-      toast('결제 모듈을 불러오지 못했어요. 새로고침 후 다시 시도해 주세요.');
+      toast('결제 모듈을 불러오지 못했어요. 새로고침 후 다시 시도해 주세요.', { icon: false });
       return;
     }
 
@@ -759,8 +761,8 @@ async function payAndApply(){
        app.js 의 결제 복귀 처리(handlePaymentReturn)가 이어서 한다. */
   } catch (e) {
     /* 사용자가 결제창을 닫은 것은 오류가 아니다 — 에러 메시지를 띄우면 놀란다. */
-    if (e?.code === 'USER_CANCEL') toast('결제를 취소했어요');
-    else toast(e.message || '신청에 실패했어요');
+    if (e?.code === 'USER_CANCEL') toast('결제를 취소했어요', { icon: false });
+    else toast(e.message || '신청에 실패했어요', { icon: false });
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -995,7 +997,7 @@ function hoverStar(n){ setStarUI(n); $('#star-caption').textContent = RATE_CAPTI
 function leaveStar(){ setStarUI(rateValue); $('#star-caption').textContent = rateValue?RATE_CAPTIONS[rateValue]:'별점을 선택해 주세요'; }
 function pickStar(n){ rateValue = n; setStarUI(n); $('#star-caption').textContent = RATE_CAPTIONS[n]; }
 function saveRating(){
-  if (!rateValue){ toast('별점을 선택해 주세요'); return; }
+  if (!rateValue){ toast('별점을 선택해 주세요', { icon: false }); return; }
   const c = STATE.completed.find(x=>x.id===rateTargetId);
   c.rating = rateValue; c.review = $('#rate-review').value;
   saveState(); closeModal('rate-modal'); renderMentoring();

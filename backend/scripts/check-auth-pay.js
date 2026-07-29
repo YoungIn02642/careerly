@@ -78,19 +78,33 @@ async function checkKakao() {
   const r = await get(url);
   const text = r.body + r.location;
 
-  /* 카카오는 오류를 코드로 준다: KOE101(앱 없음) · KOE006(리다이렉트 URI 불일치)
-     · KOE004(로그인 사용 설정 OFF). 원인마다 고칠 곳이 다르므로 그대로 보여준다. */
+  /* ── 여기서 리다이렉트 URI 는 검증되지 않는다 (실측) ──
+     카카오는 로그인하지 않은 요청을 그냥 로그인 페이지로 넘긴다. redirect_uri 대조는
+     **로그인한 뒤에** 하므로 KOE006 은 이 단계에서 절대 나오지 않는다.
+     예전에 이 검사를 통과했다고 '리다이렉트 URI 정상' 이라고 적었다가, 실제로는
+     KOE006 이 나는데 점검은 초록불이라 원인을 엉뚱한 데서 찾게 만들었다.
+     확인되는 것과 안 되는 것을 나눠서 말한다. */
   const koe = text.match(/KOE\d+/);
   if (koe) {
     const why = {
       KOE004: '카카오 로그인 > 사용 설정을 ON 으로',
-      KOE006: `리다이렉트 URI 를 콘솔에 등록: ${CALLBACK_BASE}/api/auth/kakao/callback`,
       KOE101: 'REST API 키가 잘못되었습니다 (JavaScript 키를 넣지 않았는지 확인)',
     }[koe[0]] || '콘솔 설정을 확인하세요';
     line('✗', `${koe[0]} — ${why}`);
-  } else {
-    line('✓', 'REST API 키와 리다이렉트 URI 가 인정됩니다');
+    return;
   }
+
+  if (/accounts\.kakao\.com\/login/.test(r.location)) {
+    line('✓', 'REST API 키가 인정됩니다 (로그인 화면으로 연결)');
+  } else {
+    line('?', '예상과 다른 응답입니다', `HTTP ${r.status}`);
+  }
+  line('!', '리다이렉트 URI 는 여기서 확인할 수 없습니다',
+    '카카오는 로그인 후에 대조하므로 KOE006 은 실제 로그인 때만 드러납니다');
+  line(' ', '콘솔에 이 값이 그대로 있어야 합니다',
+    `${CALLBACK_BASE}/api/auth/kakao/callback`);
+  line(' ', '등록 위치', '앱 > 플랫폼 키 > REST API 키 > 리다이렉트 URI');
+  line(' ', '먼저 필요한 것', '앱 > 플랫폼 > Web 사이트 도메인에 ' + CALLBACK_BASE + ' 등록');
 }
 
 async function checkToss() {
