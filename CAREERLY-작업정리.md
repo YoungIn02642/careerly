@@ -309,7 +309,21 @@ https://www.work24.go.kr/cm/openApi/call/wk/callOpenApiSvcInfo210L31.do
 | `OLLAMA_HOST` | `http://127.0.0.1:11434` (ollama 를 쓸 때만) |
 | `OLLAMA_MODEL` | `qwen3:8b` (ollama 를 쓸 때만) |
 | `CAS_AI_TIMEOUT_MS` | `240000` |
-| `NODE_ENV`, `ALLOWED_ORIGINS` | 배포 시에만 |
+| `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET` | **뉴스 검색**. NCP NAVER API Hub 의 Application 키 — 13-4 의 표를 먼저 볼 것 |
+
+**배포에서 추가로 필요한 것** (전부 **앱 서비스**에 넣는다. MySQL 서비스가 아니다 —
+값을 읽는 코드가 전부 `backend/src/` 에서 돌기 때문이다):
+
+| 키 | 용도 |
+|---|---|
+| `MYSQL_URL` | Railway 에서는 `${{MySQL.MYSQL_URL}}`. **같은 프로젝트 안에서만 참조가 풀린다** |
+| `NODE_ENV`, `ALLOWED_ORIGINS`, `OAUTH_REDIRECT_BASE` | 뒤의 둘은 운영 도메인과 정확히 같아야 한다 |
+| `NAVER_LOGIN_CLIENT_ID` / `NAVER_LOGIN_CLIENT_SECRET` | 네이버 **로그인** (뉴스 키와 다르다 — 13-4) |
+| `KAKAO_REST_API_KEY` / `KAKAO_CLIENT_SECRET` | 카카오 로그인. client_secret 은 새 REST 키에서 **기본 활성**이라 사실상 필수 |
+| `TOSS_CLIENT_KEY` / `TOSS_SECRET_KEY` | 결제. **secret 은 서버 전용 — 프론트로 내려보내지 않는다** |
+
+> `NEWS_PROVIDER` 는 **설정하지 않는 게 기본**이다. 값이 있으면 키와 무관하게 그쪽을
+> 강제하므로, `web` 이 남아 있으면 키가 멀쩡해도 웹 폴백으로 돈다.
 
 설정이 실제로 동작하는지: `cd backend && node scripts/check-ai.js` (AI) · `node scripts/check-news-api.js` (뉴스).
 
@@ -483,13 +497,16 @@ B1 을 하러 들어가 보니 **회사명 입력칸의 판정 실패 안내는 
 
 ---
 
-## 7. 앞으로 해야 할 일
+## 7. 앞으로 해야 할 일 (배포 전 기준 — **최신 목록은 14장**)
+
+> 이 장은 1차 배포 이전에 정리한 것이다. 완료된 항목에 취소선을 그어 두었지만,
+> **지금 무엇부터 할지는 14장을 본다.**
 
 ### A. 사용자 결정·조치가 필요 (내가 못 푸는 것)
 
 | # | 항목 | 상세 |
 |---|---|---|
-| **A1** | **배포 대상 확정** | Render / 학교서버 / 로컬데모 중 하나. **여러 번 물었으나 계속 미결.** 다만 2026-07-28 Groq 전환으로 **긴급도는 내려갔다** — 어디에 올리든 AI 경로가 동일하게 동작한다(6-4). 남은 건 `NODE_ENV`·`ALLOWED_ORIGINS` 설정과 도메인이다. |
+| ~~A1~~ | ~~배포 대상 확정~~ | ✅ **2026-07-30 해결** — Railway + MySQL 로 1차 배포 완료 (**13장**) |
 | ~~A2~~ | ~~고용24 중견기업 요청 URL~~ | ✅ **2026-07-28 해결** — 공채기업정보 `210L31` 로 수집 완료 (3-3) |
 | **A3** | **고용24 채용정보(210L01) 는 기업·기관 회원만 호출 가능** | 개인회원 계정으로는 막힌다. 학교·사업단 명의 계정으로 재신청할지 결정 필요 (10-7) |
 | ~~A4~~ | ~~네이버 뉴스 API 키~~ | ✅ **2026-07-28 해결** — NCP NAVER API Hub 키로 동작 (11-4) |
@@ -819,11 +836,16 @@ node scripts/build-job-trends.js            # 역량 빈도 집계 → data/job-
 
 ```bash
 cd /c/Users/admin/Downloads/careerly
-git branch --show-current                      # feature/jd-coach-news
-for f in test/*.test.js; do node "$f" | tail -1; done   # 합 136 통과 확인
+git branch --show-current                      # main (2026-07-30 이후)
+for f in test/*.test.js; do node "$f" | tail -1; done   # 합 227 통과 확인
+docker start careerly-mysql                    # DB 가 떠 있어야 서버가 뜬다
 cd backend && node scripts/check-ai.js         # Groq 키·모델 동작 확인
 npm run dev                                    # http://localhost:3000 (nodemon)
 ```
+
+> **DB 가 없으면 서버는 일부러 죽는다.** 살아있는 척하면 원인을 못 찾기 때문이다.
+> 부팅에 성공하면 `[mysql] 연결됨` 과 `[기능] ...` 두 줄이 뜬다 — 후자로 어떤
+> 선택 기능이 켜졌는지 바로 알 수 있다.
 
 > 자소서 코치는 `http://localhost:3000/#jd`. AI 없이도 동작하므로 키가 없어도
 > 'AI 보강 사용' 체크를 끄면 즉시 결과가 나온다.
@@ -831,9 +853,10 @@ npm run dev                                    # http://localhost:3000 (nodemon)
 > **테스트는 반드시 저장소 루트에서 돌린다.** `backend/` 안에서 `node test/...` 를 치면
 > 경로가 어긋나 `Cannot find module` 이 난다 (옛 `out.json`·`out3.txt` 가 바로 그 에러 덤프였다).
 
-1. 이 문서 6장(부족한 점)과 7장(할 일)을 읽는다.
-2. **A1(배포 대상)** 이 아직 미결이면 사용자에게 다시 확인한다. 다만 Groq 전환으로 긴급도는 내려갔다(6-4).
-3. 결정 없이 진행 가능한 **B4 → B5 → B11 → B12** 순으로 착수한다 — 이 넷이 8장 CEO 가 지정한 **공개 선행조건**이다.
+1. 이 문서 **13장(1차 배포)** 과 **14장(다음에 할 일)** 을 먼저 읽는다 — 7장보다 최신이다.
+2. 6장(부족한 점)은 여전히 유효하다. 12-1 · 13-3 의 함정 표는 성격이 같으니 같이 본다.
+3. 코드 작업은 **B16(멘토 '받은 요청' 서버 연동)** 부터다. 배포된 상태에서 티가 나는
+   유일한 미완성 지점이다 — 멘티 신청은 DB 에 들어가는데 멘토 화면이 못 읽는다.
 4. 메모는 이 문서를 갱신하는 방식으로 남긴다 (별도 메모리 저장 없음).
 
 ### 12-1. 이 프로젝트가 반복해서 밟은 함정 (성격이 같다)
@@ -847,3 +870,129 @@ npm run dev                                    # http://localhost:3000 (nodemon)
 | Groq 로 바꾸면 정확해지나? | 프로바이더와 무관한 파서 문제였다 (6-2) |
 
 **How to apply** — "AI/외부 API 가 이상하다" 싶으면 **그 계층을 건너뛰고 직접 호출해 본 뒤 앱 결과와 비교한다.** 두 결과가 다르면 범인은 그 사이의 우리 코드다.
+
+---
+
+## 13. 1차 배포 — Railway + MySQL (2026-07-29 ~ 30) ✅ 완료
+
+운영 주소: `https://careerly-production-5d6b.up.railway.app`
+
+### 13-1. 구성
+
+| | |
+|---|---|
+| 호스팅 | Railway — 앱 서비스 + MySQL 서비스 **한 프로젝트 안에** |
+| Root Directory | **비워 둔다(저장소 루트)**. `backend` 로 두면 안 된다 — 13-3 참조 |
+| Start Command | `npm start` (루트 `package.json` 이 workspaces 로 `backend` 를 물고 있다) |
+| DB | MySQL 8, DB 이름은 Railway 기본값 `railway` |
+| 스키마 투입 | 로컬에서 `MYSQL_PUBLIC_URL` 로 — Railway 컨테이너엔 셸이 없다 |
+
+```powershell
+# 스키마·카탈로그는 내 PC 에서 넣는다 (PowerShell)
+$env:MYSQL_URL = "<MySQL 서비스의 MYSQL_PUBLIC_URL>"
+cd backend
+node scripts/load-schema.js                    # 테이블 13개
+node scripts/migrate-to-mysql.js --catalog     # 자격증643·학과193·기업6,634·직업461
+Remove-Item Env:MYSQL_URL                      # 안 지우면 로컬 작업이 운영 DB 를 건드린다
+```
+
+> `mysql` CLI 를 쓰지 않는다. MySQL 을 Docker 로만 돌려서 클라이언트가 PATH 에 없다.
+> 그래서 `scripts/load-schema.js` 를 만들었다 — 어느 DB 에 넣는지 먼저 찍고 시작한다.
+
+### 13-2. 배포 점검 (밖에서 확인할 수 있는 것)
+
+```bash
+D=https://careerly-production-5d6b.up.railway.app
+curl -s $D/api/payments/config          # {"enabled":true,"clientKey":"test_ck_..."}
+curl -s -D - -o /dev/null $D/api/auth/naver | grep -i location   # nid.naver.com 으로 가야 정상
+curl -s "$D/api/news/company?name=삼성전자"                       # provider:"ncp", weekly 5건
+curl -s "$D/api/certs/suggest?q=정보&limit=1"
+curl -s $D/api/jobs | head -c 200                                # counts: 10/35/461
+```
+
+부팅 로그 한 줄로도 볼 수 있다(2026-07-30 추가):
+
+```
+[기능] 결제 켜짐 · 네이버로그인 켜짐 · 카카오로그인 켜짐 · AI 켜짐 · 뉴스 ncp
+```
+
+`뉴스 web` 이면 검색 키가 안 읽힌 것이다(웹 폴백). 웹 폴백은 **기사 날짜가 없어
+주간 대표기사가 통째로 0건**이 되고 키워드에 사이트 이름 조각이 섞인다
+(`뉴스룸`, `Newsroom`, `Korea`). 기사 자체는 나오므로 **'되는데 이상한' 모습**이다.
+
+### 13-3. 배포에서 밟은 함정 (전부 같은 성격이다)
+
+이 장은 다음에 배포할 사람을 위한 것이다. **다섯 개 중 넷이 "서버는 떴는데 값이 틀린"
+형태였고, 로그가 원인을 말해 주지 않아서 시간을 버렸다.** 그래서 고칠 때마다
+진단을 같이 넣었다.
+
+| 증상 | 실제 원인 | 남긴 진단 |
+|---|---|---|
+| `Cannot find module '../../../frontend/js/cas.js'` | Root Directory 를 `backend` 로 둬서 `frontend/` 가 이미지에 안 들어감. **require 를 고쳐도 화면이 통째로 빈다** — `express.static(frontend/)` 도 같이 깨지기 때문 | 루트 `package.json`(workspaces) + 배포 문서 수정 |
+| `[mysql] 연결 실패 — root@127.0.0.1:3306` | `${{MySQL.MYSQL_URL}}` 이 빈 문자열이 되어 **로컬 기본값으로 조용히 폴백**. 앱과 MySQL 이 **다른 프로젝트**에 있어서 참조가 안 풀렸다 | 실패 로그에 "접속 정보 출처" 를 찍는다 |
+| `DB 에 연결하지 못해...` 한 줄만 뜨고 원인 없음 | 참조가 안 풀린 `${{...}}` 가 글자 그대로 값이 됨 → `new URL()` 이 `config()` 안에서 던짐 → `assertConnection` 의 try 바깥이라 연결 로그도 안 남고, `server.js` 의 `.catch(() => ...)` 가 **에러를 통째로 버렸다** | URL 파싱 실패를 잡아 사유를 말한다. `.catch` 가 메시지를 버리지 않는다 |
+| 결제가 `enabled:true` 인데 결제창이 안 뜸 | Raw Editor 에서 `KEY=값` 줄을 통째로 **값 칸**에 붙여넣어 `TOSS_CLIENT_KEY=test_ck_...` 가 됨. 비어 있지 않으니 '켜짐'으로 보인다 | 부팅 때 `값이 자기 이름으로 시작하면` 경고 |
+| 뉴스 키를 고쳐도 계속 웹 폴백 | **`Redeploy` 는 그 배포의 옛 커밋을 다시 올린다.** 코드를 고쳐 푸시해도 반영되지 않았다. NCP 키는 처음부터 맞았다 | 발급처별 상태코드·응답본문을 보여준다(401/403/404 구분) |
+
+> **`Redeploy` 는 변수만 바꿀 때 쓴다. 코드를 바꿨으면 새 배포를 만든다**
+> (푸시 이벤트 또는 Deploy latest commit). 오늘 가장 오래 잡아먹은 함정이다.
+
+### 13-4. 네이버 키는 두 쌍이다 (제일 헷갈린 지점)
+
+| 용도 | 변수 | 발급처 |
+|---|---|---|
+| 로그인 | `NAVER_LOGIN_CLIENT_ID` / `NAVER_LOGIN_CLIENT_SECRET` | 개발자센터 — 네이버 로그인 앱 |
+| 뉴스 검색 | `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET` | **NCP NAVER API Hub** 의 Application → API Key ID / API Key |
+
+`LOGIN_` 이 붙고 안 붙고가 전부다. 서로 바꿔 넣으면 **둘 다 조용히 실패**한다.
+NCP 는 계정 전체의 `Access Key ID / Secret Key`(마이페이지 → 인증키 관리)와도
+헷갈리기 쉽다 — 필요한 것은 **Application 화면 안의 값**이다.
+
+코드(`news.js`)는 NCP·개발자센터 **양쪽을 차례로 시도해서 통한 쪽을 기억**한다.
+어디서 발급받았든 변수 이름은 `NAVER_CLIENT_ID`/`SECRET` 하나로 쓴다.
+
+### 13-5. 같이 고친 화면 버그 5건 (배포 후 실사용에서 나옴)
+
+| 증상 | 원인 |
+|---|---|
+| 가입 때 적은 닉네임이 사라짐 | `db.js` 의 `createUser` 가 `nickname` 을 **인자에서 흘려서** 서버로 안 보냈다. 화면·서버 양쪽 다 준비돼 있는데 중간에서만 빠져 **에러도 안 났다** |
+| 희망 진출분야·세부직무가 빔 | 학과를 고르면 코드로 `select.value` 를 바꾸는데 **JS 로 값을 바꾸면 `change` 가 나지 않는다.** 거기 걸어 둔 `fillFieldJob` 이 영영 안 돌았다 |
+| 자격증 첫 칸 자동완성이 뜨자마자 닫힘 | 배지 갱신에 `paintCerts()`(=`innerHTML` 통째 교체)를 불러 **방금 연 드롭다운과 포커스를 스스로 날렸다.** 첫 글자에서 배지가 반드시 바뀌므로 매번 걸렸다 |
+| 저장 안내가 안 보임 | 저장 버튼은 폼 아래인데 안내는 페이지 맨 위 초록 상자였다 → 토스트로 통일 |
+| '내가 신청'이 비어 있음 | 신청은 DB 로 가는데 **화면은 `localStorage` 만 봤다.** 기기를 바꾸면 아예 사라졌다. `GET /api/mentoring/requests` 를 붙이고 취소도 서버로 보낸다 |
+
+**공통점**: 다섯 중 넷이 *에러 없이 값만 틀린* 부류다. 12-1 의 함정과 성격이 같다.
+
+### 13-6. 배포 전 삭제한 것
+
+`sqlite3` 경로를 걷어냈다 (`src/db.js`, `routes/careerData.js`, `database/init-db.js`).
+MySQL 전환 뒤 아무도 안 쓰는데 부팅할 때 로드만 되고 있었고, **네이티브 모듈이라
+빌드에서 컴파일이 필요**했다. 읽는 `alumni` 테이블은 어디에도 없고, `careerly.db` 는
+저장소에 없고, 프론트도 테스트도 이 API 를 부르지 않았다.
+
+---
+
+## 14. 다음에 할 일 (2026-07-30 기준)
+
+### A. 사용자 조치가 필요
+
+| # | 항목 | 상세 |
+|---|---|---|
+| **A5** | **브라우저에서 결제 전 과정 확인** | `TOSS_SECRET_KEY` 는 **승인 단계**에서만 쓰인다. 밖에서는 검증할 수 없다 — 멘토 신청 → 결제창 → 테스트 카드 승인까지 한 번 통과시켜야 그 키가 맞는지 알 수 있다 |
+| **A6** | **운영 전환 시 토스 라이브 키** | 지금은 `test_ck_`. 실제 결제를 받으려면 라이브 키로 바꾸고 **사업자 심사**가 필요하다 |
+| **A7** | **DB 비밀번호 교체** | 셋업 중 대화에 노출됐다. `${{MySQL.MYSQL_URL}}` 참조를 쓰므로 앱 변수는 자동으로 따라간다 |
+| A3 | 고용24 채용정보(210L01) 기업회원 계정 | 기존 미결 (10-7) |
+| A8 | 커리어넷 학과정보 API 승인 대기 | 오면 `major-catalog.js` 의 MAJORS 를 `fetch-majors.js` 결과로 교체. **RULES·`deptOf` 는 그대로 둔다** |
+
+### B. 코드 작업
+
+| # | 작업 | 메모 |
+|---|---|---|
+| **B13** | **CAS 점수표 재설계** | 회의 메모의 숫자는 "(가중치 예시)" 라고 적혀 있었다. 메모 순서대로 **배포 후 데이터를 모은 뒤** 손대는 게 맞다 |
+| **B14** | 희망직무 chip 다중선택 | 지금은 단일 select |
+| **B15** | `job-trends` 를 NCS → KECO 로 이전 | 로드맵은 옮겼는데 트렌드만 NCS 분류로 남아 있다 |
+| **B16** | 멘토 쪽 '받은 요청'도 서버 연동 | 13-5 에서 **멘티('내가 신청')만** 서버로 옮겼다. 멘토 화면은 아직 `localStorage` 다 — 같은 증상이 그대로 남아 있다 |
+| B3 | 스펙 입력 placeholder | 기존 미결 |
+
+> **B16 이 가장 급하다.** 멘티가 보낸 신청이 DB 에 있는데 멘토 화면은 로컬만 보므로,
+> **실제로는 멘토가 신청을 영영 못 받는다.** 배포된 상태에서 티가 나는 문제다.
