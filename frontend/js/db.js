@@ -114,15 +114,28 @@ window.DB = (() => {
     return _jobsPromise;
   }
 
-  /* 학과 카탈로그. 스펙 입력 화면에서만 쓰므로 그때 한 번 받는다. */
-  let _majorsPromise = null;
-  function majorCatalog() {
-    if (!_majorsPromise) {
-      _majorsPromise = api('GET', '/api/majors')
-        .then(r => r.majors || [])
-        .catch(() => { _majorsPromise = null; return []; });
+  /* 학과 검색. 회사명(suggestCompanies)·자격증(suggestCerts)과 같은 규약이다 —
+     입력할 때마다 부르고(호출부가 debounce), { items } 를 받아 드롭다운에 그린다.
+     실패는 빈 목록으로 삼켜서 자동완성만 안 뜨고 직접 입력은 계속되게 한다. */
+  async function suggestMajors(q, limit = 8) {
+    if (!q || !q.trim()) return [];
+    try {
+      const r = await api('GET', `/api/majors/suggest?q=${encodeURIComponent(q.trim())}&limit=${limit}`);
+      return r.items || [];
+    } catch {
+      return [];
     }
-    return _majorsPromise;
+  }
+
+  /* 자격증 검색. 위와 같은 규약. */
+  async function suggestCerts(q, limit = 8) {
+    if (!q || !q.trim()) return [];
+    try {
+      const r = await api('GET', `/api/certs/suggest?q=${encodeURIComponent(q.trim())}&limit=${limit}`);
+      return r.items || [];
+    } catch {
+      return [];
+    }
   }
 
   /* 목록에 없는 학과명 → 집계 분류. 규칙은 서버에 한 벌만 둔다
@@ -134,19 +147,6 @@ window.DB = (() => {
     } catch {
       return null;
     }
-  }
-
-  /* 자격증 카탈로그(국가자격 613종 + 민간자격). 한 번 받아 두고 계속 쓴다 —
-     입력 중 검색은 전부 메모리에서 하므로 타이핑마다 서버를 부르지 않는다.
-     실패하면 빈 목록을 주고 호출부는 직접 입력으로 넘어간다(화면이 멈추지 않게). */
-  let _certsPromise = null;
-  function certCatalog() {
-    if (!_certsPromise) {
-      _certsPromise = api('GET', '/api/certs')
-        .then(r => r.certs || [])
-        .catch(() => { _certsPromise = null; return []; });   // 다음 호출에서 다시 시도
-    }
-    return _certsPromise;
   }
 
   /* 반정형 스펙 텍스트 → AI 분석(활동 정규화·정성 채점).
@@ -222,7 +222,7 @@ window.DB = (() => {
   return {
     hydrate, refreshSpecs, refreshUsers,
     currentUser, getAllSpecs, getSpec, getUsers, countByRole, stats,
-    createUser, login, logout, updateUser, upsertSpec, classifyCompany, suggestCompanies, certCatalog, jobCatalog, majorCatalog, classifyMajor,
+    createUser, login, logout, updateUser, upsertSpec, classifyCompany, suggestCompanies, suggestCerts, suggestMajors, classifyMajor, jobCatalog,
     analyzeCas, coachJd, companyNews,
     seedDemo, seedRandom, clearAll, deleteUser,
   };

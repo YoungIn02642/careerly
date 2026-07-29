@@ -302,11 +302,11 @@ window.SpecForm = (() => {
     // ── 자격증 편집기
     certState = [...(spec.certs || [])];
     certMeta  = { ...(spec.certMeta || {}) };
+    certKnown = new Map();
     if (!certState.length) certState.push('');
     paintCerts();
     paintCertReco(spec.dept || '');
     bindCertWrap();
-    loadCertCatalog();   // 카탈로그는 늦게 와도 되므로 기다리지 않는다
 
     // ── 어학 · 제2외국어 편집기
     langState    = langRowsFromScores(spec.scores);
@@ -626,7 +626,6 @@ window.SpecForm = (() => {
      못 맞추는 학과가 많다 — careerly 통계는 아직 8개 분류뿐이라 간호·기계처럼
      해당 없는 계열이 훨씬 많다. 그때 아무 데나 밀어 넣으면 간호학과 학생에게
      컴공 합격자 평균이 보인다. 그래서 비워 두고 직접 고르게 안내한다. */
-  let majorCatalogList = [];
   let lastMajorClassified = null;
 
   function initMajorSearch() {
@@ -637,8 +636,6 @@ window.SpecForm = (() => {
     if (!input || !menu || !sel) return;
 
     lastMajorClassified = input.value.trim() || null;
-
-    DB.majorCatalog().then(list => { majorCatalogList = list; });
 
     const applyDept = async name => {
       if (!name) {
@@ -664,19 +661,14 @@ window.SpecForm = (() => {
       }
     };
 
-    const search = () => {
+    const search = async () => {
       const q = input.value.trim();
       if (!q) { closeSearchMenu(menu); return; }
 
-      const hits = [];
-      for (const m of majorCatalogList) {
-        const idx = m.name.indexOf(q);
-        if (idx === 0) hits.unshift(m);
-        else if (idx > 0) hits.push(m);
-        if (hits.length >= 30) break;
-      }
+      const hits = await DB.suggestMajors(q);
+      if (input.value.trim() !== q) return;      // 늦게 온 응답으로 덮지 않는다
 
-      openSearchMenu(menu, hits.slice(0, 8).map(m => ({
+      openSearchMenu(menu, hits.map(m => ({
         value: m.name,
         sub: m.dept ? (DEPTS.find(d => d.id === m.dept)?.label || '') : '통계 없음',
       })), {
@@ -690,7 +682,7 @@ window.SpecForm = (() => {
     };
 
     let timer = null;
-    input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(search, 200); });
+    input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(search, 250); });
     input.addEventListener('blur', () => applyDept(input.value.trim()));
 
     // 분류를 직접 고치면 그 선택을 존중한다 — 다음 자동판정이 덮지 않게 표시만 바꾼다
@@ -891,8 +883,10 @@ window.SpecForm = (() => {
      저장 형식은 예전 그대로 문자열 배열(spec.certs)이다. 집계·로드맵이 전부
      자격증명 문자열로 맞춰보고 있어서 형식을 바꾸면 저장된 스펙을 못 읽는다. */
   let certState = [];    // ['정보처리기사', ...]  — 이름만. 집계(aggregation)가 이 형식을 쓴다
-  let certIndex = null;  // 카탈로그 — id → 메타. 로드 전에는 null
-  let certCatalogList = [];
+  /* 목록에 있는 자격증인지 확인된 것만 담는다 — { 이름: 부가정보 } 또는 { 이름: null }.
+     전체 카탈로그(643종·77KB)를 받아 두던 것을 대신한다. 검색을 서버에 맡겼으니
+     화면이 아는 것은 '지금까지 확인해 본 이름' 뿐이면 충분하다. */
+  let certKnown = new Map();
   /* 목록에 없어 직접 적은 자격증의 부가 정보. { 자격증명: { issuer, date } }
      certs 는 이름 배열 그대로 두고 옆에 따로 붙인다 — 배열 모양을 바꾸면
      보유율 집계(aggregation.js)와 저장된 옛 스펙이 전부 깨진다. */
@@ -905,15 +899,15 @@ window.SpecForm = (() => {
   }
 
   function certRowHtml(name, i) {
-    const meta = certIndex ? certIndex.get(name) : null;
     const manual = certMeta[name];
+    const known = certKnown.has(name) ? certKnown.get(name) : undefined;
 
-    /* 카탈로그를 아직 못 받았으면 '목록에 없음' 이라고 단정하지 않는다 —
-       로딩 중일 뿐인데 학생에게 오타라고 알리는 꼴이 된다. */
+    /* 아직 확인 전(undefined)이면 '목록에 없음' 이라고 단정하지 않는다 —
+       확인 중일 뿐인데 학생에게 오타라고 알리는 꼴이 된다. */
     const badge = !name ? ''
-      : !certIndex ? ''
-      : meta ? `<span class="sf-cert-badge sf-cert-badge--ok">${escapeHtml(meta.kindLabel)}${meta.field ? ' · ' + escapeHtml(meta.field) : ''}</span>`
       : manual ? `<span class="sf-cert-badge sf-cert-badge--ok">직접 입력</span>`
+      : known === undefined ? ''
+      : known ? `<span class="sf-cert-badge sf-cert-badge--ok">${escapeHtml(known)}</span>`
       : `<span class="sf-cert-badge sf-cert-badge--free">목록에 없음</span>`;
 
     /* 직접 입력한 자격증은 발급기관·취득일을 함께 보여준다. 목록에서 고른 것은
@@ -955,7 +949,7 @@ window.SpecForm = (() => {
 
   /* 자격증 검색 — 카탈로그 643종을 메모리에서 찾는다(서버 왕복 없음).
      목록에 없으면 '직접 입력'으로 빠질 수 있게 아래에 항상 길을 하나 둔다. */
-  function suggestCert(i) {
+  async function suggestCert(i) {
     const input = document.querySelector(`[data-cert-i="${i}"]`);
     const menu  = document.getElementById(`sf-cert-menu-${i}`);
     if (!input || !menu) return;
@@ -963,23 +957,21 @@ window.SpecForm = (() => {
     const q = input.value.trim();
     if (!q) { closeSearchMenu(menu); return; }
 
-    const ql = q.toLowerCase();
-    const starts = [], contains = [];
-    for (const c of certCatalogList) {
-      const idx = c.id.toLowerCase().indexOf(ql);
-      if (idx === 0) starts.push(c);
-      else if (idx > 0) contains.push(c);
-      if (starts.length >= 8) break;
-    }
-    const hits = [...starts, ...contains].slice(0, 8);
+    const hits = await DB.suggestCerts(q);
+    if (input.value.trim() !== q) return;      // 늦게 온 응답으로 덮지 않는다
 
-    openSearchMenu(menu, hits.map(c => ({
-      value: c.id,
-      sub: [c.kindLabel, c.field].filter(Boolean).join(' · '),
-    })), {
-      onPick: v => {
+    /* 응답에 지금 적힌 이름과 똑같은 게 있으면 목록에 있는 자격증이다.
+       없으면 '목록에 없음' 으로 확정한다 — 배지를 위해 따로 부르지 않는다. */
+    const exact = hits.find(c => c.name === q);
+    const had = certKnown.get(q);
+    certKnown.set(q, exact ? (exact.sub || '') : null);
+    if (had !== certKnown.get(q)) setTimeout(paintCerts, 0);
+
+    openSearchMenu(menu, hits.map(c => ({ value: c.name, sub: c.sub })), {
+      onPick: (v, item) => {
         certState[i] = v;
-        delete certMeta[v];          // 목록에서 고르면 직접입력 정보는 필요 없다
+        certKnown.set(v, item.sub || '');   // 목록에서 골랐으니 확인된 이름이다
+        delete certMeta[v];                 // 목록에서 고르면 직접입력 정보는 필요 없다
         paintCerts();
         paintCertReco(document.getElementById('sf-dept').value);
       },
@@ -1057,11 +1049,15 @@ window.SpecForm = (() => {
 
     /* 값은 input 마다 즉시 반영한다. 행을 다시 그리면 커서가 튀므로 입력 중에는
        다시 그리지 않고, 검색 메뉴만 갱신한다. */
+    /* 입력할 때마다 서버에 묻되 250ms 로 묶는다. 글자마다 부르면 한 단어 치는 사이에
+       요청이 대여섯 개 나간다. */
+    const certTimers = {};
     wrap.addEventListener('input', e => {
       const i = e.target.dataset.certI;
       if (i == null) return;
       certState[+i] = e.target.value;
-      suggestCert(+i);
+      clearTimeout(certTimers[i]);
+      certTimers[i] = setTimeout(() => suggestCert(+i), 250);
     });
     wrap.addEventListener('click', e => {
       const edit = e.target.closest('[data-cert-edit]');
@@ -1093,16 +1089,6 @@ window.SpecForm = (() => {
       // 새로 생긴 칸으로 바로 커서를 옮겨 준다
       wrap.querySelector(`[data-cert-i="${certState.length - 1}"]`)?.focus();
     });
-  }
-
-  /* 카탈로그는 폼을 그린 뒤 비동기로 도착한다. 도착 전에도 입력은 가능해야 하므로
-     목록만 나중에 채우고, 이미 그려둔 행은 배지를 붙이려고 다시 그린다. */
-  async function loadCertCatalog() {
-    const certs = await DB.certCatalog();
-    if (!certs.length) return;
-    certCatalogList = certs;
-    certIndex = new Map(certs.map(c => [c.id, c]));
-    paintCerts();
   }
 
   function collectCerts() {

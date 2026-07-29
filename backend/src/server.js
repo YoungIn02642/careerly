@@ -8,9 +8,9 @@ const { nanoid } = require('nanoid');
 const { readDb, writeDb } = require('./store');
 const { DEMO_SEED, generateRandom } = require('./demo-seed');
 const { classify: classifyCompany, suggest: suggestCompany, stats: classifyStats, CORP_TYPE_ID } = require('./company-classify');
-const { catalog: certCatalog } = require('./cert-catalog');
+const { catalog: certCatalog, searchCerts } = require('./cert-catalog');
 const { catalog: jobCatalog } = require('./wage-jobs');
-const { catalog: majorCatalog, deptOf } = require('./major-catalog');
+const { catalog: majorCatalog, deptOf, searchMajors } = require('./major-catalog');
 const recommendationsRouter = require("./routes/recommendations");
 const careerDataRouter = require("./routes/careerData");
 const casAnalyzeRouter = require("./routes/casAnalyze");
@@ -357,6 +357,13 @@ app.get('/api/certs', (req, res) => {
   res.json(certCatalog());
 });
 
+/* 자격증 검색 — /api/company/suggest · /api/majors/suggest 와 같은 규약(q · limit → items). */
+app.get('/api/certs/suggest', (req, res) => {
+  const q = String(req.query.q || '').trim();
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 8, 1), 20);
+  res.json({ query: q, items: q ? searchCerts(q, limit) : [] });
+});
+
 /* ── 직업 분류 (커리어 로드맵) ──────────────────────────────────
    한국고용직업분류 대분류 10 → 중분류 35 → 직업 461 (임금·전망 포함).
    200KB 남짓이라 초기 로딩에 얹지 않고, 로드맵 화면을 처음 열 때만 받아 간다.
@@ -384,6 +391,18 @@ app.get('/api/jobs', (req, res) => {
 app.get('/api/majors', (req, res) => {
   res.set('Cache-Control', 'no-cache');
   res.json(majorCatalog());
+});
+
+/* 학과 검색 — 입력할 때마다 부른다(프론트가 debounce 로 묶는다).
+   회사명 자동완성(/api/company/suggest)과 같은 규약이다: q · limit 을 받고
+   { items: [...] } 를 돌려준다. 세 검색이 같은 모양이라야 프론트 부품 하나로 끝난다.
+
+   지금 카탈로그는 193개라 목록을 통째로 내려도 되지만, 커리어넷 학과정보 키가 나오면
+   수천 개가 된다. 그때 구조를 다시 바꾸지 않도록 처음부터 서버 검색으로 둔다. */
+app.get('/api/majors/suggest', (req, res) => {
+  const q = String(req.query.q || '').trim();
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 8, 1), 20);
+  res.json({ query: q, items: q ? searchMajors(q, limit) : [] });
 });
 
 /* 목록에 없는 학과명을 직접 적었을 때 어느 분류로 묶일지 알려준다.

@@ -152,4 +152,24 @@ function catalog() {
   return cache;
 }
 
-module.exports = { catalog, deptOf, MAJORS, RULES };
+/* ── 검색 ─────────────────────────────────────────────────────
+   앞에서 걸린 것(접두사)을 중간에 걸린 것보다 위에 둔다 — '컴' 을 쳤을 때
+   '컴퓨터공학과' 가 'e-커머스전공(컴퓨터융합학부)' 보다 먼저 나와야 한다.
+   회사명 suggest 와 같은 규칙이다.
+
+   목록에 없는 학과도 dept 를 규칙으로 붙여 함께 돌려준다 — 화면이 결과를 고르는
+   순간 통계 분류까지 정해지므로 왕복이 한 번으로 끝난다. */
+function searchMajors(query, limit = 8) {
+  const q = String(query || '').trim();
+  if (!q) return [];
+
+  const starts = [], contains = [];
+  for (const [name, dept] of MAJORS) {
+    const at = name.indexOf(q);
+    if (at === 0) starts.push({ name, dept });
+    else if (at > 0) contains.push({ name, dept });
+  }
+  return [...starts, ...contains].slice(0, limit);
+}
+
+module.exports = { catalog, deptOf, searchMajors, MAJORS, RULES };

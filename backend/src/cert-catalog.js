@@ -95,4 +95,26 @@ function catalog() {
   return cache;
 }
 
-module.exports = { catalog, PRIVATE_CERTS };
+/* ── 검색 ─────────────────────────────────────────────────────
+   /api/company/suggest · /api/majors/suggest 와 같은 규약.
+   영문 약어(SQLD·AWS)가 섞여 있어 대소문자를 무시하고 찾는다. */
+function searchCerts(query, limit = 8) {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return [];
+
+  const starts = [], contains = [];
+  for (const c of catalog().certs) {
+    const at = c.id.toLowerCase().indexOf(q);
+    if (at < 0) continue;
+    const row = {
+      name: c.id,
+      /* 화면 부가정보. 발급기관이 원본에 없어 자격 구분·직무분야로 대신한다
+         (없는 정보를 지어내지 않는다 — 직접 입력할 때만 발급기관을 받는다). */
+      sub: [c.kindLabel, c.field].filter(Boolean).join(' · '),
+    };
+    (at === 0 ? starts : contains).push(row);
+  }
+  return [...starts, ...contains].slice(0, limit);
+}
+
+module.exports = { catalog, searchCerts, PRIVATE_CERTS };
