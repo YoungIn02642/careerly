@@ -45,7 +45,11 @@ const PROVIDERS = {
     tokenUrl: 'https://kauth.kakao.com/oauth/token',
     profileUrl: 'https://kapi.kakao.com/v2/user/me',
     clientId: () => (process.env.KAKAO_REST_API_KEY || '').trim(),
-    /* 카카오는 client_secret 이 선택이다(콘솔에서 켜야 생긴다). 없으면 안 보낸다. */
+    /* 카카오의 client_secret 은 '조건부 필수' 다. 콘솔에서 그 기능이 ON 이면 토큰
+       요청에 **반드시** 넣어야 하고, 요즘 새로 추가되는 REST API 키는 **켜진 채로
+       생성된다**. 즉 사실상 필수라고 보고 설정해야 한다.
+       빠뜨리면 토큰 발급에서 실패하는데, 메시지가 불친절해서 원인을 찾기 어렵다.
+       (네이버는 항상 필수라 이 구분이 없다.) */
     clientSecret: () => (process.env.KAKAO_CLIENT_SECRET || '').trim(),
     parseProfile: j => {
       const acc = j.kakao_account || {};
