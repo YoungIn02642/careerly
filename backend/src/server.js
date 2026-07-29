@@ -14,7 +14,6 @@ const { CORP_TYPE_ID } = require('./company-classify');
 const catalog = require('./catalog-db');
 const OAuth = require('./oauth');
 const recommendationsRouter = require("./routes/recommendations");
-const careerDataRouter = require("./routes/careerData");
 const casAnalyzeRouter = require("./routes/casAnalyze");
 const jdCoachRouter = require("./routes/jdCoach");
 const newsRouter = require("./routes/news");
@@ -47,7 +46,6 @@ const FRONTEND_DIR = path.join(__dirname, '..', '..', 'frontend');
 app.get('/', (req, res) => res.sendFile(path.join(FRONTEND_DIR, 'careerly.html')));
 
 app.use(express.static(FRONTEND_DIR));
-app.use("/api/career-data", careerDataRouter);
 app.use("/api/recommendations", recommendationsRouter);
 app.use("/api/cas", casAnalyzeRouter);
 app.use("/api/jd", jdCoachRouter);
