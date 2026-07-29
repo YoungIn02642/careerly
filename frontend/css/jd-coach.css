@@ -7,17 +7,6 @@
 /* ── 입력부 ───────────────────────────────────────────────── */
 .jd-input-card { padding: 20px 22px; }
 
-.jd-note {
-  display: flex; align-items: flex-start; gap: 7px;
-  padding: 10px 12px; margin-bottom: 14px;
-  background: #f8fafc; border: 1px solid var(--border); border-radius: 10px;
-  font-size: 12.5px; color: var(--text-s); line-height: 1.55;
-}
-.jd-note i { margin-top: 1px; flex: none; }
-.jd-note--on { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
-.jd-note--on b { color: #15803d; }
-.jd-link { color: var(--brand); font-weight: 600; cursor: pointer; text-decoration: underline; }
-
 .jd-label { display: block; font-size: 13px; font-weight: 700; color: var(--text-p); margin-bottom: 6px; }
 .jd-text {
   width: 100%; padding: 12px 14px; box-sizing: border-box;
@@ -64,6 +53,11 @@
   font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
 }
 .jd-chip:hover { background: #dcfce7; }
+/* 지금 보고 있는 역량 — 어느 것만 보고 있는지가 한눈에 들어와야 되돌릴 수 있다 */
+.jd-chip.is-on { background: #16a34a; border-color: #16a34a; color: #fff; }
+.jd-chip.is-on:hover { background: #15803d; }
+.jd-chip--all { font-variant-numeric: tabular-nums; }
+.jd-chips-hint { margin-top: 7px; font-size: 11.5px; color: var(--text-s); }
 
 .jd-notice { margin-top: 10px; font-size: 12.5px; color: #b45309; }
 /* 대필이 아니라는 안내 — 눈에 띄어야 하지만 오류처럼 보이면 안 된다. */
@@ -82,11 +76,10 @@
   padding: 20px 22px; background: #fff;
   border: 1px solid var(--border); border-radius: 14px;
 }
-.jd-card.is-flash { animation: jd-flash 1.1s ease-out; }
-@keyframes jd-flash {
-  from { border-color: #16a34a; box-shadow: 0 0 0 4px rgba(22, 163, 74, .14); }
-  to   { border-color: var(--border); box-shadow: none; }
-}
+/* 역량 칩으로 하나만 보고 있는 상태 — DOM 은 그대로 두고 보이기만 끈다.
+   (다시 그리면 작성 중이던 초안이 날아간다 — jd-coach.js focusItem 주석 참고) */
+.jd-cards.is-filtered > .jd-card { display: none; }
+.jd-cards.is-filtered > .jd-card.is-shown { display: block; }
 
 .jd-card-h { display: flex; align-items: center; gap: 9px; }
 .jd-card-h h3 { margin: 0; font-size: 17px; font-weight: 800; color: var(--text-p); }
@@ -191,6 +184,69 @@
   font-size: 12.5px; color: #4338ca; line-height: 1.6;
 }
 .jd-followup b { color: #312e81; }
+
+/* ── 입력 4분할 ──────────────────────────────────────────── */
+.jd-steps { display: flex; flex-direction: column; gap: 18px; }
+.jd-step { display: flex; flex-direction: column; }
+.jd-step-n {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 19px; height: 19px; margin-right: 6px; border-radius: 50%;
+  background: var(--brand); color: #fff; font-size: 11px; font-weight: 800;
+}
+.jd-opt { margin-left: 8px; font-size: 11.5px; font-weight: 500; color: var(--text-s); }
+.jd-hint { margin-top: 6px; font-size: 11.5px; color: var(--text-s); line-height: 1.6; }
+.jd-actions--news {
+  margin-top: 10px; padding-top: 12px; border-top: 1px dashed var(--border);
+}
+.jd-news-inline { font-size: 12px; color: var(--text-s); display: inline-flex; align-items: center; gap: 6px; }
+.jd-news-inline i { color: var(--brand); }
+.jd-chip--static { cursor: default; }
+
+/* ── 주간 흐름 ──────────────────────────────────────────────
+   기사 목록과 달리 '언제'가 먼저 읽혀야 한다 — 왼쪽에 주 라벨을 고정한다. */
+.jd-weeks { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.jd-week { display: flex; gap: 12px; align-items: flex-start; }
+.jd-week-tag {
+  flex: none; min-width: 56px; padding: 4px 8px; border-radius: 7px;
+  background: #eef2ff; color: #4338ca; font-size: 11.5px; font-weight: 700; text-align: center;
+}
+.jd-week-meta {
+  margin-top: 4px; font-size: 11.5px; color: var(--text-s);
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+}
+.jd-week-hot { color: #b45309; font-weight: 700; }
+.jd-week-loose { color: #dc2626; }
+.jd-week-trend { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 5px; }
+@media (max-width: 640px) {
+  .jd-week { flex-direction: column; gap: 6px; }
+  .jd-week-tag { min-width: 0; align-self: flex-start; }
+}
+
+/* ── 내 자소서 초안 ──────────────────────────────────────────
+   가이드(읽는 것)와 작성칸(쓰는 것)을 선 하나로 갈라 놓는다. */
+.jd-draft {
+  margin-top: 16px; padding-top: 14px;
+  border-top: 1px dashed var(--border);
+}
+.jd-draft-state {
+  margin-left: auto; font-size: 11.5px; font-weight: 600; color: var(--text-s);
+}
+.jd-draft-text {
+  width: 100%; margin-top: 8px; padding: 12px 14px; box-sizing: border-box;
+  border: 1px solid var(--border); border-radius: 10px; background: #fff;
+  font-family: var(--font); font-size: 13px; line-height: 1.85; color: var(--text-p);
+  resize: vertical;
+}
+.jd-draft-text:focus { outline: none; border-color: var(--brand); }
+.jd-draft-foot {
+  display: flex; align-items: center; gap: 10px; margin-top: 6px;
+  font-size: 11.5px; color: var(--text-s);
+}
+.jd-draft-hint { margin-left: auto; text-align: right; }
+@media (max-width: 640px) {
+  .jd-draft-foot { flex-wrap: wrap; }
+  .jd-draft-hint { margin-left: 0; text-align: left; }
+}
 
 /* ── 이 회사, 지금 (지원동기 소재) ───────────────────────────
    직무역량 카드와 시각적으로 구분한다 — 다른 자소서 문항에 쓰는 재료다. */
