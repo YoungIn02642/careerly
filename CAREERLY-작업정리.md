@@ -84,7 +84,8 @@ careerly
 │  │  └─ raw/                  # 지방공기업 CSV 원본 (EUC-KR)
 │  └─ scripts/                 # 수집(fetch-*.js) · 집계(build-*.js)
 ├─ docs/                       # 설계 문서
-│  └─ 화면-구조-지도.md         # ★ "이 화면 HTML 어디 있지?" — 페이지·JS·CSS·API 지도
+│  ├─ 화면-구조-지도.md         # ★ "이 화면 HTML 어디 있지?" — 페이지·JS·CSS·API 지도
+│  └─ 배포.md                  # ★ Railway 배포 절차 (볼륨 마운트 함정 포함)
 └─ test/  cas.test.js (47) · jd-competency.test.js (22) · jd-questions.test.js (23)
           job-trends.test.js (12) · news.test.js (32) · spec-parse.test.js (37)
           wage-jobs.test.js (16)

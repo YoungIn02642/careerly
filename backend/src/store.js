@@ -13,8 +13,21 @@ const fs = require('fs');
 const path = require('path');
 
 const DATA_DIR  = path.join(__dirname, '..', 'data');
-const DB_PATH   = path.join(DATA_DIR, 'db.json');
 const SEED_PATH = path.join(DATA_DIR, 'db-seed.json');
+
+/* ── db.json 위치는 배포에서 달라진다 ──────────────────────────
+   배포 플랫폼(Railway·Render)의 파일시스템은 휘발성이다. 재배포하거나 인스턴스가
+   재시작하면 그 안에 쓴 파일이 사라진다 — 가입 회원과 결제 내역이 통째로 날아간다.
+   그래서 운영에서는 영속 볼륨을 붙이고 그 경로를 CAREERLY_DB_PATH 로 알려 준다.
+
+   ── 볼륨을 backend/data 에 마운트하면 안 된다 (중요) ──
+   이 폴더에는 커밋된 캐시가 8개 들어 있다(wage-jobs·qnet-certs·ftc-large-groups·
+   public-orgs·ncs-taxonomy·work24-companies·career-data·db-seed). 볼륨을 여기에
+   걸면 그 파일들이 전부 가려져서 커리어 로드맵·자격증 검색·기업 분류가 죽는다.
+   빈 폴더(예: /data)에 마운트하고 이 변수로 db.json 만 그쪽을 보게 한다. */
+const DB_PATH = (process.env.CAREERLY_DB_PATH || '').trim()
+  || path.join(DATA_DIR, 'db.json');
+const DB_DIR = path.dirname(DB_PATH);
 
 /* 저장소가 가져야 할 최소 형태. 옛 db.json 에 없던 키가 나중에 늘어나도
    호출하는 쪽이 undefined 를 만나지 않게 한다. */
@@ -43,7 +56,9 @@ function readDb() {
   } catch (e) {
     if (e.code !== 'ENOENT') throw e;                 // 권한 문제 등은 삼키지 않는다
     const db = seedDb();
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+    /* 볼륨을 갓 붙이면 그 폴더는 비어 있다. db.json 이 놓일 폴더를 만든다
+       (DATA_DIR 이 아니라 DB_DIR — 둘은 배포에서 서로 다른 경로다). */
+    fs.mkdirSync(DB_DIR, { recursive: true });
     writeDb(db);
     console.log(`[store] db.json 이 없어 새로 만들었습니다 → ${DB_PATH}`);
     return db;
