@@ -86,7 +86,7 @@ function buildCache() {
   if (groups?.companies?.length) {
     groups.companies.forEach(c => {
       const k = normalize(c.name);
-      if (k) map.set(k, { type: CORP_TYPE.LARGE, source: `공정위:${c.group || ''}` });
+      if (k) map.set(k, { type: CORP_TYPE.LARGE, source: `공정위:${c.group || ''}`, name: c.name });
     });
     sources.push(`공정위 ${groups.companies.length}건`);
   }
@@ -98,7 +98,7 @@ function buildCache() {
   if (publics?.organizations?.length) {
     publics.organizations.forEach(o => {
       const k = normalize(o.name);
-      if (k) map.set(k, { type: CORP_TYPE.PUBLIC, source: `공공기관:${o.raw || ''}` });
+      if (k) map.set(k, { type: CORP_TYPE.PUBLIC, source: `공공기관:${o.raw || ''}`, name: o.name });
     });
     sources.push(`공공기관 ${publics.organizations.length}건`);
   }
@@ -112,7 +112,7 @@ function buildCache() {
   if (localPublics?.organizations?.length) {
     localPublics.organizations.forEach(o => {
       const k = normalize(o.name);
-      if (k && !map.has(k)) map.set(k, { type: CORP_TYPE.PUBLIC, source: `${o.kind}:${o.raw || ''}` });
+      if (k && !map.has(k)) map.set(k, { type: CORP_TYPE.PUBLIC, source: `${o.kind}:${o.raw || ''}`, name: o.name });
     });
     sources.push(`지방공공기관 ${localPublics.organizations.length}건`);
   }
@@ -126,7 +126,7 @@ function buildCache() {
     work24.companies.forEach(c => {
       const k = normalize(c.name);
       const t = mapWork24Type(c.typeName);
-      if (k && t && !map.has(k)) map.set(k, { type: t, source: `고용24:${c.typeName}` });
+      if (k && t && !map.has(k)) map.set(k, { type: t, source: `고용24:${c.typeName}`, name: c.name });
     });
     sources.push(`고용24 ${work24.companies.length}건`);
   }
@@ -171,9 +171,80 @@ function classify(companyName) {
   }
 }
 
+/* ── 자동완성 ──────────────────────────────────────────────
+   '삼성' → 삼성전자 · 삼성물산 … 처럼 입력 중인 회사명 후보를 돌려준다.
+
+   캐시가 이미 { 정규화명 → 분류 } 맵이라 그 키를 그대로 훑는다. 별도 색인을
+   두지 않는 이유는 규모 때문이다 — 항목이 3만 건 남짓이고 전부 메모리에 있어서
+   선형 스캔이 수 ms 로 끝난다. 색인을 만들면 캐시 재적재 경로가 하나 더 늘 뿐이다.
+
+   질의도 normalize 를 거치므로 'sk 하이닉스' / 'SK하이닉스' 가 같은 걸 찾는다.
+   앞에서 걸린 것(접두사)을 중간에 걸린 것보다 위로 올린다 — '삼성' 을 쳤을 때
+   '삼성전자' 가 '제일모직삼성' 보다 먼저 나와야 한다. */
+/* 공정위 명단은 법인 등기명이라 대기업집단이 **한글 음차로만** 올라와 있다.
+   'SK하이닉스' 가 아니라 '에스케이하이닉스', 'LG전자' 가 아니라 '엘지전자' 다.
+   학생은 알파벳으로 치므로 그대로 두면 SK·LG·KT 를 쳤을 때 결과가 0건이 된다.
+   질의를 음차로도 한 번 더 찾아본다(명단 자체를 고치는 건 배치의 일이 아니다). */
+const QUERY_ALIASES = {
+  SK: '에스케이', LG: '엘지', KT: '케이티', GS: '지에스', CJ: '씨제이',
+  KB: '케이비', LS: '엘에스', HD: '에이치디', BGF: '비지에프', DL: '디엘',
+  DB: '디비', OCI: '오씨아이', HMM: '에이치엠엠', KCC: '케이씨씨', NH: '엔에이치',
+};
+
+function suggest(query, limit = 8) {
+  const q = normalize(query);
+  if (!q) return [];
+
+  /* 알파벳으로 시작하면 음차로 바꾼 질의도 같이 본다. 'SK하이닉스' → '에스케이하이닉스' */
+  const queries = [q];
+  for (const [abbr, kor] of Object.entries(QUERY_ALIASES)) {
+    if (q.startsWith(abbr)) queries.push(kor + q.slice(abbr.length));
+  }
+
+  const starts = [];
+  const contains = [];
+  const seen = new Set();
+  for (const [key, v] of cache().map) {
+    if (!v.name || seen.has(key)) continue;      // 원본 이름을 안 들고 있는 옛 캐시 항목
+    const at = queries.reduce((best, qq) => {
+      const i = key.indexOf(qq);
+      return i < 0 ? best : (best < 0 ? i : Math.min(best, i));
+    }, -1);
+    if (at < 0) continue;
+    seen.add(key);
+    if (at === 0) starts.push(v);
+    else contains.push(v);
+  }
+
+  /* 짧은 이름을 위로 올린다. 명단에는 모회사와 온갖 계열사·특수목적법인이 같이
+     들어 있어서(한국전력공사 옆에 '한국전력우리스프랏글로벌사모투자전문회사'),
+     삽입 순서대로 자르면 학생이 찾는 회사가 잘려 나간다. 검색어에 가장 가까운
+     이름 = 군더더기가 가장 적은 이름이라고 보고 길이순으로 세운다. */
+  const byLength = (a, b) => displayName(a.name).length - displayName(b.name).length;
+  starts.sort(byLength);
+  contains.sort(byLength);
+
+  return [...starts, ...contains].slice(0, limit).map(v => ({
+    name: displayName(v.name),
+    corpType: CORP_TYPE_ID[v.type] || null,
+    source: v.source,
+  }));
+}
+
+/* 화면에 보여줄 이름. 명단은 법인 등기명이라 '(주)카카오' 처럼 법인격이 붙어 있는데,
+   학생이 이력서에 적는 이름은 '카카오' 다. 고른 값이 그대로 스펙에 저장되므로
+   여기서 다듬어 둔다 — 분류는 어차피 normalize 를 거쳐서 어느 쪽이든 똑같이 걸린다. */
+function displayName(name) {
+  return String(name || '')
+    .replace(/㈜|\(주\)|\(유\)|\(재\)|\(사\)|\(학\)|\(의\)/g, ' ')
+    .replace(/주식회사|유한회사|재단법인|사단법인|학교법인/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function stats() {
   const c = cache();
   return { cached: c.map.size, sources: c.sources };
 }
 
-module.exports = { classify, normalize, stats, reloadCache, CORP_TYPE, CORP_TYPE_ID, DEFAULT_TYPE };
+module.exports = { classify, suggest, normalize, displayName, stats, reloadCache, CORP_TYPE, CORP_TYPE_ID, DEFAULT_TYPE };

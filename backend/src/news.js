@@ -23,6 +23,12 @@
 const TIMEOUT_MS = Number(process.env.NEWS_TIMEOUT_MS || 8000);
 const MAX_ITEMS  = 5;
 
+/* 한 번에 받아오는 기사 수. 주간 대표 기사를 뽑으려면 5주치가 표본에 들어와야 하고,
+   같은 사건을 여러 언론사가 쓴 것도 세야 해서 넉넉히 받는다.
+   네이버 검색 API 의 display 상한이 100 이라 그 값을 그대로 쓴다.
+   (예전엔 15건만 받아서 이번 주 기사로 다 차면 지난주가 아예 안 보였다.) */
+const FETCH_COUNT = 100;
+
 const NAVER_ID     = (process.env.NAVER_CLIENT_ID || '').trim();
 const NAVER_SECRET = (process.env.NAVER_CLIENT_SECRET || '').trim();
 
@@ -44,14 +50,14 @@ const ENDPOINTS = [
     url: 'https://naverapihub.apigw.ntruss.com/search/v1/news',
     label: 'NCP NAVER API Hub',
     headers: (id, secret) => ({ 'X-NCP-APIGW-API-KEY-ID': id, 'X-NCP-APIGW-API-KEY': secret }),
-    params: q => ({ query: q, display: String(MAX_ITEMS * 3), sort: 'sim', format: 'json' }),
+    params: q => ({ query: q, display: String(FETCH_COUNT), sort: 'sim', format: 'json' }),
   },
   {
     id: 'naver',
     url: 'https://openapi.naver.com/v1/search/news.json',
     label: '네이버 개발자센터 검색 API',
     headers: (id, secret) => ({ 'X-Naver-Client-Id': id, 'X-Naver-Client-Secret': secret }),
-    params: q => ({ query: q, display: String(MAX_ITEMS * 3), sort: 'sim' }),
+    params: q => ({ query: q, display: String(FETCH_COUNT), sort: 'sim' }),
   },
 ];
 
@@ -185,14 +191,78 @@ async function fromWeb(company) {
 }
 
 /* 같은 기사가 언론사별로 여러 번 걸린다. 제목이 거의 같으면 한 건으로 본다. */
+const titleKey = t => String(t || '').replace(/[\s\[\]()·…"'’“”]/g, '').slice(0, 25);
+
 function dedupe(items) {
   const seen = new Set();
   return items.filter(it => {
-    const k = it.title.replace(/[\s\[\]()·…"']/g, '').slice(0, 25);
+    const k = titleKey(it.title);
     if (!k || seen.has(k)) return false;
     seen.add(k);
     return true;
   });
+}
+
+/* ── 같은 사건을 다룬 기사 묶기 ─────────────────────────────
+   dedupe() 는 중복을 **버린다**. 그런데 여러 언론사가 같은 날 같은 사건을 쓴다는 것
+   자체가 "이 회사에서 그 주에 가장 큰 일" 이라는 신호다. 그래서 버리는 대신 **센다**.
+
+   ── 제목 앞부분 비교로는 안 묶인다 ──
+   dedupe() 처럼 '앞 25자가 같으면 동일' 로 보면 언론사가 붙이는 말머리 때문에 갈라진다.
+   실측: '삼성전자, HBM4 양산 시작' / '[단독] 삼성전자, HBM4 양산 시작한다' /
+   '삼성전자 HBM4 양산 시작 — 종합' 이 전부 다른 묶음이 됐다. 말머리(단독·종합)와
+   꼬리(한다)가 앞뒤로 붙어서 접두사가 어긋난다.
+
+   그래서 **단어 집합이 얼마나 겹치는지**로 본다(자카드 0.6 이상이면 같은 사건).
+   어순과 말머리에 흔들리지 않는다. 후보가 100건이라 전부 비교해도 부담이 없다.
+
+   대표 기사는 묶음에서 제목이 가장 짧은 것을 쓴다. 긴 쪽은 대개 언론사가 덧붙인
+   수식(부제·말머리)이 붙은 것이라 원 사건에서 멀어진다. */
+const TITLE_MARKERS = /\[[^\]]*\]|【[^】]*】|<[^>]*>|\((단독|종합|속보|영상|사진|인터뷰)\)|(단독|종합|속보)\s*[:·-]/g;
+
+function titleTokens(title) {
+  return new Set(
+    String(title || '')
+      .replace(TITLE_MARKERS, ' ')
+      .replace(/[^0-9A-Za-z가-힣]+/g, ' ')
+      .split(' ')
+      .map(w => w.replace(JOSA, ''))          // 조사를 떼야 '삼성전자가' == '삼성전자'
+      .filter(w => w.length >= 2)
+  );
+}
+
+function jaccard(a, b) {
+  if (!a.size || !b.size) return 0;
+  let inter = 0;
+  for (const t of a) if (b.has(t)) inter++;
+  return inter / (a.size + b.size - inter);
+}
+
+const SAME_EVENT = 0.6;
+
+function cluster(items) {
+  const groups = [];
+  for (const it of items) {
+    const toks = titleTokens(it.title);
+    if (!toks.size) continue;
+
+    const hit = groups.find(g => jaccard(g.tokens, toks) >= SAME_EVENT);
+    if (!hit) {
+      groups.push({ tokens: toks, item: { ...it, count: 1 } });
+      continue;
+    }
+    hit.item.count += 1;
+    // 날짜가 비어 있는 항목(웹 폴백)에는 다른 기사에서 얻은 날짜를 채워 준다
+    if (!hit.item.date && it.date) hit.item.date = it.date;
+    /* 대표를 짧은 제목으로 바꿀 때 요약·링크도 같이 옮긴다.
+       따로 두면 A 기사 제목에 B 기사 링크가 붙어 엉뚱한 기사로 이동한다. */
+    if (it.title.length < hit.item.title.length) {
+      hit.item.title = it.title;
+      hit.item.url = it.url;
+      hit.item.summary = it.summary;
+    }
+  }
+  return groups.map(g => g.item);
 }
 
 /* 회사명이 제목·요약 어디에도 없으면 다른 회사 기사다. 지원동기 근거로 쓰면
@@ -277,6 +347,111 @@ function newsKeywords(items, company) {
     .slice(0, 12);
 }
 
+/* ── 주간 대표 기사 ─────────────────────────────────────────
+   최근 5주를 한 주씩 끊어, 주마다 기사 한 건씩 최대 5건을 고른다.
+
+   왜 '많이 나온 기사' 인가 — 지원동기에 쓸 소재는 '최신 기사' 가 아니라 '그 회사에
+   실제로 일어난 큰 일' 이다. 여러 언론사가 같이 다뤘다는 게 그 대리 지표다.
+   한 주에 한 건으로 묶으면 큰 사건 하나에 기사가 몰려도 다른 주가 밀리지 않아서,
+   한 달치 흐름(무엇을 하다가 무엇으로 옮겨갔는지)이 보인다.
+
+   직무트렌드 가산 — 같은 주에 후보가 여럿이면 채용·조직·기술처럼 취업 준비와
+   맞닿은 기사를 올린다. 회사 홍보성 기사(신제품 출시, 사회공헌)보다 자소서에
+   쓸 거리가 많다. 단어를 지어내지 않고 제목·요약에 실제로 있는 말만 본다. */
+const WEEKS = 5;
+const DAY = 24 * 60 * 60 * 1000;
+
+/* ── 5주치를 실제로 받아오는 방법 ───────────────────────────
+   회사명만으로 검색하면 5주를 못 채운다. 실측(삼성전자): display=100 을 date 순으로
+   start=701 까지 넘겨도 전부 **같은 날** 기사였다. 큰 회사는 하루 기사량이 수백 건이라
+   최신순으로는 어제조차 닿지 않고, start 상한(1000)을 다 써도 마찬가지다.
+
+   대신 **검색어를 좁힌다**. '삼성전자 조직 인사' 처럼 주제를 붙이면 모집단이 줄어
+   같은 100건이 5주에 걸쳐 퍼진다. 실측으로 삼성전자 기준:
+     '삼성전자'          → 0주차만          (7/26~7/28)
+     '삼성전자 채용'      → 0·1·2주차        (7/13~7/28)
+     '삼성전자 조직 인사'  → 0~4주차 전부     (6/28~7/27)
+     '삼성전자 투자 신사업' → 0~4주차 전부     (3/19~7/28)
+
+   주제를 아무거나 고르지 않고 **취업 준비와 맞닿은 것**으로 골랐다. 신제품 출시나
+   사회공헌보다 채용·조직·투자 기사가 자소서에 쓸 거리가 많다. 즉 이 방식은
+   5주를 채우는 수단이면서 '직무트렌드 기사 모으기' 그 자체다. */
+const TREND_QUERIES = ['채용', '조직 인사', '투자 신사업', '실적'];
+
+const TREND_TERMS = [
+  '채용', '공채', '신입', '인재', '조직', '개편', '인사', '연봉', '복지', '근무',
+  '직무', '역량', '교육', '연수', '인턴', '워라밸', '재택', '사옥', '문화',
+  '투자', '인수', '합병', '진출', '신사업', '전략', '조직문화', '리더십',
+  'AI', 'DX', '디지털전환', '전환', '연구개발', 'R&D', '특허', '수주', '계약',
+];
+
+function trendScore(item) {
+  const text = `${item.title} ${item.summary || ''}`;
+  return TREND_TERMS.reduce((n, t) => n + (text.includes(t) ? 1 : 0), 0);
+}
+
+/* 기사 날짜 → 몇 주 전인가(0 = 이번 주). 범위 밖이면 null. */
+function weekIndex(dateStr, now) {
+  if (!dateStr) return null;
+  const t = Date.parse(dateStr);
+  if (Number.isNaN(t)) return null;
+  const diff = now - t;
+  if (diff < 0) return 0;                       // 발행일이 미래로 찍힌 기사 — 이번 주로 본다
+  const w = Math.floor(diff / (7 * DAY));
+  return w < WEEKS ? w : null;
+}
+
+/* 주별 대표 기사 목록. 날짜가 없는 항목(웹 폴백)은 주에 넣을 수 없으므로 제외한다.
+
+   ── 제목에 회사가 있는 기사를 우선한다 ──
+   relevant() 는 제목·요약 어디든 회사명이 있으면 통과시킨다. 목록으로 보여줄 때는
+   그래도 괜찮았는데, 주간 대표로 한 건만 뽑으니 **스쳐 지나간 언급**이 헤드라인 자리를
+   차지했다. 실측: '아주산업' 이번 주 대표가 "박춘원 전북은행장 무거운 발걸음 '왜'" 였다
+   (본문에 회사명이 한 번 나온 남의 기사).
+   제목에 회사명이 있으면 그 기사는 그 회사를 **다룬** 기사다. 그런 후보가 한 건이라도
+   있으면 그 안에서만 고르고, 하나도 없을 때만 나머지로 내려간다. */
+function weeklyPicks(clustered, now = Date.now(), company = '') {
+  const key = String(company).replace(/\s+/g, '');
+  const inTitle = it => !!key && String(it.title).replace(/\s+/g, '').includes(key);
+
+  const buckets = new Map();
+  for (const it of clustered) {
+    const w = weekIndex(it.date, now);
+    if (w == null) continue;
+    if (!buckets.has(w)) buckets.set(w, []);
+    buckets.get(w).push(it);
+  }
+
+  const picks = [];
+  for (let w = 0; w < WEEKS; w++) {
+    const all = buckets.get(w);
+    if (!all || !all.length) continue;
+
+    const titled = all.filter(inTitle);
+    const cands = titled.length ? titled : all;
+
+    /* 언론사 중복 수 → 직무트렌드 관련도 → 최신순.
+       중복 수가 1로 같은 주가 많은데, 그때 트렌드 점수가 실제 순위를 가른다. */
+    cands.sort((a, b) =>
+      b.count - a.count ||
+      trendScore(b) - trendScore(a) ||
+      String(b.date).localeCompare(String(a.date))
+    );
+    const top = cands[0];
+    picks.push({
+      ...top,
+      week: w,
+      weekLabel: w === 0 ? '이번 주' : `${w}주 전`,
+      outlets: top.count,          // 같은 사건을 다룬 기사 수 = 그 주의 화제성
+      trendHit: TREND_TERMS.filter(t => `${top.title} ${top.summary || ''}`.includes(t)).slice(0, 4),
+      alsoInWeek: all.length - 1,
+      /* 제목에 회사가 없으면 '스쳐 지나간 언급'일 수 있다. 화면에서 조심하라고 알린다. */
+      looseMatch: !inTitle(top),
+    });
+  }
+  return picks;
+}
+
 async function companyNews(companyName) {
   const company = String(companyName || '').trim();
   if (company.length < 2) {
@@ -288,7 +463,22 @@ async function companyNews(companyName) {
   const p = provider();
   let used = p;
   let raw = p === 'web' ? await fromWeb(company) : await fromNaver(company, p);
-  let items = dedupe(relevant(raw, company)).slice(0, MAX_ITEMS);
+  let pool = relevant(raw, company);
+  let items = dedupe(pool).slice(0, MAX_ITEMS);
+
+  /* 주간 정리를 만들려면 5주치 표본이 필요하다. 회사명 단독 검색으로는 안 되므로
+     주제를 붙인 검색을 함께 돌려 표본을 넓힌다(TREND_QUERIES 주석 참고).
+     이 검색들은 **표본을 넓히는 용도**라, 실패해도 위 items 는 그대로 간다. */
+  if (p !== 'web') {
+    const extra = await Promise.all(TREND_QUERIES.map(async topic => {
+      try {
+        return relevant(await fromNaver(`${company} ${topic}`, p), company);
+      } catch {
+        return [];                 // 한 주제가 실패해도 나머지로 계속한다
+      }
+    }));
+    pool = pool.concat(...extra);
+  }
 
   /* 네이버가 회사와 무관한 기사만 준 경우 웹 검색으로 한 번 더 시도한다.
      실측: '아주산업' 처럼 기사가 적은 회사는 네이버가 검색어를 '아주'+'산업' 으로 쪼개
@@ -298,11 +488,15 @@ async function companyNews(companyName) {
   if (p !== 'web' && !items.length) {
     try {
       const webRaw = await fromWeb(company);
-      const webItems = dedupe(relevant(webRaw, company)).slice(0, MAX_ITEMS);
-      if (webItems.length) { items = webItems; used = 'web-fallback'; }
+      const webPool = relevant(webRaw, company);
+      const webItems = dedupe(webPool).slice(0, MAX_ITEMS);
+      if (webItems.length) { items = webItems; pool = webPool; used = 'web-fallback'; }
     } catch { /* 폴백까지 실패하면 그냥 0건으로 둔다 — 화면에 안내가 나간다 */ }
   }
 
+  /* 주간 대표 기사 — 날짜가 있는 경로(네이버)에서만 만들어진다.
+     웹 폴백은 날짜를 못 주므로 빈 배열이 되고, 화면은 기존 목록만 보여준다. */
+  const weekly = weeklyPicks(cluster(pool), Date.now(), company);
   const keywords = newsKeywords(items, company);
   /* 실제로 어느 경로로 가져왔는지 — 시도 끝에 정해지므로 호출 뒤에 읽는다. */
   const finalProvider = used === 'web-fallback' ? 'web-fallback'
@@ -312,6 +506,13 @@ async function companyNews(companyName) {
     company,
     provider: finalProvider,
     items,
+    weekly,
+    weeklyNote: weekly.length
+      ? '최근 5주를 한 주씩 끊어, 그 주에 여러 언론사가 함께 다룬 기사를 한 건씩 골랐어요. '
+        + '기사가 몰린 주 = 그 회사에 큰 일이 있었던 주입니다. 흐름을 보고 **한 건만** 골라 쓰세요.'
+      : (finalProvider.startsWith('web')
+          ? '웹 검색 결과에는 발행일이 없어 주간 정리를 만들지 못했어요. 아래 목록에서 직접 골라 주세요.'
+          : '최근 5주 안에 발행된 기사를 찾지 못했어요.'),
     keywords,
     /* 키워드를 왜 쓰라는지까지 말해줘야 한다. 단어만 던지면 학생이 자소서에
        그냥 박아 넣고, 맥락 없는 단어는 오히려 감점이 된다. */
@@ -351,4 +552,8 @@ const MOTIVE_GUIDE = {
   followup: '그 사업이 지금 겪고 있는 어려움은 뭐라고 생각하나요?',
 };
 
-module.exports = { companyNews, provider, newsKeywords, tokenize, MOTIVE_GUIDE, MAX_ITEMS };
+module.exports = {
+  companyNews, provider, newsKeywords, tokenize, MOTIVE_GUIDE, MAX_ITEMS,
+  // 테스트용 — 주간 묶기는 외부 호출 없이 검증할 수 있어야 한다
+  cluster, weeklyPicks, weekIndex, trendScore, WEEKS,
+};

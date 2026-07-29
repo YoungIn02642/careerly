@@ -90,6 +90,65 @@ window.DB = (() => {
     }
   }
 
+  /* 회사명 자동완성 — '삼성' → 삼성전자 · 삼성물산 …
+     서버가 로컬 캐시만 보므로 입력 중 호출해도 빠르다. 실패는 빈 목록으로 삼켜서
+     자동완성이 안 뜰 뿐 직접 입력은 계속되게 한다. */
+  async function suggestCompanies(q, limit = 8) {
+    if (!q || !q.trim()) return [];
+    try {
+      const r = await api('GET', `/api/company/suggest?q=${encodeURIComponent(q.trim())}&limit=${limit}`);
+      return r.items || [];
+    } catch {
+      return [];
+    }
+  }
+
+  /* 직업 분류 카탈로그(한국고용직업분류 · 임금·전망 포함). 커리어 로드맵이 처음
+     열릴 때 한 번만 받는다. 200KB 라 초기 로딩에 얹지 않는다. */
+  let _jobsPromise = null;
+  function jobCatalog() {
+    if (!_jobsPromise) {
+      _jobsPromise = api('GET', '/api/jobs')
+        .catch(e => { _jobsPromise = null; throw e; });   // 실패하면 다시 시도할 수 있게
+    }
+    return _jobsPromise;
+  }
+
+  /* 학과 검색. 회사명(suggestCompanies)·자격증(suggestCerts)과 같은 규약이다 —
+     입력할 때마다 부르고(호출부가 debounce), { items } 를 받아 드롭다운에 그린다.
+     실패는 빈 목록으로 삼켜서 자동완성만 안 뜨고 직접 입력은 계속되게 한다. */
+  async function suggestMajors(q, limit = 8) {
+    if (!q || !q.trim()) return [];
+    try {
+      const r = await api('GET', `/api/majors/suggest?q=${encodeURIComponent(q.trim())}&limit=${limit}`);
+      return r.items || [];
+    } catch {
+      return [];
+    }
+  }
+
+  /* 자격증 검색. 위와 같은 규약. */
+  async function suggestCerts(q, limit = 8) {
+    if (!q || !q.trim()) return [];
+    try {
+      const r = await api('GET', `/api/certs/suggest?q=${encodeURIComponent(q.trim())}&limit=${limit}`);
+      return r.items || [];
+    } catch {
+      return [];
+    }
+  }
+
+  /* 목록에 없는 학과명 → 집계 분류. 규칙은 서버에 한 벌만 둔다
+     (프론트에도 복사하면 둘이 어긋났을 때 통계가 조용히 갈린다). */
+  async function classifyMajor(name) {
+    if (!name || !name.trim()) return null;
+    try {
+      return await api('GET', `/api/majors/classify?name=${encodeURIComponent(name.trim())}`);
+    } catch {
+      return null;
+    }
+  }
+
   /* 반정형 스펙 텍스트 → AI 분석(활동 정규화·정성 채점).
      서버가 Gemini 로 처리한다. 키 미설정이면 503 → 에러 메시지를 그대로 던진다. */
   async function analyzeCas(text) {
@@ -129,6 +188,21 @@ window.DB = (() => {
     return user;
   }
 
+  /* 소셜 가입 직후 멘토/멘티·닉네임을 채운다. 성공하면 캐시된 회원 정보도 갱신해야
+     화면이 곧바로 로그인 상태(역할 포함)로 보인다. */
+  async function completeOnboarding({ role, nickname }) {
+    const { user } = await api('POST', '/api/auth/onboarding', { role, nickname });
+    _me = user;
+    await refreshSpecs();
+    return user;
+  }
+
+  /* 결제 승인 — 결제창에서 돌아온 값을 서버로 넘겨 확정한다.
+     승인은 반드시 서버가 한다(프론트에서 '성공' 이라고 말만 하면 통과하면 안 된다). */
+  async function confirmPayment({ paymentKey, orderId, amount }) {
+    return api('POST', '/api/payments/confirm', { paymentKey, orderId, amount });
+  }
+
   async function logout() {
     await api('POST', '/api/auth/logout');
     _me = null;
@@ -163,7 +237,8 @@ window.DB = (() => {
   return {
     hydrate, refreshSpecs, refreshUsers,
     currentUser, getAllSpecs, getSpec, getUsers, countByRole, stats,
-    createUser, login, logout, updateUser, upsertSpec, classifyCompany, analyzeCas, coachJd, companyNews,
+    createUser, login, logout, completeOnboarding, confirmPayment, updateUser, upsertSpec, classifyCompany, suggestCompanies, suggestCerts, suggestMajors, classifyMajor, jobCatalog,
+    analyzeCas, coachJd, companyNews,
     seedDemo, seedRandom, clearAll, deleteUser,
   };
 })();

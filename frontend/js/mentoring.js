@@ -258,17 +258,32 @@ const SEED = {
     { mentee:'이도현', sub:'21학번 컴퓨터공학과', pal:'green',
       topic:'프론트엔드 신입 포트폴리오 리뷰 요청', want:'화상 30분', when:'요청일 2026.06.18' },
   ],
+  /* 내가 보낸 신청 — 멘토가 아직 수락/거절하지 않은 것.
+     예전에는 신청 버튼이 토스트만 띄우고 아무 데도 안 남겨서, 신청한 뒤
+     '내가 신청을 하긴 했나' 를 확인할 방법이 없었다. */
+  applied: [],
 };
 
 /* ── persisted state ────────────────────────────────────── */
 const LS_KEY = 'careerly_mentoring_v1';
 let STATE = loadState();
+/* 저장분에 목록 하나가 없으면 renderMentoring 이 STATE.received.length 에서 죽는다.
+   예전 가드는 completed 만 봐서, received 가 생기기 전에 저장된 상태가 남아 있으면
+   멘토링 페이지가 통째로 흰 화면이 됐다. 빠진 목록은 SEED 로 메운다. */
 function loadState() {
+  const seed = JSON.parse(JSON.stringify(SEED));
   try {
     const saved = JSON.parse(localStorage.getItem(LS_KEY));
-    if (saved && saved.completed) return saved;
+    if (saved && typeof saved === 'object') {
+      return {
+        ongoing:   Array.isArray(saved.ongoing)   ? saved.ongoing   : seed.ongoing,
+        completed: Array.isArray(saved.completed) ? saved.completed : seed.completed,
+        received:  Array.isArray(saved.received)  ? saved.received  : seed.received,
+        applied:   Array.isArray(saved.applied)   ? saved.applied   : seed.applied,
+      };
+    }
   } catch(e) {}
-  return JSON.parse(JSON.stringify(SEED));
+  return seed;
 }
 function saveState() { localStorage.setItem(LS_KEY, JSON.stringify(STATE)); }
 
@@ -282,6 +297,18 @@ function maskName(name){
   if (name.length <= 2) return name.charAt(0) + '*';
   return name.charAt(0) + '*'.repeat(name.length-2) + name.charAt(name.length-1);
 }
+/* 경력 타임라인의 세부내용.
+   주요내용(소속·직함 + 기간)과 세부내용(거기서 무엇을 했는가)이 예전에는 같은 굵기로
+   세 줄 쌓여 있어서, 훑어볼 때 어디가 회사고 어디가 한 일인지 구분되지 않았다.
+   세부내용은 목록으로 내린다.
+
+   한 칸에 여러 건이 쉼표로 들어오는 경우가 있다("웹 서비스 2건 출시, 해커톤 수상").
+   그건 항목을 나눠 각각 한 줄로 보여준다 — 나열된 성과는 세로로 읽어야 눈에 들어온다. */
+function tlDetails(s){
+  if (!s || !s.trim()) return '';
+  const items = s.split(/\s*,\s*/).map(x=>x.trim()).filter(Boolean);
+  return `<ul class="tl-detail">${items.map(x=>`<li>${escapeHTML(x)}</li>`).join('')}</ul>`;
+}
 function avatarStyle(pal){ const p = PALETTE[pal]||PALETTE.purple; return `background:${p.bg};color:${p.ink};`; }
 function tagStyle(tag){ const c = TAGCOLOR[tag]||TAGCOLOR['IT·개발']; return `background:${c.bg};color:${c.ink};`; }
 function starsHTML(n){
@@ -289,6 +316,8 @@ function starsHTML(n){
   for (let i=1;i<=5;i++) h += `<i class="ti ti-star-filled ${i<=Math.round(n)?'fill':''}"></i>`;
   return h+'</span>';
 }
+/* 기본 아이콘이 체크(성공) 표시다. **실패·취소·입력 안내에는 { icon: false } 를 줄 것** —
+   "결제를 취소했어요" 옆에 초록 체크가 붙으면 결제가 된 것처럼 읽힌다. */
 function toast(msg, opts){
   const icon = (opts && opts.icon === false) ? '' : '<i class="ti ti-circle-check-filled"></i>';
   const t = $('#toast'); t.innerHTML = `${icon}${msg}`;
@@ -573,10 +602,12 @@ function initChipsDrag(){
 /* ════════════ MENTOR PROFILE ════════════ */
 let currentMentor = null;
 let selectedFormat = 0;
+/* 화면 표시용. **청구 금액의 단일 출처는 서버**(routes/mentoring.js FORMATS)다.
+   id 가 서버와 맞아야 신청이 만들어진다 — 여기 값을 바꿔도 결제 금액은 안 바뀐다. */
 const FORMATS = [
-  { ic:'ti-video', name:'화상 30분', price:'20,000원', cost:20000 },
-  { ic:'ti-users', name:'대면 60분', price:'45,000원', cost:45000 },
-  { ic:'ti-message-2', name:'텍스트', price:'12,000원', cost:12000 },
+  { id:'video30',  ic:'ti-video',     name:'화상 30분', price:'20,000원', cost:20000 },
+  { id:'onsite60', ic:'ti-users',     name:'대면 60분', price:'45,000원', cost:45000 },
+  { id:'text',     ic:'ti-message-2', name:'텍스트',    price:'12,000원', cost:12000 },
 ];
 function openProfile(id){
   currentMentor = MENTORS.find(m=>m.id===id);
@@ -591,7 +622,7 @@ function openProfile(id){
         <div class="avatar ph-avatar" style="${avatarStyle(m.pal)}">${initial(m.name)}</div>
         <div class="ph-id">
           <div class="ph-name-row">
-            <span class="ph-name">${m.name} · ${m.cohort}</span>
+            <span class="ph-name">${maskName(m.name)} · ${m.cohort}</span>
             <span class="mc-tag" style="${tagStyle(m.tag)}">${m.tag}</span>
           </div>
           <div class="ph-job">${m.company} · ${m.role} · 경력 ${m.years}년차</div>
@@ -610,9 +641,11 @@ function openProfile(id){
           ${m.timeline.map(t=>`
             <div class="tl-item">
               <div class="tl-dot" style="background:${t.c}"></div>
-              <div class="tl-title">${t.t}</div>
-              <div class="tl-date">${t.d}</div>
-              ${t.s?`<div class="tl-desc">${t.s}</div>`:''}
+              <div class="tl-main">
+                <span class="tl-title">${t.t}</span>
+                <span class="tl-date">${t.d}</span>
+              </div>
+              ${tlDetails(t.s)}
             </div>`).join('')}
         </div>
       </div>
@@ -655,7 +688,7 @@ function openProfile(id){
             <div class="rv-avatar">${initial(r.name)}</div>
             <div class="rv-body">
               <div class="rv-top">
-                <span class="rv-name">${r.name} · ${r.cohort}</span>
+                <span class="rv-name">${maskName(r.name)} · ${r.cohort}</span>
                 <span class="rv-stars-mini">${ratingStarsMini(r.rating)}</span>
               </div>
               <div class="rv-text">${r.text}</div>
@@ -679,8 +712,78 @@ function submitRequest(){
     setTimeout(()=>navigate('login'), 700);
     return;
   }
-  toast(`${currentMentor.name} 멘토에게 신청을 보냈어요`);
-  setTimeout(()=>navigate('mentoring'), 800);
+  payAndApply();
+}
+
+/* ── 신청 → 결제 ──────────────────────────────────────────────
+   신청은 서버에 만들고(금액도 서버가 정한다), 결제창은 토스페이먼츠 SDK 가 띄운다.
+   결제창이 성공해도 **그때는 아직 결제가 끝난 게 아니다** — 서버가 승인 API 를
+   호출해야 돈이 움직인다. 그래서 성공 콜백에서 곧바로 서버 승인을 부른다.
+
+   결제가 꺼져 있으면(키 미설정) 결제 없이 신청만 남긴다. 개발 중에 결제 키가 없다고
+   멘토링 흐름 전체를 못 써 보면 곤란하다. */
+async function payAndApply(){
+  const m = currentMentor;
+  const f = FORMATS[selectedFormat] || FORMATS[0];
+  const msg = ($('#req-msg')?.value || '').trim();
+  const btn = $('.btn-submit-req');
+  if (btn) btn.disabled = true;
+
+  try {
+    const { request } = await api('POST', '/api/mentoring/requests', {
+      mentorId: m.id, mentorName: m.name, format: f.id, message: msg,
+    });
+
+    const cfg = await api('GET', '/api/payments/config');
+    if (!cfg.enabled) {
+      toast(`${maskName(m.name)} 멘토에게 신청을 보냈어요 (결제 미설정)`);
+      return goApplied();
+    }
+    if (!window.TossPayments) {
+      toast('결제 모듈을 불러오지 못했어요. 새로고침 후 다시 시도해 주세요.', { icon: false });
+      return;
+    }
+
+    const order = await api('POST', '/api/payments/prepare', { requestId: request.id });
+
+    /* successUrl/failUrl 대신 Promise 방식을 쓴다. 리다이렉트로 돌아오면 SPA 가
+       상태를 잃어서 어느 신청의 결제였는지 다시 찾아야 한다. */
+    const toss = TossPayments(cfg.clientKey);
+    await toss.requestPayment('카드', {
+      amount: order.amount,               // 서버가 정한 금액
+      orderId: order.orderId,
+      orderName: order.orderName,
+      customerName: order.customerName,
+      successUrl: location.origin + '/#mentoring',
+      failUrl: location.origin + '/#mentoring',
+    });
+    /* 여기까지 왔다는 건 결제창이 닫혔다는 뜻이다. 승인은 successUrl 로 돌아온 뒤
+       app.js 의 결제 복귀 처리(handlePaymentReturn)가 이어서 한다. */
+  } catch (e) {
+    /* 사용자가 결제창을 닫은 것은 오류가 아니다 — 에러 메시지를 띄우면 놀란다. */
+    if (e?.code === 'USER_CANCEL') toast('결제를 취소했어요', { icon: false });
+    else toast(e.message || '신청에 실패했어요', { icon: false });
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function goApplied(){
+  mentoringTab = 'applied';           // 신청 직후엔 그 목록을 보여준다
+  setTimeout(()=>navigate('mentoring'), 600);
+}
+
+/* mentoring.js 는 DB 를 거치지 않고 직접 부른다 — 이 화면만 쓰는 엔드포인트라
+   데이터 레이어에 올리면 db.js 가 화면별 함수로 불어난다. */
+async function api(method, path, body){
+  const res = await fetch(path, {
+    method, credentials: 'include',
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(()=>null);
+  if (!res.ok) throw new Error(data?.error || `요청 실패 (${res.status})`);
+  return data;
 }
 
 /* ════════════ MY MENTORING ════════════ */
@@ -702,10 +805,12 @@ function renderMentoring(){
   $('#tabcnt-ongoing').textContent = STATE.ongoing.length;
   $('#tabcnt-completed').textContent = STATE.completed.length;
   $('#tabcnt-received').textContent = STATE.received.length;
+  $('#tabcnt-applied').textContent = STATE.applied.length;
   $$('#mentoring-tabs .tab').forEach(t=>t.classList.toggle('on', t.dataset.tab===mentoringTab));
   const body = $('#mentoring-body');
   if (mentoringTab==='ongoing')   body.innerHTML = renderOngoing();
   if (mentoringTab==='completed') body.innerHTML = renderCompleted();
+  if (mentoringTab==='applied')   body.innerHTML = renderApplied();
   if (mentoringTab==='received')  body.innerHTML = renderReceived();
 }
 function switchTab(tab){ mentoringTab = tab; renderMentoring(); }
@@ -716,7 +821,7 @@ function renderOngoing(){
     <div class="session-item">
       <div class="avatar si-avatar" style="${avatarStyle(o.pal)}">${initial(o.mentor)}</div>
       <div class="si-body">
-        <div class="si-name-row"><span class="si-name">${o.mentor} 멘토</span><span class="si-sub">· ${o.sub}</span></div>
+        <div class="si-name-row"><span class="si-name">${maskName(o.mentor)} 멘토</span><span class="si-sub">· ${o.sub}</span></div>
         <div class="si-topic">${o.topic}</div>
       </div>
       <div class="si-right">
@@ -737,7 +842,7 @@ function renderCompleted(){
         <div class="avatar si-avatar" style="${avatarStyle(c.pal)}">${initial(c.mentor)}</div>
         <div class="dm-body">
           <div class="dm-head">
-            <div class="si-name-row"><span class="si-name">${c.mentor} 멘토</span><span class="si-sub">· ${c.sub}</span></div>
+            <div class="si-name-row"><span class="si-name">${maskName(c.mentor)} 멘토</span><span class="si-sub">· ${c.sub}</span></div>
             <span class="si-when">${c.date} 완료</span>
           </div>
           <div class="dm-topic">${c.topic}</div>
@@ -766,6 +871,41 @@ function renderCompleted(){
   }).join('')}</div>`;
 }
 
+/* 내가 보낸 신청 — 멘토 응답 대기 상태. 받은 요청과 같은 카드 모양을 쓰되
+   내가 할 수 있는 행동은 '신청 취소' 하나뿐이라 버튼도 하나만 둔다. */
+function renderApplied(){
+  if (!STATE.applied.length) {
+    return emptyState('ti-send','보낸 멘토링 신청이 없어요','멘토를 찾아 신청하면 여기에서 진행 상태를 볼 수 있어요');
+  }
+  return STATE.applied.map((a,i)=>`
+    <div class="req-card">
+      <div class="done-main" style="padding:0">
+        <div class="avatar si-avatar" style="${avatarStyle(a.pal)}">${initial(a.mentor)}</div>
+        <div class="dm-body">
+          <div class="si-name-row">
+            <span class="si-name">${maskName(a.mentor)} 멘토</span><span class="si-sub">· ${a.sub}</span>
+          </div>
+          <div class="dm-topic">${escapeHTML(a.topic)}</div>
+          <div class="si-topic" style="margin-top:6px;color:var(--color-text-tertiary)">
+            ${escapeHTML(a.want)} · ${escapeHTML(a.cost)} · ${escapeHTML(a.when)}
+          </div>
+          ${a.msg ? `<div class="dm-topic" style="margin-top:6px">“${escapeHTML(a.msg)}”</div>` : ''}
+          <div class="req-actions">
+            <div class="badge amber">멘토 응답 대기</div>
+            <button class="btn-reject" onclick="cancelApplied(${i})">신청 취소</button>
+          </div>
+        </div>
+      </div>
+    </div>`).join('');
+}
+function cancelApplied(i){
+  const a = STATE.applied[i];
+  if (!a) return;
+  STATE.applied.splice(i,1);
+  saveState(); renderMentoring();
+  toast(`${maskName(a.mentor)} 멘토 신청을 취소했어요`);
+}
+
 function renderReceived(){
   if (!STATE.received.length) return emptyState('ti-inbox','받은 멘토링 요청이 없어요','');
   return STATE.received.map((r,i)=>`
@@ -773,7 +913,7 @@ function renderReceived(){
       <div class="done-main" style="padding:0">
         <div class="avatar si-avatar" style="${avatarStyle(r.pal)}">${initial(r.mentee)}</div>
         <div class="dm-body">
-          <div class="si-name-row"><span class="si-name">${r.mentee} 멘티</span><span class="si-sub">· ${r.sub}</span></div>
+          <div class="si-name-row"><span class="si-name">${maskName(r.mentee)} 멘티</span><span class="si-sub">· ${r.sub}</span></div>
           <div class="dm-topic">${r.topic}</div>
           <div class="si-topic" style="margin-top:6px;color:var(--color-text-tertiary)">희망 형식 ${r.want} · ${r.when}</div>
           <div class="req-actions">
@@ -784,8 +924,27 @@ function renderReceived(){
       </div>
     </div>`).join('');
 }
-function acceptReq(i){ const r=STATE.received[i]; toast(`${r.mentee} 멘티의 요청을 수락했어요`); STATE.received.splice(i,1); saveState(); renderMentoring(); }
-function rejectReq(i){ STATE.received.splice(i,1); saveState(); renderMentoring(); toast('요청을 거절했어요'); }
+/* 수락은 '받은 요청' 에서 빼고 **'진행 중' 으로 옮긴다**.
+   예전에는 splice 만 해서, 수락을 누르면 요청이 어느 목록에도 남지 않고
+   통째로 사라졌다. 토스트만 뜨고 흔적이 없어서 거절과 구분이 안 됐다. */
+function acceptReq(i){
+  const r = STATE.received[i];
+  if (!r) return;
+  STATE.received.splice(i,1);
+  STATE.ongoing.unshift({
+    mentor: r.mentee, sub: r.sub, pal: r.pal, topic: r.topic,
+    status: '일정 조율 중', badge: 'amber', when: r.when,
+  });
+  saveState(); renderMentoring();
+  toast(`${maskName(r.mentee)} 멘티의 요청을 수락했어요`);
+}
+function rejectReq(i){
+  const r = STATE.received[i];
+  if (!r) return;
+  STATE.received.splice(i,1);
+  saveState(); renderMentoring();
+  toast('요청을 거절했어요');
+}
 
 function emptyState(ic,t,d){ return `<div class="empty-state"><div class="ic"><i class="ti ${ic}"></i></div><div class="t">${t}</div>${d?`<div class="d">${d}</div>`:''}</div>`; }
 function escapeHTML(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -825,7 +984,7 @@ function openRating(id){
   const c = STATE.completed.find(x=>x.id===id);
   $('#rate-avatar').style.cssText = avatarStyle(c.pal);
   $('#rate-avatar').textContent = initial(c.mentor);
-  $('#rate-name').textContent = `${c.mentor} 멘토`;
+  $('#rate-name').textContent = `${maskName(c.mentor)} 멘토`;
   $('#rate-sub').textContent = `${c.sub} · ${c.topic.split(' · ')[0]}`;
   $('#rate-review').value = c.review || '';
   setStarUI(0); $('#star-caption').textContent = '별점을 선택해 주세요';
@@ -838,7 +997,7 @@ function hoverStar(n){ setStarUI(n); $('#star-caption').textContent = RATE_CAPTI
 function leaveStar(){ setStarUI(rateValue); $('#star-caption').textContent = rateValue?RATE_CAPTIONS[rateValue]:'별점을 선택해 주세요'; }
 function pickStar(n){ rateValue = n; setStarUI(n); $('#star-caption').textContent = RATE_CAPTIONS[n]; }
 function saveRating(){
-  if (!rateValue){ toast('별점을 선택해 주세요'); return; }
+  if (!rateValue){ toast('별점을 선택해 주세요', { icon: false }); return; }
   const c = STATE.completed.find(x=>x.id===rateTargetId);
   c.rating = rateValue; c.review = $('#rate-review').value;
   saveState(); closeModal('rate-modal'); renderMentoring();

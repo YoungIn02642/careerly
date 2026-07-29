@@ -17,7 +17,10 @@
 const PROVIDER     = (process.env.CAS_AI_PROVIDER || 'ollama').toLowerCase();
 const OLLAMA_HOST  = process.env.OLLAMA_HOST || 'http://127.0.0.1:11434';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen3:8b';
-const GROQ_MODEL   = 'llama-3.3-70b-versatile';
+
+/* Groq 는 모델을 예고 후 폐기(decommission)한다. 폐기되면 400/404 가 오는데,
+   그때 코드를 고쳐 배포하지 않아도 되도록 env 로 뺀다. */
+const GROQ_MODEL   = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 
 /* 로컬 8B 는 CPU/iGPU 에서 느리다. 프론트가 무한 대기하지 않게 상한을 둔다. */
 const TIMEOUT_MS = Number(process.env.CAS_AI_TIMEOUT_MS || 240000);
@@ -69,18 +72,53 @@ const modelLabel = () => (PROVIDER === 'groq' ? GROQ_MODEL : (_resolvedModel || 
    짧은 분류 작업 기준 — 긴 입력을 넣는 쪽이 늘려 쓴다). */
 async function callModel(text, system, { num_ctx = 2048, num_predict = 512 } = {}) {
   if (PROVIDER === 'groq') {
-    const key = process.env.GROQ_API_KEY;
-    if (!key) cfgError('GROQ_API_KEY 가 없습니다.');
+    const key = (process.env.GROQ_API_KEY || '').trim();
+    if (!key) {
+      cfgError('GROQ_API_KEY 가 없습니다. https://console.groq.com/keys 에서 발급받아 '
+             + 'backend/.env 의 GROQ_API_KEY 에 넣어주세요.');
+    }
     const Groq = require('groq-sdk');                 // 지연 require — ollama 만 쓸 땐 안 불린다
-    const completion = await new Groq({ apiKey: key }).chat.completions.create({
-      model: GROQ_MODEL,
-      temperature: 0.2,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: text },
-      ],
-    });
+
+    /* Ollama 쪽과 달리 여기엔 오류 처리가 없었다. 그래서 키 오타·무료쿼터 소진·모델
+       폐기가 전부 "AI 분석에 실패했습니다"(500) 한 줄로 뭉개져, 사용자가 무엇을
+       해야 하는지 알 수 없었다. 상태코드별로 할 일이 다르므로 갈라 준다. */
+    let completion;
+    try {
+      completion = await new Groq({ apiKey: key, timeout: TIMEOUT_MS, maxRetries: 1 })
+        .chat.completions.create({
+          model: GROQ_MODEL,
+          temperature: 0.2,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: text },
+          ],
+        });
+    } catch (e) {
+      const status = e?.status;
+      const detail = String(e?.error?.error?.message || e?.message || '').slice(0, 200);
+      let msg, out;
+
+      if (status === 401 || status === 403) {
+        msg = `Groq 인증에 실패했습니다(HTTP ${status}). GROQ_API_KEY 가 올바른지 확인해 주세요 `
+            + `— https://console.groq.com/keys`;
+        out = 503;                                    // 키 문제 = 설정 문제
+      } else if (status === 429) {
+        msg = 'Groq 무료 쿼터를 초과했습니다. 잠시 뒤 다시 시도해 주세요.';
+        out = 429;                                    // 재시도하면 되는 상황 — 503 과 구분한다
+      } else if (status === 404 || /decommission|not.*exist|model/i.test(detail)) {
+        msg = `Groq 모델 "${GROQ_MODEL}" 을(를) 쓸 수 없습니다(${detail}). `
+            + `폐기된 모델일 수 있습니다 — .env 의 GROQ_MODEL 을 현행 모델로 바꿔주세요 `
+            + `(목록: https://console.groq.com/docs/models).`;
+        out = 503;
+      } else {
+        msg = `Groq 호출 실패${status ? ` (HTTP ${status})` : ''}: ${detail}`;
+        out = 502;
+      }
+      const err = new Error(msg);
+      err.status = out;
+      throw err;
+    }
     return completion.choices?.[0]?.message?.content || '{}';
   }
 

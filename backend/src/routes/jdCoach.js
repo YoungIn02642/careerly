@@ -84,7 +84,7 @@ router.post('/coach', async (req, res) => {
       if (!entries.length) {
         const status = e?.status || 502;
         return res.status(status).json({
-          error: status === 503 ? e.message : 'AI 분석에 실패했습니다.',
+          error: (status === 503 || status === 429) ? e.message : 'AI 분석에 실패했습니다.',
           detail: e.message,
         });
       }

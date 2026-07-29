@@ -35,7 +35,9 @@ const OUTCOME_RULES = [
 ];
 
 const ROLE_RULES = [
-  ['팀장',   /팀장|리더|조장|PM|프로젝트\s*매니저|대표/i],
+  /* '대표'는 단독으로 두면 "대표활동1) …" 같은 목록 머리말에 걸려 팀원이 팀장이 된다.
+     (실측: 폼 placeholder 가 유도하는 표기 자체가 이 함정을 밟았다) */
+  ['팀장',   /팀장|리더|조장|PM|프로젝트\s*매니저|대표(?!\s*활동)/i],
   ['임원진', /회장|부회장|임원|운영진|기장/],
   ['개인',   /개인|혼자|단독/],
   ['팀원',   /팀원|참가|참여/],
@@ -73,6 +75,11 @@ function normalizeRole(roleKind, role) {
 }
 
 const firstMatch = (rules, s) => (rules.find(([, re]) => re.test(s)) || [null])[0];
+
+/* 성과 표현 → enum. AI 가 낸 성과를 원문 근거로 검증할 때 쓴다(casAnalyze).
+   모델은 근거 없이 "전환, 정규직 합격" 같은 높은 배수의 성과를 지어내는 일이 있다
+   (실측 5회 중 3회). 점수를 직접 밀어올리므로 원문에 근거가 있을 때만 인정한다. */
+const outcomeFromText = text => (text ? firstMatch(OUTCOME_RULES, String(text)) : null);
 
 /* "3개월", "1년", "6주" → cas.js 기간 enum. 범위("3~6개월")는 큰 쪽을 기준으로 본다. */
 function parseDuration(line) {
@@ -176,10 +183,15 @@ const NAME_NOISE_DURATION = [
 const NAME_NOISE_WORDS =
   /팀장|팀원|임원진|운영진|회장|부회장|조장|동아리원|일반학회원|개인|단독|혼자|참가|참여|수상|입상|대상|최우수상|우수상|장려상|금상|은상|동상|특별상|논문\s*게재|깃헙|깃허브|github|오픈\s*소스|산출물|공개|발표|배포|출시|시연|포스터|결과물\s*없음|정규직\s*합격/gi;
 
-const tidy = s => s.replace(/[,·~\-–]+/g, ' ').replace(/\s+/g, ' ').trim();
+/* '/' 도 구분자로 본다 — "카카오 인턴 / 6개월 / 팀원" 에서 기간·역할을 걷어내면
+   "카카오 인턴 / /" 처럼 슬래시만 남는다. */
+const tidy = s => s.replace(/[,·~\-–/]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+/* 목록 머리말 — "1)", "1.", "대표활동1)", "활동 2." 등. 활동명이 아니다. */
+const LIST_PREFIX = /^\s*(?:대표\s*)?(?:활동)?\s*\d+\s*[.)]\s*/;
 
 function extractName(line) {
-  let s = line.replace(/^\s*\d+\s*[.)]\s*/, '');
+  let s = line.replace(LIST_PREFIX, '');
   for (const re of NAME_NOISE_DURATION) s = s.replace(re, ' ');
   const withoutDuration = tidy(s);
 
@@ -243,16 +255,44 @@ function parseQuant(text) {
   };
 }
 
-/* 텍스트 전체 → { activities, quant, unparsedLines }
-   unparsedLines 는 규칙이 유형을 못 잡은 줄 — AI 가 맡을 몫이다. */
+/* ── 한 줄에 활동이 여러 개 들어 있는 경우 ──────────────────────────
+   입력을 '\n' 로만 자르므로 줄글 한 문단은 통째로 한 줄이다. parseLine 은 그 줄에서
+   먼저 맞는 유형 하나로 활동 1건을 만들어 버리는데, 그러면 이런 일이 벌어진다:
+
+     "카카오에서 6개월 인턴 … 공모전에서 대상 … 2년 동안 동아리 스터디장"
+       → 인턴십 1건 / 기간 '1년이상'(동아리 것) / 성과 '수상'(공모전 것)
+
+   활동 3건이 1건으로 합쳐지고, 남의 기간·성과가 인턴 점수에 붙는다. 게다가
+   unparsedLines 가 비어서 AI 는 호출되지도 않았다 — 못 읽었는데 "다 읽었다"고
+   보고하는 셈이라, 에러 없이 조용히 틀린 점수가 나갔다.
+
+   그래서 유형 신호가 2개 이상인 줄은 규칙이 단정하지 않고 AI 에게 넘긴다.
+   다만 규칙 결과를 버리지는 않는다(fallbackActivities) — AI 키가 없거나 오프라인일 때
+   그 줄이 통째로 사라지면 지금보다 나빠지기 때문이다. 호출부가 AI 성공 시에는 버리고
+   실패 시에만 쓴다. */
+function countTypeSignals(line) {
+  return TYPE_RULES.filter(([, re]) => re.test(line)).length;
+}
+
+/* 텍스트 전체 → { activities, quant, unparsedLines, fallbackActivities }
+   activities        — 규칙이 확신하는 것(줄 하나에 활동 하나)
+   unparsedLines     — 규칙이 못 읽었거나 단정할 수 없는 줄. AI 가 맡을 몫이다.
+   fallbackActivities— 단정하지 않기로 한 줄의 규칙 해석. AI 가 실패했을 때만 쓴다. */
 function ruleParse(text) {
   const lines = String(text || '').split('\n').map(l => l.trim()).filter(Boolean);
   const activities = [];
   const unparsedLines = [];
+  const fallbackActivities = [];
 
   for (const line of lines) {
     const a = parseLine(line);
-    if (a) { activities.push(a); continue; }
+    if (a) {
+      if (countTypeSignals(line) < 2) { activities.push(a); continue; }
+      // 활동이 여러 개 섞인 줄 — 규칙 해석은 예비로만 남기고 AI 에게 맡긴다.
+      fallbackActivities.push({ ...a, assumed: true });
+      unparsedLines.push(line);
+      continue;
+    }
 
     /* "토익 920 오픽 IH 학점 4.1/4.5" 같은 정량 전용 줄을 AI 에 넘기면
        type='other' 짜리 가짜 활동을 만들어 낸다. 정량으로 읽힌 줄은 여기서 끝낸다. */
@@ -261,7 +301,7 @@ function ruleParse(text) {
 
     if (line.length > 3) unparsedLines.push(line);
   }
-  return { activities, quant: parseQuant(text), unparsedLines };
+  return { activities, quant: parseQuant(text), unparsedLines, fallbackActivities };
 }
 
-module.exports = { ruleParse, parseDuration, durationFromSnippets, typicalDuration, normalizeRole, TYPICAL_DURATION, DEFAULT_ROLE, DEFAULT_STAGE, DEFAULT_OUTCOME };
+module.exports = { ruleParse, countTypeSignals, parseDuration, outcomeFromText, durationFromSnippets, typicalDuration, normalizeRole, TYPICAL_DURATION, DEFAULT_ROLE, DEFAULT_STAGE, DEFAULT_OUTCOME };
