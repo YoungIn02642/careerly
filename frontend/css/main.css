@@ -990,6 +990,10 @@ input.input-error { border-color: var(--c-red); }
   border-bottom: 2px solid transparent; margin-bottom: -1px;
   transition: color .15s, border-color .15s;
 }
+/* display 를 준 요소는 hidden 속성이 먹지 않는다(UA 의 [hidden]{display:none} 을
+   클래스가 이긴다). '멘토 페이지' 탭은 initMypage() 가 hidden 으로 끄는데,
+   이 줄이 없으면 멘티에게도 그대로 보인다. */
+.mp-tab[hidden] { display: none; }
 .mp-tab:hover { color: var(--text-s); }
 .mp-tab.on { color: var(--brand); border-bottom-color: var(--brand); }
 .mp-tab i { font-size: 17px; }
