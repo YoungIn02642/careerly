@@ -91,15 +91,37 @@ window.CASHero = (() => {
   }
 
   /* 저장된 값은 'cs' · 'backend' 같은 id 라 그대로 쓰면 화면에 영문이 노출된다.
-     라벨은 스펙 입력 폼의 목록이 단일 출처다. */
+     라벨은 스펙 입력 폼의 목록이 단일 출처다.
+
+     스펙에는 두 세대의 직무 값이 섞여 있다.
+       새 스펙 — jobMajor/jobMiddles (KECO 코드, 커리어 로드맵과 같은 분류)
+       옛 스펙 — field/job (하드코딩 id). 1,188건이 이 형태다
+     새 값을 먼저 보고, 없으면 옛 값으로 떨어진다. 둘 다 없으면 전공만 쓴다. */
   function labelOf(spec) {
     const SF = window.SpecForm || {};
     const dept = (SF.DEPTS || []).find(d => d.id === spec.dept)?.label || '내 전공';
-    const jobPairs   = (SF.JOB_OPTIONS   || {})[spec.field] || [];
-    const fieldPairs = (SF.FIELD_OPTIONS || {})[spec.dept]  || [];
-    const job   = jobPairs.find(([id]) => id === spec.job)?.[1];
-    const field = fieldPairs.find(([id]) => id === spec.field)?.[1];
-    const sub = job || field;
+
+    let sub = null;
+
+    /* KECO 트리는 로드맵을 열어야 받아진다(비동기). 아직 안 받았으면 ready() 가
+       false 라 여기서 조용히 옛 경로로 떨어진다 — 라벨 하나 때문에 기다리지 않는다. */
+    if (window.KECO && KECO.ready() && spec.jobMajor) {
+      const mids = Array.isArray(spec.jobMiddles) ? spec.jobMiddles : [];
+      const names = mids
+        .map(c => KECO.middleById(spec.jobMajor, c)?.name)
+        .filter(Boolean);
+      /* 여러 개 고를 수 있다. 다 붙이면 제목이 길어지므로 첫 하나 + 나머지 개수. */
+      if (names.length) sub = names.length > 1 ? `${names[0]} 외 ${names.length - 1}` : names[0];
+      else sub = KECO.byId(spec.jobMajor)?.name || null;
+    }
+
+    if (!sub) {
+      const jobPairs   = (SF.JOB_OPTIONS   || {})[spec.field] || [];
+      const fieldPairs = (SF.FIELD_OPTIONS || {})[spec.dept]  || [];
+      sub = jobPairs.find(([id]) => id === spec.job)?.[1]
+         || fieldPairs.find(([id]) => id === spec.field)?.[1]
+         || null;
+    }
     return sub ? `${dept} · ${sub} 기준` : `${dept} 기준`;
   }
 

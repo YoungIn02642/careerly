@@ -195,6 +195,22 @@ async function migrateCatalog() {
     MAJORS.map(([name, dept]) => ({ name, dept })), { update: ['dept'] });
   console.log(`  majors ${MAJORS.length}개 ✓`);
 
+  /* 학교 — 아직 수집 전이면 건너뛴다. 키(CAREERNET_API_KEY)가 없어도 이관 전체가
+     멈추면 안 된다. 카탈로그가 비면 학교 자동완성만 안 뜨고 직접 입력은 계속된다. */
+  const UNIV_SRC = path.join(DATA, 'universities.json');
+  if (fs.existsSync(UNIV_SRC)) {
+    const univ = JSON.parse(fs.readFileSync(UNIV_SRC, 'utf8')).universities || [];
+    await bulkInsert('universities', ['name', 'gubun', 'region', 'est'],
+      univ.map(u => ({
+        name: u.name, gubun: u.gubun ?? null, region: u.region ?? null, est: u.est ?? null,
+      })),
+      { update: ['gubun', 'region', 'est'] });
+    console.log(`  universities ${univ.length}개교 ✓`);
+  } else {
+    console.log('  universities — universities.json 이 없어 건너뜀 '
+      + '(node scripts/fetch-universities.js 로 수집)');
+  }
+
   // 기업 분류 — 가장 크다(3만 건)
   const cc = require('../src/company-classify');
   const map = cc.reloadCache().map;
@@ -244,8 +260,8 @@ async function wipe() {
   console.log('--fresh — 기존 행을 지웁니다');
   /* 외래키 때문에 자식부터 지운다. 카탈로그는 부모(job_majors)를 지우면 CASCADE 로 따라간다. */
   for (const t of ['spec_certs', 'spec_activities', 'mentoring_requests', 'user_specs',
-                   'sessions', 'profiles', 'users', 'certs', 'majors', 'companies', 'jobs',
-                   'job_middles', 'job_majors']) {
+                   'sessions', 'profiles', 'users', 'certs', 'majors', 'universities',
+                   'companies', 'jobs', 'job_middles', 'job_majors']) {
     await query(`DELETE FROM \`${t}\``);
   }
 }

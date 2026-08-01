@@ -17,6 +17,7 @@
 const { query, queryOne } = require('./mysql');
 const { normalize, CORP_TYPE_ID, DEFAULT_TYPE } = require('./company-classify');
 const { RULES } = require('./major-catalog');
+const jobFilter = require('./job-filter');
 
 /* LIKE 특수문자 무력화. 백슬래시도 함께 막아야 '\%' 같은 입력이 새지 않는다. */
 const esc = s => String(s || '').replace(/[\\%_]/g, c => '\\' + c);
@@ -72,6 +73,25 @@ async function searchMajors(q, limit = 8) {
 async function majorCatalog() {
   const rows = await query('SELECT name, dept FROM majors ORDER BY name');
   return { count: rows.length, majors: rows.map(r => ({ name: r.name, dept: r.dept })) };
+}
+
+// ── 학교 ────────────────────────────────────────────────────
+/* 학과 검색과 같은 규약이다 — { items } 를 주고 화면이 드롭다운에 그린다.
+   목록에 없는 학교도 직접 입력할 수 있으므로 못 찾는 것은 실패가 아니다. */
+async function searchUniversities(q, limit = 8) {
+  const s = String(q || '').trim();
+  if (!s) return [];
+  const e = esc(s);
+  const rows = await query(
+    `SELECT name, gubun, region FROM universities
+     WHERE name LIKE ? ESCAPE '\\\\' ${RANK} LIMIT ${limitOf(limit)}`,
+    [`%${e}%`, `${e}%`]);
+  /* sub 는 드롭다운 오른쪽에 흐리게 붙는 설명이다. 같은 이름의 분교·캠퍼스를
+     가릴 수 있게 지역을 함께 보여준다. */
+  return rows.map(r => ({
+    name: r.name,
+    sub: [r.gubun, r.region].filter(Boolean).join(' · ') || '',
+  }));
 }
 
 /* 학과명 → 통계 분류. 목록에 있으면 그 값을, 없으면 키워드 규칙으로 정한다.
@@ -180,7 +200,11 @@ async function jobCatalog() {
     });
   });
 
-  _jobTree = {
+  /* 대학생 취업 선택지가 아닌 분류·직업을 걸러낸다(job-filter.js).
+     DB 에는 공식 분류 원본을 그대로 두고 **내보낼 때만** 거른다 — 기준이 바뀌면
+     그 파일의 목록만 고치면 되고, 다시 수집할 필요가 없다.
+     커리어 로드맵과 스펙 입력이 둘 다 이 응답을 쓰므로 여기 한 곳이면 양쪽이 같아진다. */
+  _jobTree = jobFilter.filterTree({
     empty: false,
     counts: { majors: majors.length, middles: middles.length, jobs: jobs.length },
     wageUnit: '만원',
@@ -188,7 +212,7 @@ async function jobCatalog() {
       code: M.code, no: M.no, name: M.name, emoji: M.emoji, desc: M.descr,
       middles: midsByMajor.get(M.code) || [],
     })),
-  };
+  });
   return _jobTree;
 }
 
@@ -205,6 +229,7 @@ function wageRange(list) {
 module.exports = {
   searchCerts, certCatalog,
   searchMajors, majorCatalog, deptOfMajor,
+  searchUniversities,
   suggestCompanies, classifyCompany, companyStats,
   jobCatalog,
 };

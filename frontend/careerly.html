@@ -66,7 +66,9 @@
       <span class="nav-user-name" id="nav-user-name" onclick="navigate('mypage')">홍길동님</span>
       <button class="btn-nav-logout" onclick="handleLogout()">로그아웃</button>
     </div>
-    <button class="btn-nav-biz" onclick="navigate('backoffice')">백오피스</button>
+    <!-- 관리자에게만 보인다. updateNavAuth() 가 켜고 끈다.
+         숨기는 것은 편의일 뿐이고 실제 차단은 서버(requireAdmin)가 한다. -->
+    <button class="btn-nav-biz" id="nav-biz" onclick="navigate('backoffice')" hidden>백오피스</button>
     <button class="nav-burger" id="nav-burger" onclick="toggleNavDrawer()"
             aria-label="메뉴 열기" aria-expanded="false" aria-controls="nav-drawer">
       <i class="ti ti-menu-2"></i>
@@ -177,12 +179,14 @@
 
     <!-- QUICK LINKS -->
     <section class="home-quick">
-      <div class="ql acc-a" onclick="navigate('search')"><div class="ql-ic"><i class="ti ti-users-group"></i></div><div class="ql-label">멘토 찾기</div></div>
-      <div class="ql acc-b" onclick="navigate('career')"><div class="ql-ic"><i class="ti ti-map-2"></i></div><div class="ql-label">커리어 로드맵</div></div>
-      <div class="ql acc-a" onclick="navigate('mypage')"><div class="ql-ic"><i class="ti ti-file-pencil"></i></div><div class="ql-label">스펙 입력</div></div>
-      <div class="ql acc-b" onclick="navigate('mentoring')"><div class="ql-ic"><i class="ti ti-messages"></i></div><div class="ql-label">내 멘토링</div></div>
-      <div class="ql acc-a" onclick="navigate('career')"><div class="ql-ic"><i class="ti ti-chart-bar"></i></div><div class="ql-label">직군별 통계</div></div>
+      <!-- 순서는 상단 네비(.nav-links)와 같게 맞춘다. 네비에 없는 '스펙 입력'만 맨 뒤.
+           acc-a / acc-b 는 색을 번갈아 주는 클래스라 순서를 바꾸면 같이 다시 매겨야 한다. -->
+      <div class="ql acc-a" onclick="navigate('career')"><div class="ql-ic"><i class="ti ti-map-2"></i></div><div class="ql-label">커리어 로드맵</div></div>
       <div class="ql acc-b" onclick="navigate('dashboard')"><div class="ql-ic"><i class="ti ti-target-arrow"></i></div><div class="ql-label">CAS 점수</div></div>
+      <div class="ql acc-a" onclick="navigate('jd')"><div class="ql-ic"><i class="ti ti-file-text"></i></div><div class="ql-label">자소서 코치</div></div>
+      <div class="ql acc-b" onclick="navigate('search')"><div class="ql-ic"><i class="ti ti-users-group"></i></div><div class="ql-label">멘토 찾기</div></div>
+      <div class="ql acc-a" onclick="navigate('mentoring')"><div class="ql-ic"><i class="ti ti-messages"></i></div><div class="ql-label">내 멘토링</div></div>
+      <div class="ql acc-b" onclick="navigate('mypage')"><div class="ql-ic"><i class="ti ti-file-pencil"></i></div><div class="ql-label">스펙 입력</div></div>
     </section>
 
     <!-- CAROUSEL -->
@@ -377,7 +381,7 @@
 
       <!-- 회원 유형 선택 -->
       <div class="role-pick">
-        <div class="role-pick-label">회원 유형을 선택해주세요</div>
+        <div class="role-pick-label">회원 유형을 선택해주세요<span class="req" aria-hidden="true">*</span></div>
         <div class="role-cards">
           <label class="role-card" data-role="mentee">
             <input type="radio" name="role" value="mentee" checked />
@@ -401,38 +405,61 @@
       </div>
 
       <div class="form-group">
-        <label>아이디</label>
-        <input type="text" id="su-username" placeholder="영문, 숫자, 밑줄 포함 4~20자" autocomplete="username" />
+        <label>아이디<span class="req" aria-hidden="true">*</span></label>
+        <div class="input-with-btn">
+          <input type="text" id="su-username" placeholder="영문, 숫자, 밑줄 포함 4~20자"
+                 autocomplete="username" required aria-required="true" />
+          <button type="button" class="btn-inline" id="su-username-check"
+                  onclick="checkUsernameDup()">중복확인</button>
+        </div>
         <span class="field-error" id="err-su-username"></span>
+        <span class="field-note" id="su-username-note"></span>
       </div>
       <div class="form-group">
-        <label>비밀번호</label>
-        <input type="password" id="su-password" placeholder="영문+숫자+특수문자 포함 8~20자" autocomplete="new-password" />
+        <label>비밀번호<span class="req" aria-hidden="true">*</span></label>
+        <input type="password" id="su-password" placeholder="영문+숫자 포함 8~20자"
+               autocomplete="new-password" required aria-required="true" />
         <span class="field-error" id="err-su-password"></span>
-        <span class="field-hint">영문, 숫자, 특수문자(!@#$%^&amp;* 등)를 모두 포함해야 합니다.</span>
+        <span class="field-hint">영문과 숫자를 모두 포함해야 합니다. 특수문자도 쓸 수 있어요.</span>
       </div>
       <div class="form-group">
-        <label>비밀번호 확인</label>
-        <input type="password" id="su-password-confirm" placeholder="비밀번호를 다시 입력하세요" autocomplete="new-password" />
+        <label>비밀번호 확인<span class="req" aria-hidden="true">*</span></label>
+        <input type="password" id="su-password-confirm" placeholder="비밀번호를 다시 입력하세요"
+               autocomplete="new-password" required aria-required="true" />
         <span class="field-error" id="err-su-password-confirm"></span>
       </div>
       <div class="form-group">
-        <label>이름</label>
-        <input type="text" id="su-name" placeholder="실명을 입력하세요" autocomplete="name" />
+        <label>이름<span class="req" aria-hidden="true">*</span></label>
+        <input type="text" id="su-name" placeholder="실명을 입력하세요"
+               autocomplete="name" required aria-required="true" />
         <span class="field-error" id="err-su-name"></span>
       </div>
       <div class="form-group">
-        <label>닉네임</label>
-        <!-- placeholder 는 선택한 회원 유형에 따라 app.js 가 바꾼다 (멘티↔멘토) -->
-        <input type="text" id="su-nickname" placeholder="선배들에게 표시될 이름" autocomplete="nickname" />
+        <label>별명</label>
+        <input type="text" id="su-nickname" placeholder="2~20자" autocomplete="nickname" />
         <span class="field-error" id="err-su-nickname"></span>
         <span class="field-hint">선택 사항. 다른 회원에게 실명 대신 표시됩니다. 나중에 마이페이지에서 바꿀 수 있어요.</span>
       </div>
       <div class="form-group">
-        <label>이메일 주소</label>
-        <input type="email" id="su-email" placeholder="example@email.com" autocomplete="email" />
+        <label>이메일 주소<span class="req" aria-hidden="true">*</span></label>
+        <input type="email" id="su-email" placeholder="example@email.com"
+               autocomplete="email" required aria-required="true" />
         <span class="field-error" id="err-su-email"></span>
       </div>
+
+      <!-- 본인확인. 인증을 쓸 수 없는 환경(운영인데 키 미설정)이면 app.js 가 통째로 숨긴다.
+           숨겨진 상태에서는 서버도 인증을 요구하지 않는다 — 양쪽이 같은 조건을 본다. -->
+      <div class="form-group" id="su-verify-group" hidden>
+        <label>본인확인<span class="req" aria-hidden="true">*</span></label>
+        <div class="verify-row">
+          <span class="verify-state" id="su-verify-state">아직 인증하지 않았어요</span>
+          <button type="button" class="btn-inline" id="su-verify-btn"
+                  onclick="startVerify()">본인인증</button>
+        </div>
+        <span class="field-error" id="err-su-verify"></span>
+        <span class="field-hint">한 사람당 계정 하나만 만들 수 있어요.</span>
+      </div>
+
       <button class="btn-submit" id="signup-btn" onclick="handleSignup()">회원가입</button>
 
       <div class="social-login" id="signup-social" hidden>
@@ -460,7 +487,7 @@
       <div class="error-box" id="ob-error"></div>
 
       <div class="role-pick">
-        <div class="role-pick-label">회원 유형을 선택해주세요</div>
+        <div class="role-pick-label">회원 유형을 선택해주세요<span class="req" aria-hidden="true">*</span></div>
         <div class="role-cards">
           <label class="role-card" data-role="mentee">
             <input type="radio" name="ob-role" value="mentee" checked />
@@ -484,9 +511,21 @@
       </div>
 
       <div class="form-group">
-        <label>닉네임 <span class="sf-optional">선택</span></label>
-        <input type="text" id="ob-nickname" placeholder="선배들에게 표시될 이름" autocomplete="nickname" />
+        <label>별명 <span class="sf-optional">선택</span></label>
+        <input type="text" id="ob-nickname" placeholder="2~20자" autocomplete="nickname" />
         <span class="field-hint">비워두면 나중에 마이페이지에서 정할 수 있어요.</span>
+      </div>
+
+      <!-- 소셜 가입도 같은 관문을 지난다. 여기서 안 받으면 네이버·카카오로
+           계정을 얼마든지 더 만들 수 있어 일반가입에만 붙인 의미가 없어진다. -->
+      <div class="form-group" id="ob-verify-group" hidden>
+        <label>본인확인<span class="req" aria-hidden="true">*</span></label>
+        <div class="verify-row">
+          <span class="verify-state" id="ob-verify-state">아직 인증하지 않았어요</span>
+          <button type="button" class="btn-inline" id="ob-verify-btn"
+                  onclick="startVerify('ob')">본인인증</button>
+        </div>
+        <span class="field-hint">한 사람당 계정 하나만 만들 수 있어요.</span>
       </div>
 
       <button class="btn-submit dark" id="ob-btn" onclick="handleOnboarding()">시작하기</button>
@@ -494,7 +533,10 @@
   </div>
 </div>
 
-<!-- ══ MYPAGE — 스펙 입력 ══ -->
+<!-- ══ MYPAGE — 계정 관리 · 스펙 관리 ══
+     탭 두 개를 한 페이지에 둔다. 라우트를 나누지 않은 이유는 #mypage 를 가리키는
+     곳(네비 이름·드로어·홈 퀵메뉴)이 여러 군데라, 쪼개면 그 링크들이 어디로 가야
+     할지 전부 다시 정해야 하기 때문이다. 탭 상태는 해시 뒤에 붙인다(#mypage/account). -->
 <div class="page" id="page-mypage">
   <div class="mypage-wrap">
     <span class="back-link" onclick="navigate('main')">← 홈으로 돌아가기</span>
@@ -503,7 +545,43 @@
         <p>마이페이지는 로그인 후 이용 가능합니다.</p>
         <span class="btn-go-login" onclick="navigate('login')">로그인하러 가기</span>
       </div>
-      <div id="mypage-form-container"></div>
+
+      <div id="mypage-body" hidden>
+        <div class="mp-tabs" role="tablist">
+          <button type="button" class="mp-tab" data-mp-tab="account" role="tab">
+            <i class="ti ti-user-circle"></i> 계정 관리
+          </button>
+          <button type="button" class="mp-tab" data-mp-tab="spec" role="tab">
+            <i class="ti ti-file-pencil"></i> 스펙 관리
+          </button>
+          <!-- 멘토에게만 보인다. initMypage() 가 켜고 끈다. -->
+          <button type="button" class="mp-tab" data-mp-tab="mentor" role="tab" id="mp-tab-mentor" hidden>
+            <i class="ti ti-user-star"></i> 멘토 페이지
+          </button>
+          <!-- 되돌릴 수 없는 동작이라 맨 끝에 두고 색으로도 구분한다 -->
+          <button type="button" class="mp-tab mp-tab--danger" data-mp-tab="withdraw" role="tab">
+            <i class="ti ti-user-minus"></i> 탈퇴하기
+          </button>
+        </div>
+        <!-- 계정 js/account.js · 스펙 js/spec-form.js · 멘토 js/mentor-profile.js · 탈퇴 js/account.js -->
+        <div id="mypage-account-container" hidden></div>
+        <div id="mypage-form-container" hidden></div>
+        <div id="mypage-mentor-container" hidden></div>
+        <div id="mypage-withdraw-container" hidden></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MENTOR PROFILE — 멘토가 후배에게 보여줄 소개 ══
+     스펙 입력(#mypage)과 나눈 이유: 스펙은 '점수를 매기는 데이터'고 이건 '읽히는 글'이다.
+     한 폼에 섞으면 멘티에게도 안 쓰는 칸이 절반 보인다.
+     내용은 js/mentor-profile.js 가 만든다(스펙 입력·백오피스와 같은 방식). -->
+<div class="page" id="page-mentor-profile">
+  <div class="mypage-wrap">
+    <span class="back-link" onclick="navigate('mypage')">← 스펙 입력으로</span>
+    <div class="mypage-card">
+      <div id="mentor-profile-container"></div>
     </div>
   </div>
 </div>
@@ -698,10 +776,13 @@
 
     <div class="card" style="overflow:hidden">
       <div class="tabs-bar" id="mentoring-tabs">
-        <span class="tab" data-tab="ongoing" onclick="switchTab('ongoing')">진행 중<span class="cnt" id="tabcnt-ongoing">2</span></span>
-        <span class="tab on" data-tab="completed" onclick="switchTab('completed')">완료<span class="cnt" id="tabcnt-completed">5</span></span>
-        <span class="tab" data-tab="applied" onclick="switchTab('applied')">내가 신청<span class="cnt" id="tabcnt-applied">0</span></span>
-        <span class="tab" data-tab="received" onclick="switchTab('received')">받은 요청<span class="cnt" id="tabcnt-received">1</span></span>
+        <!-- '보낸 요청'은 멘티만, '받은 요청'은 멘토만 본다. renderMentoring() 이 켜고 끈다.
+             개수는 0 으로 시작한다 — 예시 데이터를 없앴으므로 숫자를 박아 두면
+             빈 목록에 2·5 가 붙어 보인다. -->
+        <span class="tab" data-tab="ongoing" onclick="switchTab('ongoing')">진행 중<span class="cnt" id="tabcnt-ongoing">0</span></span>
+        <span class="tab on" data-tab="completed" onclick="switchTab('completed')">완료<span class="cnt" id="tabcnt-completed">0</span></span>
+        <span class="tab" data-tab="applied" onclick="switchTab('applied')">보낸 요청<span class="cnt" id="tabcnt-applied">0</span></span>
+        <span class="tab" data-tab="received" onclick="switchTab('received')">받은 요청<span class="cnt" id="tabcnt-received">0</span></span>
       </div>
       <div id="mentoring-body"></div>
     </div>
@@ -890,6 +971,9 @@
 <script src="js/cas-hero.js"></script>
 <script src="js/cas-compare.js"></script>
 <script src="js/spec-form.js"></script>
+<!-- app.js 보다 앞에 와야 한다 — showPage()/initMypage() 가 이들을 부른다 -->
+<script src="js/account.js"></script>
+<script src="js/mentor-profile.js"></script>
 <script src="js/backoffice.js"></script>
 <script src="js/career.js"></script>
 <script src="js/mentoring.js"></script>

@@ -53,12 +53,32 @@ router.get('/requests', requireAuth, async (req, res) => {
 });
 
 router.post('/requests', requireAuth, async (req, res) => {
-  const { mentorId, mentorName, format, message } = req.body || {};
+  const { mentorId, mentorName, format, message, slotDate, slotTime } = req.body || {};
   const f = formatById(format);
   if (!mentorId || !f) {
     return res.status(400).json({ error: '멘토와 멘토링 형식을 선택해주세요.' });
   }
   const msg = (message || '').trim();
+
+  /* 날짜·시간은 화면에서 멘토가 연 일정 중에서만 고르게 되어 있지만,
+     요청은 직접 만들어 보낼 수 있으므로 형식과 '지난 날짜인지'를 여기서 다시 본다.
+     지난 날짜로 신청이 들어오면 결제까지 되고 나서야 문제가 드러난다. */
+  const date = String(slotDate || '').trim();
+  const time = String(slotTime || '').trim();
+  if (!date || !time) {
+    return res.status(400).json({ error: '멘토링 날짜와 시간을 선택해주세요.' });
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(new Date(date).getTime())) {
+    return res.status(400).json({ error: '날짜 형식이 올바르지 않습니다.' });
+  }
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) {
+    return res.status(400).json({ error: '시간 형식이 올바르지 않습니다.' });
+  }
+  /* 오늘은 허용한다 — 몇 시간 뒤 약속을 잡을 수 있어야 한다. 어제는 막는다. */
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  if (new Date(date) < today) {
+    return res.status(400).json({ error: '지난 날짜로는 신청할 수 없어요.' });
+  }
 
   /* 같은 멘토에게 결제 전 신청이 이미 있으면 새로 만들지 않고 그것을 갱신한다.
      아니면 결제창을 닫을 때마다 미결제 주문이 쌓인다. */
@@ -70,16 +90,19 @@ router.post('/requests', requireAuth, async (req, res) => {
   if (open) {
     id = open.id;
     await query(
-      'UPDATE mentoring_requests SET format=?, format_name=?, amount=?, message=? WHERE id=?',
-      [f.id, f.name, f.amount, msg, id]);
+      `UPDATE mentoring_requests
+         SET format=?, format_name=?, amount=?, message=?, slot_date=?, slot_time=?
+       WHERE id=?`,
+      [f.id, f.name, f.amount, msg, date, time, id]);
   } else {
     id = nanoid();
     await query(
       `INSERT INTO mentoring_requests
-         (id, mentee_id, mentor_id, mentor_name, format, format_name, amount, message, status)
-       VALUES (?,?,?,?,?,?,?,?,'pending')`,
+         (id, mentee_id, mentor_id, mentor_name, format, format_name, amount, message,
+          slot_date, slot_time, status)
+       VALUES (?,?,?,?,?,?,?,?,?,?,'pending')`,
       [id, req.user.id, mentorId, (mentorName || '').trim() || null,
-       f.id, f.name, f.amount, msg]);   // ← 금액은 서버가 정한 값. 클라이언트 값은 쓰지 않는다
+       f.id, f.name, f.amount, msg, date, time]);   // ← 금액은 서버가 정한 값. 클라이언트 값은 쓰지 않는다
   }
 
   const row = await queryOne('SELECT * FROM mentoring_requests WHERE id=?', [id]);
@@ -116,6 +139,9 @@ function toRequest(r) {
     id: r.id, menteeId: r.mentee_id, mentorId: r.mentor_id, mentorName: r.mentor_name,
     format: r.format, formatName: r.format_name, amount: Number(r.amount),
     message: r.message, status: r.status, orderId: r.order_id, payment: payment ?? null,
+    /* 약속 시각. dateStrings:true 라 'YYYY-MM-DD' 문자열로 온다 —
+       Date 로 바꾸면 시간대 때문에 하루씩 밀린다(mysql.js 주석). */
+    slotDate: r.slot_date ?? null, slotTime: r.slot_time ?? null,
     createdAt: r.created_at, updatedAt: r.updated_at,
   };
 }

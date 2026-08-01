@@ -13,6 +13,7 @@ const { CORP_TYPE_ID } = require('./company-classify');
    company-classify·wage-jobs)은 수집·이관 전용으로 남는다 — catalog-db.js 머리주석 참고. */
 const catalog = require('./catalog-db');
 const OAuth = require('./oauth');
+const NiceAuth = require('./nice-auth');
 const recommendationsRouter = require("./routes/recommendations");
 const casAnalyzeRouter = require("./routes/casAnalyze");
 const jdCoachRouter = require("./routes/jdCoach");
@@ -38,7 +39,12 @@ app.use(cors({
     : true,
   credentials: true,
 }));
-app.use(express.json());
+/* 기본 한도는 100KB 다. 프로필 사진을 base64 로 받으므로(파일 서버가 없다 —
+   profiles.avatar 주석 참고) 그 한도로는 **정상적인 사진도 못 올라간다.**
+   그런데 본문 파서가 먼저 걸러 버려서, 화면에는 '서버에서 문제가 생겼습니다'(500)만
+   뜨고 용량 때문이라는 것을 알 수 없다.
+   2MB 로 올려 두고, 실제 사진 한도(1MB)는 /api/profile 이 판단해 413 으로 돌려준다. */
+app.use(express.json({ limit: '2mb' }));
 app.use(cookieParser());
 const FRONTEND_DIR = path.join(__dirname, '..', '..', 'frontend');
 
@@ -71,6 +77,18 @@ function publicUser(user) {
     /* 소셜 가입 직후엔 역할이 없다. 화면이 추가입력으로 보낼지 판단하는 값이라
        명시적으로 내려준다 — role 이 null 인 것을 화면마다 따로 해석하면 어긋난다. */
     needsOnboarding: !user.role,
+    /* 본인확인 **여부만** 내려준다. ci·phone 은 개인식별정보라 절대 나가면 안 된다 —
+       이 함수가 허용 목록인 이유가 그것이다. 필드를 늘릴 때 spread(...user) 로
+       바꾸지 말 것. */
+    verified: !!user.ci,
+    /* 본인인증한 번호를 **가린 형태로만** 내보낸다(010-****-5678).
+       마이페이지가 연락처 기본값으로 쓰고, 백오피스에서 계정을 구분하는 데도 쓴다.
+       원본 phone·ci 는 절대 나가지 않는다 — 이 함수가 허용 목록인 이유다. */
+    phoneMasked: NiceAuth.maskPhone(user.phone) || null,
+    /* 화면이 백오피스 버튼을 보일지 판단하는 값. 이건 **표시용일 뿐**이고
+       실제 차단은 서버의 requireAdmin 이 한다 — 화면에서 숨기는 것만으로는
+       주소를 직접 쳐서 들어오는 것을 못 막는다. */
+    isAdmin: !!user.isAdmin,
   };
 }
 
@@ -98,12 +116,75 @@ function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+/* 영문·숫자는 필수, 특수문자는 허용하되 강제하지 않는다.
+   frontend/js/app.js 의 PASSWORD_REGEX 와 같은 규칙이어야 한다 — 한쪽만 고치면
+   프론트 검증을 통과한 값이 여기서 400 으로 떨어져 원인을 찾기 어렵다. */
 function isValidPassword(password) {
-  return /^(?=.*[A-Za-z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?]).{8,20}$/.test(password);
+  return /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?]{8,20}$/.test(password);
 }
 
 app.get('/api/health', (req, res) => {
   res.json({ ok: true, service: 'careerly-backend' });
+});
+
+/* ── 본인확인 ────────────────────────────────────────────────
+   '한 사람 = 한 계정' 을 위한 것이다. 자세한 배경은 src/nice-auth.js 머리주석.
+
+   흐름: 화면이 /request 로 팝업 URL 을 받아 열고 → 인증을 마치면 /result 로
+   결과를 보내 **단명 토큰**을 받는다 → 가입/온보딩 요청에 그 토큰을 함께 보낸다.
+   CI 를 화면에 내려보내지 않으려고 토큰을 한 겹 두었다. */
+const verifyTickets = new Map();          // token → { ci, phone, name, expiresAt }
+const TICKET_TTL_MS = 10 * 60 * 1000;
+
+function issueTicket(result) {
+  const token = nanoid();
+  verifyTickets.set(token, { ...result, expiresAt: Date.now() + TICKET_TTL_MS });
+  /* 만료된 것을 같이 걷어낸다. 안 하면 서버가 오래 뜰수록 계속 쌓인다. */
+  if (verifyTickets.size > 500) {
+    const now = Date.now();
+    for (const [k, v] of verifyTickets) if (v.expiresAt < now) verifyTickets.delete(k);
+  }
+  return token;
+}
+
+/* 한 번 쓰면 버린다 — 같은 인증으로 계정을 두 개 만들 수 없게. */
+function consumeTicket(token) {
+  const t = verifyTickets.get(token);
+  if (!t) return null;
+  verifyTickets.delete(token);
+  return t.expiresAt < Date.now() ? null : t;
+}
+
+app.get('/api/verify/status', (req, res) => {
+  res.json({
+    configured: NiceAuth.isConfigured(),
+    devMode: NiceAuth.devModeAllowed(),
+    /* 운영인데 키가 없으면 본인인증을 쓸 수 없다. 화면이 '인증' 버튼을 띄우고
+       누를 때마다 503 을 보여주는 것보다, 아예 상태를 알려주는 편이 낫다. */
+    available: NiceAuth.isConfigured() || NiceAuth.devModeAllowed(),
+  });
+});
+
+app.post('/api/verify/request', (req, res) => {
+  try {
+    res.json(NiceAuth.buildRequest({ returnUrl: req.body?.returnUrl }));
+  } catch (e) {
+    res.status(e.status || 502).json({ error: e.message });
+  }
+});
+
+app.post('/api/verify/result', (req, res) => {
+  try {
+    const result = NiceAuth.parseResult(req.body);
+    res.json({
+      token: issueTicket(result),
+      name: result.name,
+      /* 번호는 가려서 준다. 화면에는 '어떤 번호로 인증했는지'만 보이면 된다. */
+      phoneMasked: NiceAuth.maskPhone(result.phone),
+    });
+  } catch (e) {
+    res.status(e.status || 502).json({ error: e.message });
+  }
 });
 
 app.post('/api/auth/signup', async (req, res) => {
@@ -119,20 +200,36 @@ app.post('/api/auth/signup', async (req, res) => {
     return res.status(400).json({ error: '아이디는 영문, 숫자, 밑줄 포함 4~20자여야 합니다.' });
   }
   if (!isValidPassword(password)) {
-    return res.status(400).json({ error: '비밀번호는 8~20자이며 영문·숫자·특수문자를 모두 포함해야 합니다.' });
+    return res.status(400).json({ error: '비밀번호는 8~20자이며 영문과 숫자를 모두 포함해야 합니다.' });
   }
   if (!isValidEmail(email)) {
     return res.status(400).json({ error: '올바른 이메일 형식이 아닙니다.' });
   }
-  /* 닉네임은 선택. 안 보내면 null 로 두고 화면이 이름을 가려서 쓴다.
+  /* 별명은 선택. 안 보내면 null 로 두고 화면이 이름을 가려서 쓴다.
      화면 곳곳에 이름 대신 들어가는 값이라 길이만 막아둔다. */
   const trimmedNickname = typeof nickname === 'string' ? nickname.trim() : '';
-  if (trimmedNickname && (trimmedNickname.length < 2 || trimmedNickname.length > 12)) {
-    return res.status(400).json({ error: '닉네임은 2~12자여야 합니다.' });
+  if (trimmedNickname && (trimmedNickname.length < 2 || trimmedNickname.length > 20)) {
+    return res.status(400).json({ error: '별명은 2~20자여야 합니다.' });
   }
 
   const normalizedUsername = username.trim();
   const normalizedEmail = email.trim().toLowerCase();
+
+  /* 본인확인 — 같은 사람이 계정을 여러 개 만들지 못하게 한다.
+     인증을 아직 쓸 수 없는 환경(운영인데 키 미설정)에서는 가입 자체를 막지 않는다.
+     막아 버리면 키 하나 때문에 서비스가 멈춘다. */
+  let verified = null;
+  if (NiceAuth.isConfigured() || NiceAuth.devModeAllowed()) {
+    verified = consumeTicket(req.body?.verifyToken);
+    if (!verified) {
+      return res.status(400).json({ error: '본인인증을 먼저 완료해 주세요.' });
+    }
+    if (await repo.users.ciTaken(verified.ci)) {
+      return res.status(409).json({
+        error: '이미 가입된 계정이 있어요. 기존 계정으로 로그인해 주세요.',
+      });
+    }
+  }
 
   if (await repo.users.usernameTaken(normalizedUsername)) {
     return res.status(409).json({ error: '이미 사용 중인 아이디입니다.' });
@@ -142,17 +239,30 @@ app.post('/api/auth/signup', async (req, res) => {
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
-  const user = await repo.users.create({
-    id: nanoid(),
-    username: normalizedUsername,
-    passwordHash,
-    name: name.trim(),
-    email: normalizedEmail,
-    role,
-    nickname: trimmedNickname || null,
-  });
-
-  res.status(201).json({ message: '회원가입이 완료되었습니다.', user: publicUser(user) });
+  try {
+    const user = await repo.users.create({
+      id: nanoid(),
+      username: normalizedUsername,
+      passwordHash,
+      name: name.trim(),
+      email: normalizedEmail,
+      role,
+      nickname: trimmedNickname || null,
+      ci: verified?.ci || null,
+      phone: verified?.phone || null,
+    });
+    res.status(201).json({ message: '회원가입이 완료되었습니다.', user: publicUser(user) });
+  } catch (e) {
+    /* uk_ci 가 최종 방어선이다. 위 ciTaken 검사와 INSERT 사이에 같은 사람의 두 번째
+       요청이 끼어들면 앱 검사만으로는 둘 다 통과한다(TOCTOU). DB 가 막아 준 것을
+       500 으로 흘리지 않고 위와 같은 안내로 바꾼다. */
+    if (e.code === 'ER_DUP_ENTRY' && /uk_ci/.test(e.message || '')) {
+      return res.status(409).json({
+        error: '이미 가입된 계정이 있어요. 기존 계정으로 로그인해 주세요.',
+      });
+    }
+    throw e;
+  }
 });
 
 app.post('/api/auth/login', async (req, res) => {
@@ -202,6 +312,45 @@ async function startSession(res, user) {
 
 // 화면이 어떤 소셜 버튼을 보여줄지 — 키가 없는 제공자는 버튼도 띄우지 않는다
 app.get('/api/auth/providers', (req, res) => res.json({ providers: OAuth.enabledProviders() }));
+
+/* 아이디 중복확인 — 가입 버튼을 누르기 전에 알려준다.
+   아래 `/api/auth/:provider` 보다 **먼저** 선언한다. 그 라우트가 모르는 이름을
+   next() 로 흘려보내긴 하지만, 순서에 기대지 않는 편이 안전하다.
+
+   이 엔드포인트는 "이 아이디가 존재하는가"를 그대로 알려주므로 계정 목록을 긁을 수
+   있다. 회원가입 화면에서 사람이 누르는 빈도(분당 몇 번)만 허용한다. */
+const usernameCheckHits = new Map();   // ip → { count, resetAt }
+const CHECK_WINDOW_MS = 60 * 1000;
+const CHECK_MAX_PER_WINDOW = 20;
+
+function checkRateLimited(ip) {
+  const now = Date.now();
+  const hit = usernameCheckHits.get(ip);
+  if (!hit || now > hit.resetAt) {
+    usernameCheckHits.set(ip, { count: 1, resetAt: now + CHECK_WINDOW_MS });
+    /* 만료된 항목을 같이 걷어낸다. 안 하면 IP 마다 항목이 쌓여 메모리가 샌다. */
+    if (usernameCheckHits.size > 1000) {
+      for (const [k, v] of usernameCheckHits) if (now > v.resetAt) usernameCheckHits.delete(k);
+    }
+    return false;
+  }
+  hit.count += 1;
+  return hit.count > CHECK_MAX_PER_WINDOW;
+}
+
+app.get('/api/auth/check-username', async (req, res) => {
+  const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
+
+  if (!isValidUsername(username)) {
+    return res.status(400).json({ error: '아이디는 영문, 숫자, 밑줄 포함 4~20자여야 합니다.' });
+  }
+  if (checkRateLimited(req.ip)) {
+    return res.status(429).json({ error: '확인 요청이 너무 많아요. 잠시 후 다시 시도해주세요.' });
+  }
+
+  const taken = await repo.users.usernameTaken(username);
+  res.json({ available: !taken });
+});
 
 /* :provider 는 /api/auth/me · /api/auth/providers 까지 삼킨다.
    **모르는 이름이면 반드시 next() 로 흘려보내야** 로그인 상태 조회가 살아남는다.
@@ -274,8 +423,8 @@ app.post('/api/auth/onboarding', requireAuth, async (req, res) => {
     return res.status(400).json({ error: '회원 유형(멘토/멘티)을 선택해주세요.' });
   }
   const nick = typeof nickname === 'string' ? nickname.trim() : '';
-  if (nick && (nick.length < 2 || nick.length > 12)) {
-    return res.status(400).json({ error: '닉네임은 2~12자여야 합니다.' });
+  if (nick && (nick.length < 2 || nick.length > 20)) {
+    return res.status(400).json({ error: '별명은 2~20자여야 합니다.' });
   }
 
   /* 역할이 이미 있으면 바꾸지 못하게 한다 — 바뀌면 그동안 쌓인 스펙이 어느 통계에
@@ -284,8 +433,66 @@ app.post('/api/auth/onboarding', requireAuth, async (req, res) => {
 
   const patch = { role };
   if (nick) patch.nickname = nick;
+
+  /* 소셜 가입도 같은 관문을 지난다. 여기서 안 받으면 네이버·카카오로 계정을
+     얼마든지 더 만들 수 있어서 일반가입에만 인증을 붙인 의미가 사라진다.
+     이미 인증된 계정(재진입)이면 다시 받지 않는다. */
+  if (!req.user.ci && (NiceAuth.isConfigured() || NiceAuth.devModeAllowed())) {
+    const verified = consumeTicket(req.body?.verifyToken);
+    if (!verified) return res.status(400).json({ error: '본인인증을 먼저 완료해 주세요.' });
+
+    /* CI 가 다른 계정에 이미 있으면 **계정을 잇지 않고 안내로 막는다.**
+       자동 병합은 하지 않는다 — 이메일 중복 정책(위 소셜 콜백)과 같은 결이다.
+       여기서 조용히 이어 버리면 어느 계정으로 로그인했는지에 따라 다른 데이터가 보인다. */
+    const owner = await repo.users.byCi(verified.ci);
+    if (owner && owner.id !== req.user.id) {
+      return res.status(409).json({
+        error: '이미 가입된 계정이 있어요. 기존 계정으로 로그인해 주세요.',
+      });
+    }
+    patch.ci = verified.ci;
+    patch.phone = verified.phone;
+    patch.verifiedAt = new Date();
+  }
   const user = await repo.users.update(req.user.id, patch);
   res.json({ message: '가입이 완료되었습니다.', user: publicUser(user) });
+});
+
+/* ── 회원 탈퇴 ────────────────────────────────────────────────
+   본인이 자기 계정을 지운다(백오피스의 강제 삭제와는 다른 길이다).
+
+   프로필·세션·스펙·자격증·활동은 외래키 CASCADE 로 함께 지워진다.
+   **되돌릴 수 없다.** 그래서 두 겹으로 확인한다.
+     ① 비밀번호 재확인 — 자리를 비운 사이 남이 누르는 것을 막는다
+     ② 화면에서 '탈퇴하겠습니다' 를 직접 입력 (프론트)
+
+   소셜 가입자는 비밀번호가 없다(passwordHash null). 그때는 아이디를 받아 대조한다 —
+   비밀번호가 없다고 확인 없이 지우면 가장 위험한 동작이 가장 쉬워진다. */
+app.post('/api/auth/withdraw', requireAuth, async (req, res) => {
+  const { password, username } = req.body || {};
+
+  if (req.user.passwordHash) {
+    if (!password) return res.status(400).json({ error: '비밀번호를 입력해 주세요.' });
+    if (!await bcrypt.compare(password, req.user.passwordHash)) {
+      return res.status(401).json({ error: '비밀번호가 일치하지 않습니다.' });
+    }
+  } else {
+    if (String(username || '').trim() !== req.user.username) {
+      return res.status(400).json({ error: '아이디가 일치하지 않습니다.' });
+    }
+  }
+
+  /* 관리자가 스스로 지우면 백오피스에 들어갈 사람이 없어질 수 있다.
+     ADMIN_USERNAMES 로 다시 만들 수는 있지만, 모르고 벌어지면 한참 헤맨다. */
+  if (req.user.isAdmin) {
+    return res.status(409).json({
+      error: '관리자 계정은 탈퇴할 수 없어요. 다른 관리자에게 권한 해제를 요청해 주세요.',
+    });
+  }
+
+  await repo.users.deleteByUsername(req.user.username);
+  res.clearCookie(SESSION_COOKIE);
+  res.json({ message: '탈퇴가 완료되었습니다.' });
 });
 
 app.post('/api/auth/logout', async (req, res) => {
@@ -305,13 +512,84 @@ app.get('/api/profile', requireAuth, async (req, res) => {
 app.put('/api/profile', requireAuth, async (req, res) => {
   /* 예전에는 아무 키나 받아 파일에 그대로 넣었다. 테이블에는 컬럼이 있는 것만 넣는다
      — 없는 컬럼을 보내면 조용히 버려지는 대신 여기서 걸러진 것이 보인다. */
-  const allowed = ['nickname', 'university', 'currentJob', 'tips'];
+  /* **repo.profiles.update 의 map 과 함께 늘려야 한다.** 한쪽만 고치면 저장은
+     성공했다고 나오는데 값이 조용히 사라진다. */
+  const allowed = ['nickname', 'university', 'currentJob', 'tips',
+                   'avatar', 'gender', 'birthdate', 'phone', 'address',
+                   'intro', 'specialties', 'timeline', 'modes', 'availability'];
   const patch = {};
   allowed.forEach(k => {
     if (Object.prototype.hasOwnProperty.call(req.body, k)) {
       patch[k] = typeof req.body[k] === 'string' ? req.body[k].trim() : req.body[k];
     }
   });
+
+  /* 이름·이메일은 users 에 있고 여기로 안 받는다. 두 곳에 두면 어느 쪽이 맞는지
+     알 수 없어진다 — 화면은 회원가입 때 받은 값을 그대로 보여 준다. */
+
+  if (patch.avatar) {
+    /* 브라우저가 256px 로 줄여 보내지만, 그 코드를 우회해 원본을 그대로 밀어 넣을 수
+       있다. base64 는 원본의 약 4/3 이라 1MB 면 넉넉하고, 이걸 안 막으면
+       MEDIUMTEXT 한도(16MB)까지 들어와 목록 조회가 통째로 느려진다. */
+    if (!/^data:image\/(png|jpe?g|webp);base64,/.test(patch.avatar)) {
+      return res.status(400).json({ error: '이미지 형식이 올바르지 않습니다.' });
+    }
+    if (patch.avatar.length > 1_000_000) {
+      return res.status(413).json({ error: '사진 용량이 너무 큽니다. 더 작은 이미지를 올려주세요.' });
+    }
+  }
+  if (patch.gender != null && patch.gender !== ''
+      && !['male', 'female', 'other'].includes(patch.gender)) {
+    return res.status(400).json({ error: '성별 값이 올바르지 않습니다.' });
+  }
+  if (patch.birthdate) {
+    /* <input type="date"> 는 'YYYY-MM-DD' 를 준다. 형식이 어긋나면 MySQL 이
+       0000-00-00 으로 넣거나 던지는데, 어느 쪽이든 원인이 안 보인다. */
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(patch.birthdate)) {
+      return res.status(400).json({ error: '생년월일 형식이 올바르지 않습니다.' });
+    }
+    const d = new Date(patch.birthdate);
+    if (Number.isNaN(d.getTime()) || d > new Date()) {
+      return res.status(400).json({ error: '생년월일을 다시 확인해 주세요.' });
+    }
+  }
+  /* 예약 가능 일정 — 멘티에게 "이 시간에 신청하세요"로 보여줄 값이라
+     형식이 어긋나면 화면이 통째로 깨진다. 모양을 여기서 못 박는다. */
+  if (patch.availability != null) {
+    if (!Array.isArray(patch.availability)) {
+      return res.status(400).json({ error: '예약 가능 일정 형식이 올바르지 않습니다.' });
+    }
+    if (patch.availability.length > 200) {
+      return res.status(400).json({ error: '날짜는 200개까지 정할 수 있어요.' });
+    }
+    const clean = [];
+    for (const slot of patch.availability) {
+      const date = String(slot?.date || '');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(new Date(date).getTime())) {
+        return res.status(400).json({ error: `날짜 형식이 올바르지 않습니다: ${date}` });
+      }
+      const times = Array.isArray(slot?.times) ? slot.times.map(String) : [];
+      const badTime = times.find(t => !/^([01]\d|2[0-3]):[0-5]\d$/.test(t));
+      if (badTime) {
+        return res.status(400).json({ error: `시간 형식이 올바르지 않습니다: ${badTime}` });
+      }
+      /* 시간이 하나도 없는 날짜는 '열어두지 않은 날'이다. 남겨 두면 멘티 화면에
+         누를 수 없는 빈 날짜가 뜬다. */
+      if (!times.length) continue;
+      clean.push({ date, times: [...new Set(times)].sort() });
+    }
+    /* 같은 날짜가 두 번 오면 뒤엣것이 이긴다 — 합치지 않으면 화면에 같은 날이
+       두 줄로 보인다. */
+    const byDate = new Map(clean.map(s => [s.date, s]));
+    patch.availability = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  /* 빈 문자열은 '지웠다'는 뜻이라 NULL 로 바꾼다. 안 그러면 ''(빈 값)이 저장돼
+     화면이 '적혀 있는데 안 보이는' 상태가 된다. */
+  ['gender', 'birthdate', 'phone', 'address', 'avatar'].forEach(k => {
+    if (patch[k] === '') patch[k] = null;
+  });
+
   const profile = await repo.profiles.update(req.user.id, patch);
   res.json({ message: '프로필이 저장되었습니다.', profile });
 });
@@ -348,9 +626,12 @@ app.put('/api/specs/me', requireAuth, async (req, res) => {
        major             — 학생이 적은 학과명(자유). dept 는 그걸 묶는 통계 분류다
        careers           — 멘토의 경력 [{company,start,end,current,position,job,desc}]
        interestCompanies — 멘티의 관심 기업 (이름 배열)
-       certMeta          — 직접 입력한 자격증의 발급기관·취득일 { 이름: {issuer,date} } */
+       certMeta          — 직접 입력한 자격증의 발급기관·취득일 { 이름: {issuer,date} }
+       jobMajor          — KECO 1차 코드(커리어 로드맵과 같은 분류). field/job 은 옛 값이라 둘 다 남는다
+       jobMiddles        — KECO 2차 코드 배열(세부직무 다중선택) */
   const allowed = [
-    'dept', 'major', 'field', 'job', 'company', 'corpType', 'gpa', 'gpaMax',
+    'dept', 'major', 'field', 'job', 'jobMajor', 'jobMiddles',
+    'company', 'corpType', 'gpa', 'gpaMax',
     'certs', 'certMeta', 'scores', 'qual', 'detail', 'activities',
     'careers', 'interestCompanies',
   ];
@@ -358,6 +639,29 @@ app.put('/api/specs/me', requireAuth, async (req, res) => {
   allowed.forEach(k => {
     if (Object.prototype.hasOwnProperty.call(req.body, k)) patch[k] = req.body[k];
   });
+
+  /* 직무 코드는 카탈로그에 있는 것만 받는다. 걸러낸 분류(관리직·청소직 등)나
+     오타가 들어오면 로드맵 집계에서 영영 안 잡히는 스펙이 되는데, 에러가 안 나서
+     화면상으로는 저장에 성공한 것으로 보인다. */
+  if (patch.jobMajor != null || patch.jobMiddles != null) {
+    const tree = await catalog.jobCatalog();
+    const validMajors = new Set(tree.majors.map(M => M.code));
+    const validMiddles = new Set(tree.majors.flatMap(M => M.middles.map(m => m.code)));
+
+    if (patch.jobMajor != null && patch.jobMajor !== '' && !validMajors.has(String(patch.jobMajor))) {
+      return res.status(400).json({ error: '진출분야 값이 올바르지 않습니다.' });
+    }
+    if (patch.jobMiddles != null) {
+      if (!Array.isArray(patch.jobMiddles)) {
+        return res.status(400).json({ error: '세부직무는 목록이어야 합니다.' });
+      }
+      const bad = patch.jobMiddles.filter(c => !validMiddles.has(String(c)));
+      if (bad.length) {
+        return res.status(400).json({ error: `세부직무 값이 올바르지 않습니다: ${bad.join(', ')}` });
+      }
+      patch.jobMiddles = [...new Set(patch.jobMiddles.map(String))];
+    }
+  }
 
   const spec = await repo.specs.upsert(req.user.id, patch);
   res.json({ message: '스펙이 저장되었습니다.', spec });
@@ -483,6 +787,16 @@ app.get('/api/majors/suggest', async (req, res) => {
   res.json({ query: q, items: q ? await catalog.searchMajors(q, limit) : [] });
 });
 
+/* 학교 검색 — 위 세 검색(회사·자격증·학과)과 같은 규약이다.
+   카탈로그는 scripts/fetch-universities.js 가 커리어넷에서 받아 채운다.
+   **비어 있어도 화면은 동작한다** — 자동완성만 안 뜨고 직접 입력은 계속된다.
+   대학은 이름 표기가 비교적 일정해서(‘서울대학교’) 학과만큼 흔들리지 않는다. */
+app.get('/api/universities/suggest', async (req, res) => {
+  const q = String(req.query.q || '').trim();
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 8, 1), 20);
+  res.json({ query: q, items: q ? await catalog.searchUniversities(q, limit) : [] });
+});
+
 /* 목록에 없는 학과명을 직접 적었을 때 어느 분류로 묶일지 알려준다.
    못 맞추면 dept:null — 화면이 '직접 골라주세요'로 빠진다. */
 app.get('/api/majors/classify', async (req, res) => {
@@ -490,22 +804,34 @@ app.get('/api/majors/classify', async (req, res) => {
   res.json({ major: name, dept: await catalog.deptOfMajor(name) });
 });
 
-/* ── 백오피스 (개발 전용) ──────────────────────────────────────
-   회원 목록 조회·삭제, 데모 시드, 전체 초기화. 인증·권한 체계가 아직 없으므로
-   운영 환경에서는 전부 404 로 막는다. 관리자 역할을 도입하기 전까지의 임시 조치. */
-const IS_PROD = process.env.NODE_ENV === 'production';
+/* ── 백오피스 (관리자 전용) ────────────────────────────────────
+   회원 목록 조회·삭제, 데모 시드, 전체 초기화. 남의 계정을 지울 수 있는 곳이라
+   **로그인 + 관리자 권한** 을 둘 다 본다.
 
-function devOnly(req, res, next) {
-  if (IS_PROD) return res.status(404).json({ error: '요청한 경로를 찾을 수 없습니다.' });
+   예전에는 NODE_ENV 로만 막았다(운영 404 / 개발은 무제한). 그러면 스테이징이나
+   팀원 PC 에서는 아무나 회원 1,508명을 지울 수 있다. 이제 권한으로 막는다.
+
+   관리자 지정은 users.is_admin 이고, 최초 관리자는 ADMIN_USERNAMES 로 만든다
+   (아래 부팅 로직). 화면에서 버튼을 숨기는 것은 편의일 뿐 방어가 아니다 —
+   막는 곳은 여기다. */
+function requireAdmin(req, res, next) {
+  /* 권한 없는 사람에게 '있는데 막혔다'를 알려줄 이유가 없어서 404 로 돌려준다.
+     경로가 있다는 사실 자체가 정보다(계정 삭제 API 가 있다는 힌트). */
+  if (!req.user?.isAdmin) {
+    return res.status(404).json({ error: '요청한 경로를 찾을 수 없습니다.' });
+  }
   next();
 }
 
-app.get('/api/admin/users', devOnly, async (req, res) => {
+/* requireAuth 를 먼저 태워야 req.user 가 채워진다. 순서를 바꾸면 항상 404 다. */
+const adminOnly = [requireAuth, requireAdmin];
+
+app.get('/api/admin/users', adminOnly, async (req, res) => {
   const users = await repo.users.listAll();
   res.json({ users: users.map(u => ({ ...publicUser(u), hasSpec: u.hasSpec })) });
 });
 
-app.delete('/api/admin/users/:username', devOnly, async (req, res) => {
+app.delete('/api/admin/users/:username', adminOnly, async (req, res) => {
   /* 프로필·세션·스펙·자격증·활동은 외래키 CASCADE 로 함께 지워진다.
      예전에는 배열마다 직접 걸러냈고, 새 컬렉션이 생길 때마다 빠뜨리기 쉬웠다. */
   const removed = await repo.users.deleteByUsername(req.params.username);
@@ -513,14 +839,14 @@ app.delete('/api/admin/users/:username', devOnly, async (req, res) => {
   res.json({ message: '삭제되었습니다.' });
 });
 
-app.post('/api/admin/clear', devOnly, async (req, res) => {
+app.post('/api/admin/clear', adminOnly, async (req, res) => {
   // users 만 지우면 프로필·세션·스펙은 CASCADE 로 따라간다
   await query('DELETE FROM users');
   res.clearCookie(SESSION_COOKIE);
   res.json({ message: '초기화되었습니다.' });
 });
 
-app.post('/api/admin/seed', devOnly, async (req, res) => {
+app.post('/api/admin/seed', adminOnly, async (req, res) => {
   // 고정 데모는 계정마다 비밀번호가 다를 수 있어 개별 해싱한다
   for (const { u, s } of DEMO_SEED) {
     if (await repo.users.usernameTaken(u.username)) continue;
@@ -530,7 +856,7 @@ app.post('/api/admin/seed', devOnly, async (req, res) => {
 });
 
 // 무작위 N명 추가 — 커리어 로드맵·CAS 집계를 채우기 위한 대량 시드
-app.post('/api/admin/seed-random', devOnly, async (req, res) => {
+app.post('/api/admin/seed-random', adminOnly, async (req, res) => {
   const count = Math.min(Math.max(parseInt(req.body?.count, 10) || 50, 1), 200);
 
   // 무작위 계정은 비밀번호가 모두 같으므로 해시를 한 번만 계산해 재사용한다
@@ -583,13 +909,41 @@ app.use((req, res) => {
 app.use((err, req, res, next) => {
   console.error('[error]', req.method, req.path, '-', err.message);
   if (res.headersSent) return next(err);
+
+  /* 본문이 한도를 넘으면 express.json 이 여기로 던진다. 500 으로 뭉개면
+     사용자는 '서버 장애'로 읽고 같은 사진을 계속 다시 올린다. */
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({ error: '보낸 내용이 너무 큽니다. 사진 용량을 줄여주세요.' });
+  }
+  /* 잘못된 JSON 도 서버 잘못이 아니다. */
+  if (err.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: '요청 형식이 올바르지 않습니다.' });
+  }
   res.status(500).json({ error: '서버에서 문제가 생겼습니다.' });
 });
 
 /* DB 연결을 확인한 뒤에 포트를 연다. 연결이 안 되는데 서버만 떠 있으면
    모든 API 가 500 을 내면서 '살아있는 척' 해서 원인을 찾기 어렵다. */
 assertConnection()
-  .then(() => {
+  .then(async () => {
+    /* 최초 관리자 만들기. 백오피스는 관리자만 들어가는데, 관리자를 지정하는 화면도
+       백오피스 안에 있다 — 그대로 두면 아무도 못 들어간다. 그 고리를 여기서 끊는다.
+       **가입하지 않은 아이디는 무시된다**(UPDATE 라 대상이 없으면 0건). 먼저 가입한 뒤
+       서버를 다시 띄우면 반영된다. */
+    const adminNames = (process.env.ADMIN_USERNAMES || '')
+      .split(',').map(s => s.trim()).filter(Boolean);
+    if (adminNames.length) {
+      const promoted = await repo.users.promoteAdmins(adminNames);
+      const missing = adminNames.filter(n => !promoted.includes(n));
+      console.log(`[관리자] ${promoted.length}명 — ${promoted.join(', ') || '없음'}`);
+      if (missing.length) {
+        console.warn(`[관리자] 아직 가입하지 않은 아이디: ${missing.join(', ')} `
+          + '— 가입 후 서버를 다시 띄우면 반영됩니다.');
+      }
+    } else {
+      console.warn('[관리자] ADMIN_USERNAMES 가 비어 있습니다 — 백오피스에 들어갈 수 있는 사람이 없습니다.');
+    }
+
     app.listen(PORT, () => {
       console.log(`Careerly backend running on http://localhost:${PORT}`);
       /* 선택 기능은 키가 없으면 조용히 꺼진 채로 돈다. 화면에서는 '되는 것 같은데
