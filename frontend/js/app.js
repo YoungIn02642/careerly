@@ -5,6 +5,7 @@ const PAGES = [
   'main', 'login', 'signup', 'onboarding', 'mypage', 'career', 'backoffice',
   'dashboard', 'search', 'profile', 'mentoring',   // ← 구 mentoring.html
   'jd',                                            // 자소서 코치 (js/jd-coach.js)
+  'mentor-profile',                                // 멘토 소개 입력 (js/mentor-profile.js)
 ];
 
 /* navbar 에서 밑줄로 강조할 페이지 (data-nav 값과 일치) */
@@ -31,13 +32,18 @@ function showPage(page) {
   updateNavActive(NAV_HIGHLIGHT.includes(navKey) ? navKey : '');
 
   if (page === 'mypage')     initMypage();
-  /* 회원 유형 선택은 DOM 에 그대로 남는다. 멘토를 골라 두고 나갔다 돌아오면
-     라디오는 멘토인데 안내 문구만 멘티로 남으므로 들어올 때 맞춰 준다. */
-  if (page === 'signup')     syncNicknamePlaceholder();
+  if (page === 'mentor-profile') initMentorProfile();
   if (page === 'onboarding') enterOnboarding();
   if (page === 'login')      showLoginError();
   if (page === 'career')     { CareerPage.refreshUser(); CareerPage.render(); }
-  if (page === 'backoffice') Backoffice.render(document.querySelector('#page-backoffice .bo-wrap'));
+  /* 주소창에 #backoffice 를 직접 쳐서 들어올 수 있으므로 여기서도 막는다.
+     서버가 404 로 막아 화면이 비긴 하지만, '들어가지긴 했는데 아무것도 없는'
+     상태는 고장으로 읽힌다. */
+  if (page === 'backoffice') {
+    const me = DB.currentUser();
+    if (!me?.isAdmin) { navigate(me ? 'main' : 'login'); return; }
+    Backoffice.render(document.querySelector('#page-backoffice .bo-wrap'));
+  }
   if (page === 'main')       { if (window.renderHome) renderHome(); }
   if (page === 'jd')         JdCoach.onEnter();
   if (MENTORING_PAGES.includes(page)) Mentoring.onEnter(page);
@@ -83,10 +89,15 @@ window.addEventListener('resize', () => {
   if (window.innerWidth > 900) closeNavDrawer();
 });
 
+/* 해시에는 하위 경로가 붙을 수 있다(#mypage/account — 마이페이지 탭).
+   '/' 앞부분만 페이지 이름이다. 이걸 안 떼면 PAGES 에 없어서 홈으로 튕긴다.
+   '?' 도 같이 떼는데, 소셜 로그인 실패가 #login?error=... 로 돌아오기 때문이다. */
+function pageFromHash() {
+  return (window.location.hash.replace('#', '').split(/[/?]/)[0]) || 'main';
+}
+
 window.addEventListener('popstate', e => {
-  const page = (e.state && PAGES.includes(e.state.page))
-    ? e.state.page
-    : (window.location.hash.replace('#', '') || 'main');
+  const page = (e.state && PAGES.includes(e.state.page)) ? e.state.page : pageFromHash();
   showPage(PAGES.includes(page) ? page : 'main');
 });
 
@@ -100,6 +111,11 @@ function updateNavAuth() {
   const drawerAuth = document.getElementById('drawer-auth');
   const drawerUser = document.getElementById('drawer-user');
   const drawerName = document.getElementById('drawer-user-name');
+  /* 백오피스는 관리자에게만 보인다. 로그아웃 상태에서도 반드시 숨긴다 —
+     처음에 hidden 으로 두어도 로그아웃하면 다시 켜질 수 있어서 매번 계산한다. */
+  const navBiz = document.getElementById('nav-biz');
+  if (navBiz) navBiz.hidden = !user?.isAdmin;
+
   if (user) {
     const label = (user.nickname || user.name || user.username) + '님';
     navAuth.style.display = 'none';
@@ -183,13 +199,6 @@ function enterOnboarding() {
   if (err) err.style.display = 'none';
 }
 
-/* 온보딩의 닉네임 안내도 회원가입과 같은 규칙으로 뒤집는다(멘티↔멘토). */
-document.addEventListener('change', e => {
-  if (e.target.name !== 'ob-role') return;
-  const el = document.getElementById('ob-nickname');
-  if (el) el.placeholder = NICKNAME_PLACEHOLDER[e.target.value] || NICKNAME_PLACEHOLDER.mentee;
-});
-
 async function handleOnboarding() {
   const err  = document.getElementById('ob-error');
   const btn  = document.getElementById('ob-btn');
@@ -197,11 +206,21 @@ async function handleOnboarding() {
   const nickname = document.getElementById('ob-nickname').value.trim();
   err.style.display = 'none';
 
+  if (verifyAvailable && !verifyTokens.ob) {
+    err.textContent = '본인인증을 완료해주세요.';
+    err.style.display = 'block';
+    return;
+  }
+
   btn.disabled = true;
   try {
-    await DB.completeOnboarding({ role, nickname: nickname || null });
+    await DB.completeOnboarding({
+      role, nickname: nickname || null, verifyToken: verifyTokens.ob,
+    });
     navigate('main');
   } catch (e) {
+    verifyTokens.ob = null;                 // 서버가 토큰을 소모했다 — 다시 받아야 한다
+    setVerifyState('ob', '다시 인증해 주세요', false);
     err.textContent = e.message;
     err.style.display = 'block';
   } finally {
@@ -262,10 +281,12 @@ window.addEventListener('DOMContentLoaded', async () => {
   CareerPage.init();
   Mentoring.init();
   JdCoach.init();
-  const hash = window.location.hash.replace('#', '') || 'main';
-  const target = PAGES.includes(hash) ? hash : 'main';
+  const target = PAGES.includes(pageFromHash()) ? pageFromHash() : 'main';
   document.getElementById('page-career').style.display = 'none';
-  history.replaceState({ page: target }, '', '#' + target);
+  /* 주소는 원래 것을 그대로 둔다. '#'+target 으로 덮으면 #mypage/account 의
+     탭 부분이 날아가, 링크로 들어와도 항상 첫 탭이 열린다. */
+  const keep = PAGES.includes(pageFromHash()) ? location.hash : '#' + target;
+  history.replaceState({ page: target }, '', keep);
 
   // 서버 상태(로그인 여부·스펙)를 먼저 받아야 첫 화면이 올바르게 그려진다.
   // 실패해도 게스트 상태로 화면은 띄운다.
@@ -278,6 +299,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   showPage(me?.needsOnboarding ? 'onboarding' : target);
   updateNavAuth();
   paintSocialButtons();
+  initVerify();            // 본인인증을 쓸 수 있는 환경인지 확인하고 칸을 노출/숨김
   handlePaymentReturn();   // 결제창에서 돌아왔으면 승인까지 이어서 한다
 });
 
@@ -314,7 +336,11 @@ document.addEventListener('keydown', e => {
 // ════════════════════════════════════════════════════════════
 //   SIGNUP
 // ════════════════════════════════════════════════════════════
-const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?]).{8,20}$/;
+/* 영문·숫자는 필수, 특수문자는 허용하되 강제하지 않는다.
+   문자 클래스에서 특수문자를 빼면 기존 비밀번호로 가입이 막히므로 반드시 남긴다.
+   backend/src/server.js 의 isValidPassword 와 같은 규칙이어야 한다 — 한쪽만 고치면
+   프론트를 통과한 값이 서버에서 400 으로 떨어진다. */
+const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?]{8,20}$/;
 
 function showFieldErr(id, msg) {
   const input = document.getElementById('su-' + id);
@@ -334,24 +360,103 @@ function clearFieldErr(id) {
   });
 });
 
-/* 닉네임이 '누구에게' 보이는지는 회원 유형에 따라 반대다.
-   멘티가 쓰는 닉네임은 선배(멘토)가 보고, 멘토가 쓰는 닉네임은 후배(멘티)가 본다.
-   유형을 고를 때마다 안내 문구를 뒤집어 준다. */
-const NICKNAME_PLACEHOLDER = {
-  mentee: '선배들에게 표시될 이름',
-  mentor: '후배들에게 표시될 이름',
-};
+/* ── 아이디 중복확인 ──────────────────────────────────────────
+   확인에 통과한 '값 자체'를 기억한다. 통과 여부만 불리언으로 들고 있으면
+   확인 후 아이디를 고쳐도 통과 상태가 남아, 이미 쓰이는 아이디로 제출된다. */
+let checkedUsername = null;
 
-function syncNicknamePlaceholder() {
-  const role = document.querySelector('input[name="role"]:checked')?.value;
-  const el = document.getElementById('su-nickname');
-  if (el) el.placeholder = NICKNAME_PLACEHOLDER[role] || NICKNAME_PLACEHOLDER.mentee;
+function setUsernameNote(msg, ok) {
+  const el = document.getElementById('su-username-note');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'field-note' + (msg ? (ok ? ' ok' : ' bad') : '');
 }
 
-/* 회원 유형은 라디오라 change 로 잡는다. 문서 전체에 위임해 두면 회원가입 화면이
-   보이기 전에 바인딩해도 안전하다. */
-document.addEventListener('change', e => {
-  if (e.target.name === 'role') syncNicknamePlaceholder();
+async function checkUsernameDup() {
+  const input = document.getElementById('su-username');
+  const btn = document.getElementById('su-username-check');
+  const u = input.value.trim();
+
+  clearFieldErr('username');
+  setUsernameNote('', false);
+  checkedUsername = null;
+
+  if (!u) { showFieldErr('username', '아이디를 입력해주세요.'); return; }
+  if (u.length < 4 || u.length > 20) { showFieldErr('username', '아이디는 4~20자로 입력해주세요.'); return; }
+  if (!/^[a-zA-Z0-9_]+$/.test(u)) { showFieldErr('username', '아이디는 영문, 숫자, 밑줄(_)만 사용 가능합니다.'); return; }
+
+  btn.disabled = true;
+  try {
+    const { available } = await DB.checkUsername(u);
+    if (available) { checkedUsername = u; setUsernameNote('사용할 수 있는 아이디예요.', true); }
+    else setUsernameNote('이미 사용 중인 아이디예요.', false);
+  } catch (e) {
+    setUsernameNote(e.message || '확인에 실패했어요. 잠시 후 다시 시도해주세요.', false);
+  } finally {
+    btn.disabled = false;
+  }
+}
+window.checkUsernameDup = checkUsernameDup;
+
+/* ── 본인확인 ────────────────────────────────────────────────
+   서버가 준 단명 토큰만 들고 있는다. CI(개인식별값)는 화면으로 내려오지 않는다.
+   회원가입(su)과 소셜 온보딩(ob) 두 화면이 같은 부품을 쓴다. */
+const verifyTokens = { su: null, ob: null };
+let verifyAvailable = false;          // 인증을 쓸 수 있는 환경인가 (서버가 판단)
+let verifyPopup = null;
+
+async function initVerify() {
+  const { available } = await DB.verifyStatus();
+  verifyAvailable = !!available;
+  /* 쓸 수 없으면 칸을 통째로 숨긴다. 서버도 같은 조건에서 인증을 요구하지 않으므로
+     '보이는데 눌러도 안 되는' 버튼이 남지 않는다. */
+  ['su', 'ob'].forEach(p => {
+    const g = document.getElementById(`${p}-verify-group`);
+    if (g) g.hidden = !verifyAvailable;
+  });
+}
+
+function setVerifyState(prefix, msg, ok) {
+  const el = document.getElementById(`${prefix}-verify-state`);
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'verify-state' + (ok ? ' ok' : '');
+}
+
+async function startVerify(prefix = 'su') {
+  clearFieldErr('verify');
+  try {
+    const { popupUrl } = await DB.verifyRequest();
+    /* 팝업이 차단되면 아무 일도 안 일어난 것처럼 보인다 — 반드시 알려준다. */
+    verifyPopup = window.open(popupUrl, 'careerly-verify', 'width=440,height=560');
+    if (!verifyPopup) {
+      setVerifyState(prefix, '팝업이 차단됐어요. 허용 후 다시 눌러주세요.', false);
+      return;
+    }
+    verifyPopup.__prefix = prefix;
+  } catch (e) {
+    setVerifyState(prefix, e.message || '본인인증을 시작하지 못했어요.', false);
+  }
+}
+window.startVerify = startVerify;
+
+/* 팝업이 postMessage 로 결과를 보낸다. **origin 을 반드시 확인한다** —
+   확인하지 않으면 아무 사이트나 '인증됐다'고 보낼 수 있다. */
+window.addEventListener('message', e => {
+  if (e.origin !== window.location.origin) return;
+  if (e.data?.type !== 'careerly:verified' || !e.data.token) return;
+
+  const prefix = verifyPopup?.__prefix || 'su';
+  verifyTokens[prefix] = e.data.token;
+  setVerifyState(prefix, `${e.data.name || ''} · ${e.data.phoneMasked || ''} 인증 완료`.trim(), true);
+  clearFieldErr('verify');
+  verifyPopup = null;
+});
+
+/* 아이디를 고치면 직전 확인 결과는 무효다. */
+document.addEventListener('input', e => {
+  if (e.target.id !== 'su-username') return;
+  if (e.target.value.trim() !== checkedUsername) { checkedUsername = null; setUsernameNote('', false); }
 });
 
 function validateSignup() {
@@ -365,24 +470,30 @@ function validateSignup() {
   if (!u) { showFieldErr('username', '아이디를 입력해주세요.'); valid = false; }
   else if (u.length < 4 || u.length > 20) { showFieldErr('username', '아이디는 4~20자로 입력해주세요.'); valid = false; }
   else if (!/^[a-zA-Z0-9_]+$/.test(u)) { showFieldErr('username', '아이디는 영문, 숫자, 밑줄(_)만 사용 가능합니다.'); valid = false; }
+  else if (u !== checkedUsername) { showFieldErr('username', '아이디 중복확인을 해주세요.'); valid = false; }
 
   if (!p) { showFieldErr('password', '비밀번호를 입력해주세요.'); valid = false; }
-  else if (!PASSWORD_REGEX.test(p)) { showFieldErr('password', '비밀번호는 8~20자이며, 영문·숫자·특수문자를 모두 포함해야 합니다.'); valid = false; }
+  else if (!PASSWORD_REGEX.test(p)) { showFieldErr('password', '비밀번호는 8~20자이며, 영문과 숫자를 모두 포함해야 합니다.'); valid = false; }
 
   if (!pc) { showFieldErr('password-confirm', '비밀번호를 다시 입력해주세요.'); valid = false; }
   else if (p !== pc) { showFieldErr('password-confirm', '비밀번호가 일치하지 않습니다.'); valid = false; }
 
   if (!n) { showFieldErr('name', '이름을 입력해주세요.'); valid = false; }
 
-  /* 닉네임은 선택 — 비워두면 이름을 가려서 쓴다(maskName). 적었다면 길이만 본다.
+  /* 별명은 선택 — 비워두면 이름을 가려서 쓴다(maskName). 적었다면 길이만 본다.
      화면 곳곳에 이름 대신 들어가는 값이라 너무 길면 레이아웃이 깨진다. */
   const nick = document.getElementById('su-nickname').value.trim();
-  if (nick && (nick.length < 2 || nick.length > 12)) {
-    showFieldErr('nickname', '닉네임은 2~12자로 입력해주세요.'); valid = false;
+  if (nick && (nick.length < 2 || nick.length > 20)) {
+    showFieldErr('nickname', '별명은 2~20자로 입력해주세요.'); valid = false;
   }
 
   if (!em) { showFieldErr('email', '이메일을 입력해주세요.'); valid = false; }
   else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) { showFieldErr('email', '올바른 이메일 형식을 입력해주세요.'); valid = false; }
+
+  /* 인증을 쓸 수 있는 환경일 때만 요구한다. 서버도 같은 조건이라 어긋나지 않는다. */
+  if (verifyAvailable && !verifyTokens.su) {
+    showFieldErr('verify', '본인인증을 완료해주세요.'); valid = false;
+  }
   return valid;
 }
 
@@ -399,10 +510,15 @@ async function handleSignup() {
       nickname: document.getElementById('su-nickname').value.trim() || null,
       email:    document.getElementById('su-email').value.trim(),
       role,
+      verifyToken: verifyTokens.su,
     });
     alert(`${role === 'mentor' ? '멘토' : '멘티'}로 회원가입이 완료되었습니다. 로그인해 주세요.`);
     navigate('login');
   } catch (e) {
+    /* 인증 토큰은 서버가 한 번 쓰면 버린다. 실패했으면 다시 받아야 하므로
+       여기서 비워 준다 — 안 비우면 이미 쓴 토큰으로 계속 재시도하게 된다. */
+    verifyTokens.su = null;
+    setVerifyState('su', '다시 인증해 주세요', false);
     serverError.textContent = e.message;
     serverError.style.display = 'block';
   }
@@ -412,12 +528,82 @@ window.handleSignup = handleSignup;
 // ════════════════════════════════════════════════════════════
 //   MYPAGE
 // ════════════════════════════════════════════════════════════
+/* 마이페이지는 탭 두 개다 — 계정 관리 / 스펙 관리.
+   탭은 해시 뒤에 붙여 둔다(#mypage/account). 새로고침하거나 링크를 공유해도
+   보던 탭이 유지되고, 뒤로가기도 자연스럽게 동작한다. */
+const MYPAGE_TABS = ['account', 'spec', 'mentor', 'withdraw'];
+let mypageTab = 'account';
+
+/* '멘토 페이지' 탭은 멘토만 쓴다. 멘티에게 보이면 눌러도 아무것도 없는 칸이 된다. */
+const tabsFor = user => MYPAGE_TABS.filter(t => t !== 'mentor' || user?.role === 'mentor');
+
 function initMypage() {
   const user = DB.currentUser();
   document.getElementById('mypage-not-logged-in').style.display = user ? 'none' : 'block';
-  const container = document.getElementById('mypage-form-container');
-  if (!user) { container.innerHTML = ''; return; }
-  SpecForm.render(container, user);
+  const body = document.getElementById('mypage-body');
+  if (!user) { body.hidden = true; return; }
+  body.hidden = false;
+
+  const allowed = tabsFor(user);
+  document.getElementById('mp-tab-mentor').hidden = !allowed.includes('mentor');
+
+  /* 해시에 탭이 적혀 있으면 그걸 따른다. 없으면 직전에 보던 탭.
+     멘티가 #mypage/mentor 를 직접 쳐도 허용 목록에 없으면 첫 탭으로 떨어진다. */
+  const fromHash = (location.hash.split('/')[1] || '').trim();
+  if (allowed.includes(fromHash)) mypageTab = fromHash;
+  if (!allowed.includes(mypageTab)) mypageTab = 'account';
+
+  paintMypageTab(user);
+}
+
+function paintMypageTab(user) {
+  document.querySelectorAll('[data-mp-tab]').forEach(b => {
+    const on = b.dataset.mpTab === mypageTab;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-selected', String(on));
+  });
+
+  const panes = {
+    account: document.getElementById('mypage-account-container'),
+    spec: document.getElementById('mypage-form-container'),
+    mentor: document.getElementById('mypage-mentor-container'),
+    withdraw: document.getElementById('mypage-withdraw-container'),
+  };
+  Object.entries(panes).forEach(([k, el]) => { el.hidden = mypageTab !== k; });
+
+  /* 열 때마다 다시 그린다. 저장 후 다른 탭에 갔다 오면 방금 바꾼 값이
+     화면에 남아 있어야 하는데, 한 번만 그리면 옛 값이 그대로 보인다.
+     탈퇴 탭은 특히 그렇다 — 입력해 둔 확인 문구가 남아 있으면 안 된다. */
+  if (mypageTab === 'account') Account.render(panes.account, user);
+  else if (mypageTab === 'mentor') MentorProfile.render(panes.mentor, user);
+  else if (mypageTab === 'withdraw') Account.renderWithdraw(panes.withdraw, user);
+  else SpecForm.render(panes.spec, user);
+}
+
+function selectMypageTab(tab) {
+  const user = DB.currentUser();
+  if (!tabsFor(user).includes(tab)) return;
+  mypageTab = tab;
+  /* pushState 가 아니라 replaceState — 탭을 옮길 때마다 히스토리가 쌓이면
+     뒤로가기를 여러 번 눌러야 이전 화면으로 나간다. */
+  history.replaceState({ page: 'mypage' }, '', `#mypage/${tab}`);
+  paintMypageTab(user);
+}
+window.selectMypageTab = selectMypageTab;
+
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-mp-tab]');
+  if (btn) selectMypageTab(btn.dataset.mpTab);
+});
+
+/* 멘토 프로필은 마이페이지 탭으로 옮겼다(#mypage/mentor).
+   옛 주소로 들어오는 링크·북마크가 있으므로 그쪽으로 보내 준다. */
+function initMentorProfile() {
+  const user = DB.currentUser();
+  if (!user) { navigate('login'); return; }
+  if (user.role !== 'mentor') { navigate('mypage'); return; }
+  mypageTab = 'mentor';
+  navigate('mypage');
 }
 
 // ════════════════════════════════════════════════════════════

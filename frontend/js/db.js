@@ -138,6 +138,16 @@ window.DB = (() => {
     }
   }
 
+  /* 학교 검색. 학과·회사·자격증 검색과 같은 규약이다.
+     실패는 빈 목록으로 삼킨다 — 카탈로그가 아직 비어 있어도(수집 전) 직접 입력은 되어야 한다. */
+  async function suggestUniversities(q, limit = 8) {
+    if (!q || !q.trim()) return [];
+    try {
+      const r = await api('GET', `/api/universities/suggest?q=${encodeURIComponent(q.trim())}&limit=${limit}`);
+      return r.items || [];
+    } catch { return []; }
+  }
+
   /* 목록에 없는 학과명 → 집계 분류. 규칙은 서버에 한 벌만 둔다
      (프론트에도 복사하면 둘이 어긋났을 때 통계가 조용히 갈린다). */
   async function classifyMajor(name) {
@@ -177,8 +187,25 @@ window.DB = (() => {
   /* nickname 을 빠뜨리지 말 것. 화면·서버 양쪽 다 받는데 여기서만 안 실어
      보내서, 가입할 때 적은 닉네임이 조용히 사라지고 스펙 입력창에서 다시
      적어야 했다. 인자에서 흘리는 실수라 에러도 안 난다. */
-  async function createUser({ username, password, name, nickname, email, role }) {
-    const { user } = await api('POST', '/api/auth/signup', { username, password, name, nickname, email, role });
+  /* 아이디 중복확인. 여기서는 실패를 삼키지 않는다 — 자동완성과 달리 결과가
+     "사용 가능" 으로 잘못 보이면 그대로 제출되고 서버에서 409 로 튕긴다. */
+  async function checkUsername(username) {
+    return api('GET', '/api/auth/check-username?username=' + encodeURIComponent(username));
+  }
+
+  /* 본인확인 — 쓸 수 있는 상태인지 먼저 묻는다. 운영인데 키가 없으면
+     'available: false' 라 화면이 인증 단계를 통째로 건너뛴다. */
+  async function verifyStatus() {
+    try { return await api('GET', '/api/verify/status'); }
+    catch { return { available: false }; }
+  }
+  async function verifyRequest() {
+    return api('POST', '/api/verify/request', { returnUrl: location.href });
+  }
+
+  async function createUser({ username, password, name, nickname, email, role, verifyToken }) {
+    const { user } = await api('POST', '/api/auth/signup',
+      { username, password, name, nickname, email, role, verifyToken });
     return user;
   }
 
@@ -193,8 +220,8 @@ window.DB = (() => {
 
   /* 소셜 가입 직후 멘토/멘티·닉네임을 채운다. 성공하면 캐시된 회원 정보도 갱신해야
      화면이 곧바로 로그인 상태(역할 포함)로 보인다. */
-  async function completeOnboarding({ role, nickname }) {
-    const { user } = await api('POST', '/api/auth/onboarding', { role, nickname });
+  async function completeOnboarding({ role, nickname, verifyToken }) {
+    const { user } = await api('POST', '/api/auth/onboarding', { role, nickname, verifyToken });
     _me = user;
     await refreshSpecs();
     return user;
@@ -204,6 +231,14 @@ window.DB = (() => {
      승인은 반드시 서버가 한다(프론트에서 '성공' 이라고 말만 하면 통과하면 안 된다). */
   async function confirmPayment({ paymentKey, orderId, amount }) {
     return api('POST', '/api/payments/confirm', { paymentKey, orderId, amount });
+  }
+
+  /* 회원 탈퇴 — 되돌릴 수 없다. 성공하면 서버가 세션 쿠키를 지우므로
+     여기서도 캐시를 비운다(안 비우면 로그인된 것처럼 보인다). */
+  async function withdraw({ password, username }) {
+    await api('POST', '/api/auth/withdraw', { password, username });
+    _me = null;
+    _mySpec = null;
   }
 
   async function logout() {
@@ -223,6 +258,17 @@ window.DB = (() => {
     await refreshSpecs();
   }
 
+  /* 프로필(학교 등)은 스펙과 다른 테이블이다. 스펙 폼에서 함께 저장하지만
+     통계에 쓰이는 값이 아니라 refreshSpecs 를 부르지 않는다. */
+  async function getProfile() {
+    try { return (await api('GET', '/api/profile')).profile || null; }
+    catch { return null; }
+  }
+  async function updateProfile(patch) {
+    const { profile } = await api('PUT', '/api/profile', patch);
+    return profile;
+  }
+
   // ── 백오피스 (개발 전용 — 운영에서는 서버가 404 로 막는다) ──
   async function seedDemo() { await api('POST', '/api/admin/seed');  await refreshSpecs(); await refreshUsers(); }
   async function seedRandom(count = 50) {
@@ -240,7 +286,9 @@ window.DB = (() => {
   return {
     hydrate, refreshSpecs, refreshUsers,
     currentUser, getAllSpecs, getSpec, getUsers, countByRole, stats,
-    createUser, login, logout, completeOnboarding, confirmPayment, updateUser, upsertSpec, classifyCompany, suggestCompanies, suggestCerts, suggestMajors, classifyMajor, jobCatalog,
+    checkUsername, verifyStatus, verifyRequest,
+    createUser, login, logout, withdraw, completeOnboarding, confirmPayment, updateUser, upsertSpec, getProfile, updateProfile,
+    classifyCompany, suggestCompanies, suggestCerts, suggestMajors, suggestUniversities, classifyMajor, jobCatalog,
     analyzeCas, coachJd, companyNews,
     seedDemo, seedRandom, clearAll, deleteUser,
   };
