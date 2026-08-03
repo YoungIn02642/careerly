@@ -249,3 +249,37 @@ body.dir-c .home-hero-dark { display: block; }
   .navbar { padding: 0 18px; gap: 16px; }
   .nav-links { display: none; }
 }
+
+
+/* ─────────────────────── REVEAL · 홈 등장 효과 ───────────────────────
+   원본은 framer-motion 의 containerVariants/itemVariants 였다.
+   staggerChildren 은 --rv-i(순번)에 비례하는 transition-delay 로,
+   { opacity:0, y:20 } → { opacity:1, y:0 } 은 그대로 옮겼다.
+   진입 시점은 js/home.js 의 IntersectionObserver 가 .rv-in 으로 알린다. */
+.rv {
+  opacity: 0;
+  transform: translateY(20px);
+}
+.rv.rv-in {
+  opacity: 1;
+  transform: none;
+  transition: opacity 0.5s ease, transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: calc(var(--rv-i, 0) * 0.12s);
+}
+
+/* 히어로의 통계 카드만 살짝 확대되며 들어온다 (imageVariants 의 scale 0.8→1).
+   숫자가 있는 카드라 위로 떠오르기보다 '자리를 잡는' 편이 덜 산만하다. */
+.home-hero-visual.rv { transform: translateY(20px) scale(0.96); }
+.home-hero-visual.rv.rv-in { transform: none; }
+
+/* 효과를 끈 상태(구형 브라우저·모션 최소화). 반드시 보이게 되돌린다. */
+.home.reveal-off .rv,
+.home.reveal-off .home-hero-visual.rv {
+  opacity: 1; transform: none; transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rv, .rv.rv-in, .home-hero-visual.rv {
+    opacity: 1; transform: none; transition: none;
+  }
+}

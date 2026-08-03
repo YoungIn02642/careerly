@@ -26,6 +26,75 @@ function goInsights() {
 }
 window.goInsights = goInsights;
 
+/* ════════════════════════════════════════════════════════════
+   REVEAL — 홈 전체 등장 효과 (스크롤 진입 시 페이드업)
+   ════════════════════════════════════════════════════════════
+   섹션마다 '무엇을 하나씩 띄울지'가 다르다. 히어로는 문구 줄 단위로,
+   퀵링크는 아이콘 하나씩, 나머지는 섹션 통째로 띄운다.
+   여기 없는 섹션은 fallback 으로 섹션 전체가 한 덩어리로 뜬다. */
+const REVEAL_PARTS = {
+  'home-hero':      ['.home-hero-copy > *', '.home-hero-visual'],
+  'home-hero-dark': [':scope > *'],
+  'home-quick':     ['.ql'],
+  'home-pill-wrap': ['.home-pill'],
+};
+
+/* 가로 스크롤 레일(job rail)은 건드리지 않는다 — 화면 밖으로 나가 있는
+   카드까지 숨겼다가 띄우면, 스크롤해서 꺼낸 카드가 비어 보인다. */
+
+function revealTargets(section) {
+  for (const cls in REVEAL_PARTS) {
+    if (!section.classList.contains(cls)) continue;
+    const found = REVEAL_PARTS[cls]
+      .flatMap(sel => Array.from(section.querySelectorAll(sel)));
+    if (found.length) return found;
+  }
+  return [section];
+}
+
+let revealObserver = null;
+
+function setupReveal() {
+  const home = document.querySelector('#page-main .home');
+  if (!home) return;
+
+  /* 브라우저가 못 따라오거나 사용자가 모션을 줄여 달라고 했으면 효과를 아예 건다.
+     여기서 그냥 넘기면 opacity:0 인 채로 남아 홈이 백지로 보인다. */
+  const reduced = window.matchMedia &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!('IntersectionObserver' in window) || reduced) {
+    home.classList.add('reveal-off');
+    return;
+  }
+  home.classList.remove('reveal-off');
+
+  if (!revealObserver) {
+    revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach(en => {
+        if (!en.isIntersecting) return;
+        en.target.classList.add('rv-in');
+        revealObserver.unobserve(en.target);   // 한 번만. 오르내릴 때마다 깜빡이면 성가시다
+      });
+    }, { rootMargin: '0px 0px -12% 0px', threshold: 0.05 });
+  }
+
+  home.querySelectorAll(':scope > section').forEach(section => {
+    revealTargets(section).forEach((el, i) => {
+      el.classList.add('rv');
+      el.classList.remove('rv-in');
+      el.style.setProperty('--rv-i', String(Math.min(i, 6)));  // 계단은 6칸에서 멈춘다
+      revealObserver.observe(el);
+    });
+  });
+}
+
+/* SPA 라 홈을 떠났다 돌아오면 클래스가 남아 있어 효과가 한 번만 돌고 끝난다.
+   showPage 가 renderHome 을 다시 부르므로 여기서 매번 새로 건다. */
+function replayReveal() {
+  if (revealObserver) revealObserver.disconnect();
+  setupReveal();
+}
+
 /* ── main page hook (called by app.js showPage) ─────────── */
 function renderHome() { applyTweaks(); refreshStartFree(); }
 window.renderHome = renderHome;
@@ -122,6 +191,10 @@ function applyTweaks() {
   // sync panel segmented controls
   syncSeg('tw-dir', TW.homeDir);
   syncSeg('tw-acc', TW.accent);
+  /* dir 을 바꾸면 방금까지 display:none 이던 히어로가 나타난다. 그 요소는
+     화면에 없는 동안 관찰되지 않아 .rv(opacity:0) 그대로라, 다시 걸어 주지 않으면
+     투명한 채로 굳는다. 홈에 다시 들어올 때(renderHome)도 이 경로를 탄다. */
+  replayReveal();
 }
 function syncSeg(id, val) {
   const seg = document.getElementById(id);
@@ -152,7 +225,7 @@ window.addEventListener('message', e => {
 document.addEventListener('DOMContentLoaded', () => {
   applyTweaks();
   refreshStartFree();
-  syncNotiDot();
+  syncNotiDot();   // reveal 은 applyTweaks 안에서 함께 걸린다
   // wire segmented controls
   const dir = document.getElementById('tw-dir');
   const acc = document.getElementById('tw-acc');
