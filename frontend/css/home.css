@@ -73,17 +73,17 @@ body.dir-c .home-hero-dark { display: block; }
   font-size: 12.8px; font-weight: 550; color: var(--brand);
   background: var(--brand-soft); padding: 5px 11px; border-radius: var(--radius-sm);
 }
-.hcard-n { font-family: var(--font-mono); font-size: 12px; color: var(--text-m); }
+.hcard-n { font-family: var(--font-num); font-size: 12px; font-weight: 600; color: var(--text-m); }
 .hcard-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 18px; }
 .hcard-stat-lab { font-size: 12px; color: var(--text-m); font-weight: 500; margin-bottom: 5px; }
-.hcard-stat-val { font-family: var(--font-mono); font-size: 28px; font-weight: 500; letter-spacing: -0.5px; color: var(--ink); }
-.hcard-stat-val small { font-size: 13px; color: var(--text-m); font-weight: 400; margin-left: 3px; }
+.hcard-stat-val { font-family: var(--font-num); font-size: 30px; font-weight: 700; letter-spacing: -0.4px; color: var(--ink); }
+.hcard-stat-val small { font-size: 13px; color: var(--text-m); font-weight: 600; margin-left: 3px; }
 .hcard-bar { height: 6px; background: var(--bg); border-radius: 99px; margin-top: 8px; overflow: hidden; }
 .hcard-bar > i { display: block; height: 100%; border-radius: 99px; }
 .hcard-list { display: flex; flex-direction: column; gap: 8px; padding-top: 16px; border-top: 1px solid var(--border); }
 .hcard-row { display: flex; justify-content: space-between; font-size: 13px; }
 .hcard-row span { color: var(--text-s); }
-.hcard-row b { font-family: var(--font-mono); font-weight: 500; color: var(--ink); }
+.hcard-row b { font-family: var(--font-num); font-weight: 700; color: var(--ink); }
 
 /* ─────────────────────── DIR C · dark hero band ─────────────────────── */
 .home-hero-dark {
@@ -112,7 +112,7 @@ body.dir-c .home-hero-dark { display: block; }
 }
 .btn-on-dark-ghost:hover { border-color: #fff; }
 .home-dark-stats { display: flex; justify-content: center; gap: 56px; margin-top: 36px; flex-wrap: wrap; }
-.home-dark-stat .n { font-family: var(--font-mono); font-size: 30px; font-weight: 500; letter-spacing: -0.5px; }
+.home-dark-stat .n { font-family: var(--font-num); font-size: 32px; font-weight: 700; letter-spacing: -0.4px; }
 .home-dark-stat .l { font-size: 13px; color: rgba(255,255,255,0.5); margin-top: 2px; }
 
 /* ─────────────────────── QUICK LINKS (shared) ─────────────────────── */
@@ -172,7 +172,7 @@ body.dir-c .home-hero-dark { display: block; }
 }
 .job-cas { text-align: right; }
 .job-cas .l { font-size: 10px; color: var(--text-m); font-weight: 600; letter-spacing: 0.04em; }
-.job-cas .v { font-family: var(--font-mono); font-size: 20px; font-weight: 500; color: var(--ink); letter-spacing: -0.5px; }
+.job-cas .v { font-family: var(--font-num); font-size: 21px; font-weight: 700; color: var(--ink); letter-spacing: -0.4px; }
 .job-name { font-size: 19px; font-weight: 600; color: var(--ink); letter-spacing: -0.3px; }
 .job-companies { font-size: 13px; color: var(--text-s); line-height: 1.5; }
 .job-meta {
@@ -180,7 +180,7 @@ body.dir-c .home-hero-dark { display: block; }
   border-top: 1px solid var(--border); margin-top: auto;
 }
 .job-meta-item { display: flex; flex-direction: column; gap: 2px; }
-.job-meta-item .n { font-family: var(--font-mono); font-size: 15px; font-weight: 500; color: var(--ink); }
+.job-meta-item .n { font-family: var(--font-num); font-size: 15px; font-weight: 700; color: var(--ink); }
 .job-meta-item .l { font-size: 11px; color: var(--text-m); }
 
 /* articles */
