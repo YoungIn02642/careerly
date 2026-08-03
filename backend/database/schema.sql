@@ -29,9 +29,22 @@ CREATE TABLE IF NOT EXISTS users (
   nickname       VARCHAR(32)  NULL,
   provider       VARCHAR(16)  NULL,          -- 'naver' | 'kakao' | NULL(일반 가입)
   provider_id    VARCHAR(64)  NULL,
+  -- 본인확인 CI. 같은 사람이면 가입 경로(일반·네이버·카카오)가 달라도 같은 값이다.
+  -- **'한 사람 = 한 계정' 을 실제로 강제하는 곳은 아래 uk_ci 하나다.** 앱에서만
+  -- 검사하면 동시에 들어온 두 요청이 둘 다 통과한다.
+  ci             VARCHAR(88)  NULL,
+  phone          VARCHAR(20)  NULL,
+  verified_at    DATETIME     NULL,
+  -- 백오피스 접근 권한. 역할(role)과는 다른 축이다 — 관리자도 멘토이거나 멘티일 수 있고,
+  -- role 에 'admin' 을 더하면 스펙·통계 화면이 전부 예외 처리를 해야 한다.
+  -- 최초 관리자는 ADMIN_USERNAMES 환경변수로 지정한다(server.js 부팅 시 반영).
+  is_admin       BOOLEAN      NOT NULL DEFAULT FALSE,
   created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   -- 소셜 로그인은 (제공자, 제공자 계정) 으로 회원을 찾는다. 매 로그인마다 조회된다.
   UNIQUE KEY uk_provider (provider, provider_id),
+  -- 기존 회원 1,508명은 ci 가 NULL 이다. MySQL 은 NULL 을 중복으로 보지 않아
+  -- 공존한다 — 옛 계정에 인증을 소급 강제하면 로그인이 통째로 막힌다.
+  UNIQUE KEY uk_ci (ci),
   KEY idx_role (role)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -41,6 +54,29 @@ CREATE TABLE IF NOT EXISTS profiles (
   university     VARCHAR(128) NULL,
   current_job    VARCHAR(128) NULL,
   tips           TEXT         NULL,
+  -- 계정 관리(마이페이지). 이름·이메일은 users 에 있으므로 여기 두지 않는다 —
+  -- 두 곳에 두면 어느 쪽이 맞는지 알 수 없게 된다.
+  -- avatar 는 브라우저에서 256px 로 줄인 data:image/... base64 다. 파일 서버가 없고,
+  -- 디스크에 두면 Railway 재배포 때 사라져서 DB 에 넣는다.
+  avatar         MEDIUMTEXT   NULL,
+  gender         VARCHAR(16)  NULL,   -- male | female | other | (빈 값 = 안 밝힘)
+  birthdate      DATE         NULL,
+  -- 연락처. users.phone(본인인증으로 확인된 번호)과 **다른 값이다** —
+  -- 인증은 신원 확인용이고 이건 연락받을 번호라 바꿀 수 있어야 한다.
+  -- 비어 있으면 화면이 users.phone 을 기본값으로 채워 준다.
+  phone          VARCHAR(20)  NULL,
+  address        VARCHAR(255) NULL,
+  -- 멘토 프로필. 멘티는 쓰지 않는다(스펙 입력만 한다).
+  intro          TEXT         NULL,   -- 소개글
+  specialties    JSON         NULL,   -- 전문 분야 ["백엔드", "이직"]
+  timeline       JSON         NULL,   -- 경력 타임라인 [{t 제목, d 기간, s 세부}]
+  modes          JSON         NULL,   -- 멘토링 가능 형식 ["화상", "채팅"]
+  -- 멘토가 직접 고른 예약 가능 일정.
+  --   [{ "date": "2026-08-10", "times": ["10:00", "14:00"] }, ...]
+  -- 요일 반복이 아니라 **날짜를 콕 집는 방식**이다. 멘토는 매주 같은 시간이 비지 않고
+  -- (출장·야근), 반복으로 받으면 "이번 주만 안 됨"을 표현할 수가 없다.
+  -- 지난 날짜는 화면이 걸러 보여준다 — 지우지는 않는다(언제 열어뒀는지 기록으로 남는다).
+  availability   JSON         NULL,
   CONSTRAINT fk_profiles_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -63,8 +99,15 @@ CREATE TABLE IF NOT EXISTS user_specs (
   -- dept 는 집계를 묶는 키다. 화면에 보이는 학과명(major)은 자유 입력이라 따로 둔다.
   dept        VARCHAR(32)  NULL,
   major       VARCHAR(128) NULL,
+  -- field/job 은 옛 하드코딩 분류('finance'·'backend' 등)다. 새로 입력하지 않지만
+  -- **지우면 안 된다** — wage-jobs.js 의 legacy 매핑이 이 값으로 옛 스펙 1,188건을
+  -- 커리어 로드맵에 연결한다. 지우는 순간 그 집계가 조용히 0 이 된다.
   field       VARCHAR(32)  NULL,
   job         VARCHAR(32)  NULL,
+  -- 새 직무 분류 — 커리어 로드맵과 같은 한국고용직업분류(KECO) 코드를 그대로 쓴다.
+  -- 1차는 하나, 2차(세부직무)는 여러 개 고를 수 있다.
+  job_major   VARCHAR(8)   NULL,   -- KECO 1차 코드 (예: '0')
+  job_middles JSON         NULL,   -- KECO 2차 코드 배열 (예: ["02","03"])
   company     VARCHAR(190) NULL,
   corp_type   VARCHAR(16)  NULL,
   gpa         DECIMAL(4,2) NULL,
@@ -82,8 +125,9 @@ CREATE TABLE IF NOT EXISTS user_specs (
   created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_specs_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-  -- 커리어 로드맵이 dept/field/job 조합으로 집계한다
+  -- 커리어 로드맵이 dept/field/job 조합으로 집계한다(옛 스펙 경로)
   KEY idx_specs_dept (dept, field, job),
+  KEY idx_specs_job_major (job_major),
   KEY idx_specs_corp (corp_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -127,6 +171,11 @@ CREATE TABLE IF NOT EXISTS mentoring_requests (
   -- 금액은 서버가 정한 값이다. 결제 승인 때 이 값과 대조하므로 절대 화면 값을 넣지 않는다.
   amount       INT          NOT NULL,
   message      TEXT         NULL,
+  -- 멘토가 연 일정(profiles.availability) 중 멘티가 고른 한 칸.
+  -- 시간은 'HH:MM' 문자열이다 — DATETIME 하나로 합치면 시간대(UTC 변환) 때문에
+  -- 저장할 때와 보여줄 때가 하루씩 밀린다.
+  slot_date    DATE         NULL,
+  slot_time    VARCHAR(5)   NULL,
   status       ENUM('pending','paid','accepted','rejected','cancelled') NOT NULL DEFAULT 'pending',
   order_id     VARCHAR(128) NULL UNIQUE,  -- 결제 시도마다 새로 발급. 승인 때 이걸로 되찾는다
   payment      JSON         NULL,         -- 승인 응답(paymentKey·method·영수증 등)
@@ -158,6 +207,15 @@ CREATE TABLE IF NOT EXISTS majors (
   -- careerly 집계 분류. NULL 이면 아직 통계를 내지 않는 계열이다.
   dept VARCHAR(32) NULL,
   KEY idx_majors_dept (dept)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 학교 자동완성용. 학과(majors)와 같은 구조다 — 이름이 곧 저장되는 값이라 PK.
+CREATE TABLE IF NOT EXISTS universities (
+  name   VARCHAR(128) PRIMARY KEY,
+  gubun  VARCHAR(32)  NULL,          -- 전문대학 | 대학(4년제)
+  region VARCHAR(64)  NULL,
+  est    VARCHAR(32)  NULL,          -- 국립 | 사립 | 공립
+  KEY idx_univ_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS companies (

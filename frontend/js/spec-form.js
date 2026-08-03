@@ -131,6 +131,12 @@ window.SpecForm = (() => {
       <div class="sf-head">
         <h1>스펙 입력</h1>
         <p class="sf-sub">입력한 데이터는 학과·직무별 평균/보유율 계산에 사용되어, 후배들에게 통계로 보여집니다. 개인 정보는 공개되지 않아요.</p>
+        ${isMentor ? `
+        <!-- 멘토에게만 보인다. 소개글·타임라인·일정은 채점되는 값이 아니라
+             후배가 읽는 것이라 같은 마이페이지의 다른 탭에 있다. -->
+        <button type="button" class="sf-link-btn" onclick="selectMypageTab('mentor')">
+          멘토 페이지에서 경력·소개글·가능 일정 정하기 →
+        </button>` : ''}
       </div>
 
       <div class="success-box" id="sf-success">스펙 정보가 저장되었습니다.</div>
@@ -139,37 +145,51 @@ window.SpecForm = (() => {
       <!-- 기본 정보 -->
       <div class="sf-section">
         <div class="sf-section-title"><i class="ti ti-user"></i>기본 정보</div>
-        <div class="form-group">
-          <label>닉네임</label>
-          <input type="text" id="sf-nickname" placeholder="후배들에게 표시될 닉네임"
-                 value="${escapeHtml(user.nickname || '')}" />
-        </div>
-        <div class="form-group">
-          <label>학과</label>
-          <div class="sf-search" id="sf-major-search">
-            <input type="text" id="sf-major" class="sf-search-input" placeholder="학과명을 검색하세요 (예: 컴퓨터공학과)"
-                   value="${escapeHtml(spec.major || '')}" autocomplete="off" />
-            <i class="ti ti-search sf-search-icon"></i>
-            <div class="sf-search-menu" id="sf-major-menu" hidden></div>
-          </div>
-          <div class="sf-hint-inline" id="sf-major-hint">학과명은 자유롭게 적어도 돼요. 통계는 아래 분류로 묶입니다.</div>
-        </div>
+        <!-- 관련 있는 항목은 한 줄에 묶는다. 한 칸씩 세로로 길게 늘어놓으면
+             스크롤만 길어지고 무엇과 무엇이 한 묶음인지 안 읽힌다.
+             학교↔학과, 진출분야↔통계분류가 각각 한 쌍이다. -->
+        <!-- 학교↔학과는 한 쌍이라 한 줄에 둔다. 별명은 계정 관리 탭으로 옮겼다 —
+             후배에게 보이는 '누구인지'에 가까운 값이라 스펙과 성격이 다르다.
+             학교는 스펙(user_specs)이 아니라 프로필(profiles.university)에 저장된다.
+             값은 render 가 끝난 뒤 initUniversitySearch() 가 비동기로 채운다. -->
         <div class="sf-row-2">
           <div class="form-group">
-            <label>통계 분류</label>
-            <select id="sf-dept">
-              <option value="">선택</option>
-              ${DEPTS.map(d => `<option value="${d.id}" ${spec.dept===d.id?'selected':''}>${d.label}</option>`).join('')}
-            </select>
+            <label>학교</label>
+            <div class="sf-search" id="sf-university-search">
+              <input type="text" id="sf-university" class="sf-search-input"
+                     placeholder="학교명 검색 (예: 서울대학교)" autocomplete="off" />
+              <i class="ti ti-search sf-search-icon"></i>
+              <div class="sf-search-menu" id="sf-university-menu" hidden></div>
+            </div>
           </div>
           <div class="form-group">
-            <label>${isMentor ? '현재' : '희망'} 진출분야</label>
-            <select id="sf-field"></select>
+            <label>학과</label>
+            <div class="sf-search" id="sf-major-search">
+              <input type="text" id="sf-major" class="sf-search-input" placeholder="학과명 검색 (예: 컴퓨터공학과)"
+                     value="${escapeHtml(spec.major || '')}" autocomplete="off" />
+              <i class="ti ti-search sf-search-icon"></i>
+              <div class="sf-search-menu" id="sf-major-menu" hidden></div>
+            </div>
           </div>
         </div>
+        <div class="sf-major-note">
+          <div class="sf-hint-inline" id="sf-major-hint">학과명은 자유롭게 적어도 돼요.</div>
+        </div>
+
+        <!-- 진출분야·세부직무는 커리어 로드맵과 **같은 분류**를 쓴다(GET /api/jobs).
+             선택 방식은 멘토 찾기의 분야 칩과 같게 맞췄다 — 한 화면에서 두 가지
+             방식으로 직무를 고르면 같은 것을 고르는 중이라는 게 안 읽힌다.
+             다만 가로 스크롤이 아니라 **줄바꿈**이다. 입력 폼에서 선택지가
+             스크롤 뒤에 숨으면 있는 줄도 모르고 지나친다. -->
         <div class="form-group">
-          <label>${isMentor ? '현재' : '희망'} 세부직무</label>
-          <select id="sf-job"></select>
+          <label>${isMentor ? '현재' : '희망'} 진출분야</label>
+          <div class="sf-chip-pick" id="sf-job-major">
+            <span class="sf-hint-inline">불러오는 중…</span>
+          </div>
+        </div>
+        <div class="form-group" id="sf-mid-group" hidden>
+          <label>${isMentor ? '현재' : '희망'} 세부직무 <span class="sf-optional">여러 개 선택 가능</span></label>
+          <div class="sf-chip-pick" id="sf-job-middles"></div>
         </div>
 
         ${isMentor ? `
@@ -324,22 +344,51 @@ window.SpecForm = (() => {
       paintActivities();
     });
 
-    // ── 필드/직무 의존 채우기
-    fillFieldJob(spec.dept, spec.field, spec.job);
+    // ── 직무 분류 (커리어 로드맵과 같은 KECO 트리)
+    initJobPicker(spec);
 
     // ── 이벤트
-    document.getElementById('sf-dept').addEventListener('change', e => {
-      paintCertReco(e.target.value);
-      fillFieldJob(e.target.value, null, null);
-    });
-    document.getElementById('sf-field').addEventListener('change', e => {
-      fillJob(e.target.value, null);
-    });
     document.getElementById('sf-save').addEventListener('click', () => handleSave(user));
     document.getElementById('sf-cancel').addEventListener('click', () => navigate('main'));
 
     initMajorSearch();
+    initUniversitySearch();
     initCompanyAutoClassify();
+  }
+
+  /* ── 학교 검색 ──────────────────────────────────────────────
+     학과 검색과 같은 부품(openSearchMenu)을 쓴다. 다른 점은 두 가지다.
+       · 저장 위치가 프로필이다 — 그래서 값을 여기서 따로 받아 온다
+       · 자동 분류가 없다 — 학교는 통계를 묶는 키가 아니다
+     카탈로그가 비어 있어도(수집 전) 직접 입력으로 계속 쓸 수 있다. */
+  async function initUniversitySearch() {
+    const input = document.getElementById('sf-university');
+    const menu  = document.getElementById('sf-university-menu');
+    if (!input || !menu) return;
+
+    /* 프로필은 비동기라 render 시점에 값이 없다. 받아온 뒤 채우되,
+       그 사이에 사용자가 이미 타이핑했으면 덮지 않는다. */
+    const profile = await DB.getProfile();
+    if (profile?.university && !input.value.trim()) input.value = profile.university;
+
+    const search = async () => {
+      const q = input.value.trim();
+      if (!q) { closeSearchMenu(menu); return; }
+
+      const hits = await DB.suggestUniversities(q);
+      if (input.value.trim() !== q) return;      // 늦게 온 응답으로 덮지 않는다
+
+      openSearchMenu(menu, hits.map(u => ({ value: u.name, sub: u.sub })), {
+        onPick: name => { input.value = name; },
+        empty: '목록에 없는 학교예요',
+        /* 분교·대학원·해외대학은 목록에 없을 수 있다. 못 찾았다고 막지 않는다. */
+        footer: `<b>${escapeHtml(q)}</b> 직접 입력`,
+        onFooter: () => { closeSearchMenu(menu); },
+      });
+    };
+
+    let timer = null;
+    input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(search, 250); });
   }
 
   /* ── 회사명 → 기업 유형 자동 판정 ──────────────────────────
@@ -617,31 +666,34 @@ window.SpecForm = (() => {
   }
 
   // ── 학과 검색 ───────────────────────────────────────────────
-  /* 학과명은 자유롭게 받고, 통계 분류(dept)는 그 이름에서 자동으로 정한다.
+  /* 학과명은 자유롭게 받고, 집계 분류(dept)는 그 이름에서 자동으로 정한다.
      회사명 → 기업 유형 자동판정과 같은 구조다.
 
-     자동 분류는 어디까지나 추천이라 회원이 고른 값을 덮어쓰지 않는다.
-     '학과명이 바뀐 순간'에만 반영하고, 그 뒤 분류를 손대면 그대로 둔다.
+     ── 화면에는 dept 를 보여주지 않는다 ──
+     예전에는 '통계 분류' 드롭다운이 따로 있었는데, 학과를 적고 나서 또 계열을
+     고르는 꼴이라 같은 것을 두 번 묻는 것처럼 보였다. 이제 값만 뒤에서 정한다.
 
-     못 맞추는 학과가 많다 — careerly 통계는 아직 8개 분류뿐이라 간호·기계처럼
-     해당 없는 계열이 훨씬 많다. 그때 아무 데나 밀어 넣으면 간호학과 학생에게
-     컴공 합격자 평균이 보인다. 그래서 비워 두고 직접 고르게 안내한다. */
+     **못 맞춰도 저장을 막지 않는다.** careerly 통계는 아직 8개 분류뿐이라
+     간호·기계처럼 해당 없는 계열이 훨씬 많다. 분류가 비면 그 학과 기준 통계에만
+     안 잡힐 뿐이고, 직무(jobMajor/jobMiddles)로는 여전히 비교된다. */
   let lastMajorClassified = null;
+  let deptState = null;          // 자동 판정된 집계 분류. 화면에 없고 저장에만 쓴다
 
   function initMajorSearch() {
     const input = document.getElementById('sf-major');
     const menu  = document.getElementById('sf-major-menu');
     const hint  = document.getElementById('sf-major-hint');
-    const sel   = document.getElementById('sf-dept');
-    if (!input || !menu || !sel) return;
+    if (!input || !menu) return;
 
     lastMajorClassified = input.value.trim() || null;
 
     const applyDept = async name => {
       if (!name) {
         hint.className = 'sf-hint-inline';
-        hint.textContent = '학과명은 자유롭게 적어도 돼요. 통계는 아래 분류로 묶입니다.';
+        hint.textContent = '학과명은 자유롭게 적어도 돼요.';
         lastMajorClassified = null;
+        deptState = null;
+        paintCertReco(null);
         return;
       }
       if (name === lastMajorClassified) return;
@@ -649,21 +701,21 @@ window.SpecForm = (() => {
       const r = await DB.classifyMajor(name);
       if (input.value.trim() !== name) return;      // 그새 더 입력했으면 버린다
       lastMajorClassified = name;
+      deptState = r?.dept || null;
+      /* 학과가 정해지면 그 학과에서 많이 따는 자격증을 칩으로 추천한다.
+         예전에는 dept 드롭다운의 change 에 걸려 있었는데, 그 칸을 없앴으므로
+         여기서 직접 부른다. */
+      paintCertReco(deptState);
 
-      if (r?.dept) {
-        sel.value = r.dept;
-        /* 값을 코드로 바꾸면 change 가 저절로 나지 않는다. 그래서 여기에 걸어 둔
-           fillFieldJob(진출분야·세부직무 채우기)·paintCertReco 가 안 돌았고,
-           학과를 골라도 '희망 진출분야'가 계속 비어 있었다. 직접 부르지 않고
-           이벤트를 쏘는 이유는, 나중에 change 에 뭘 더 붙여도 같이 따라오게
-           하기 위해서다(직접 부르면 또 빠뜨린다). */
-        sel.dispatchEvent(new Event('change'));
-        const label = DEPTS.find(d => d.id === r.dept)?.label || r.dept;
+      if (deptState) {
+        const label = DEPTS.find(d => d.id === deptState)?.label || deptState;
         hint.className = 'sf-hint-inline sf-hint-ok';
-        hint.textContent = `${label} 통계로 묶여요. 다르면 아래에서 직접 고치세요.`;
+        hint.textContent = `${label} 계열 통계와 비교돼요.`;
       } else {
-        hint.className = 'sf-hint-inline sf-hint-warn';
-        hint.textContent = '아직 이 계열의 선배 통계가 없어요. 가장 가까운 분류를 직접 골라주세요.';
+        /* 실패해도 경고가 아니다 — 저장은 되고, 직무 기준 비교는 그대로 된다.
+           예전처럼 '골라주세요'라고 하면 고를 칸도 없는데 시키는 꼴이 된다. */
+        hint.className = 'sf-hint-inline';
+        hint.textContent = '아직 이 계열의 선배 통계가 없어요. 직무 기준으로는 비교됩니다.';
       }
     };
 
@@ -690,12 +742,6 @@ window.SpecForm = (() => {
     let timer = null;
     input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(search, 250); });
     input.addEventListener('blur', () => applyDept(input.value.trim()));
-
-    // 분류를 직접 고치면 그 선택을 존중한다 — 다음 자동판정이 덮지 않게 표시만 바꾼다
-    sel.addEventListener('change', () => {
-      hint.className = 'sf-hint-inline';
-      hint.textContent = '직접 고른 분류로 저장돼요.';
-    });
   }
 
   // ── 관심 기업 (멘티 전용) ───────────────────────────────────
@@ -927,18 +973,50 @@ window.SpecForm = (() => {
     if (slot) slot.innerHTML = certBadgeHtml(certState[i]);
   }
 
+  /* 자격증 한 줄의 아랫단(발급기관·취득일). 배지와 같은 이유로 슬롯만 갈아끼운다 —
+     목록 전체를 다시 그리면 타이핑 중이던 입력칸과 열려 있던 드롭다운이 날아간다.
+
+     발급기관은 목록에서 고른 자격증에도 **빈칸으로** 내준다. 큐넷 원본에 발급기관
+     필드가 없어서(catalog-db.js searchCerts 주석) 카탈로그로는 못 채우고,
+     추측해서 넣으면 틀린 값이 조용히 저장된다. 선택 입력이라 비워도 저장된다. */
+  function certDetailHtml(i) {
+    const name = (certState[i] || '').trim();
+    if (!name) return '';                       // 아직 안 적은 줄에는 아무것도 안 띄운다
+
+    const meta = certMeta[name];
+    // 직접 입력분은 취득일까지 있다 — 그때는 모달에서 함께 고치게 둔다
+    if (meta && meta.date) {
+      return `<div class="sf-cert-detail">
+        <span><i class="ti ti-building"></i> ${escapeHtml(meta.issuer || '—')}</span>
+        <span><i class="ti ti-calendar"></i> ${escapeHtml(meta.date)}</span>
+        <button type="button" class="sf-cert-edit" data-cert-edit="${i}">수정</button>
+      </div>`;
+    }
+    return `<div class="sf-cert-detail">
+      <label class="sf-cert-issuer">
+        <i class="ti ti-building"></i>
+        <input type="text" data-cert-issuer="${i}" placeholder="발급기관 (선택)"
+               value="${escapeHtml(meta?.issuer || '')}" />
+      </label>
+    </div>`;
+  }
+
+  /* 이름이 '없다 ↔ 있다'로 바뀔 때만 부른다. 매 글자마다 부르면 방금 친
+     발급기관 입력칸이 다시 그려져 포커스가 날아간다. */
+  function paintCertDetail(i) {
+    const slot = document.getElementById(`sf-cert-detail-${i}`);
+    if (slot) slot.innerHTML = certDetailHtml(i);
+  }
+
   function certRowHtml(name, i) {
-    const manual = certMeta[name];
     const badge = `<span class="sf-cert-badge-slot" id="sf-cert-badge-${i}">${certBadgeHtml(name)}</span>`;
 
-    /* 직접 입력한 자격증은 발급기관·취득일을 함께 보여준다. 목록에서 고른 것은
-       그 정보가 카탈로그에 없으므로 묻지 않는다(공식 자격은 이름만으로 특정된다). */
-    const detail = manual ? `
-      <div class="sf-cert-detail">
-        <span><i class="ti ti-building"></i> ${escapeHtml(manual.issuer)}</span>
-        <span><i class="ti ti-calendar"></i> ${escapeHtml(manual.date)}</span>
-        <button type="button" class="sf-cert-edit" data-cert-edit="${i}">수정</button>
-      </div>` : '';
+    /* 직접 입력한 자격증은 모달에서 받은 발급기관·취득일을 그대로 보여준다.
+       목록에서 고른 자격증은 발급기관을 **빈칸으로 노출해 직접 적게** 한다 —
+       큐넷 원본에 발급기관 필드가 아예 없어서(catalog-db.js 의 searchCerts 주석)
+       카탈로그로는 채울 수 없고, 그렇다고 추측해서 넣으면 틀린 값이 조용히 저장된다.
+       선택 입력이라 비워 두어도 저장은 된다. */
+    const detail = `<div class="sf-cert-detail-slot" id="sf-cert-detail-${i}">${certDetailHtml(i)}</div>`;
 
     return `<div class="sf-cert-row">
         <div class="sf-cert-main">
@@ -992,9 +1070,12 @@ window.SpecForm = (() => {
       onPick: (v, item) => {
         certState[i] = v;
         certKnown.set(v, item.sub || '');   // 목록에서 골랐으니 확인된 이름이다
-        delete certMeta[v];                 // 목록에서 고르면 직접입력 정보는 필요 없다
+        /* 다른 자격증을 고른 것이므로 앞 이름에 붙어 있던 발급기관·취득일은 버린다.
+           남겨 두면 A 자격증에 적은 기관이 B 자격증에 붙는다. 고른 뒤 발급기관을
+           다시 적을 수 있게 아랫단은 빈칸으로 다시 그려진다(paintCerts). */
+        delete certMeta[v];
         paintCerts();
-        paintCertReco(document.getElementById('sf-dept').value);
+        paintCertReco(deptState);
       },
       empty: '목록에 없는 자격증이에요',
       footer: `<b>${escapeHtml(q)}</b> 직접 입력`,
@@ -1061,7 +1142,7 @@ window.SpecForm = (() => {
       host.hidden = true;
       host.innerHTML = '';
       paintCerts();
-      paintCertReco(document.getElementById('sf-dept').value);
+      paintCertReco(deptState);
     });
   }
 
@@ -1074,9 +1155,39 @@ window.SpecForm = (() => {
        요청이 대여섯 개 나간다. */
     const certTimers = {};
     wrap.addEventListener('input', e => {
+      /* 발급기관 칸. 자격증명 칸(data-cert-i)과 같은 wrap 안에 있으므로
+         **먼저 걸러내야** 한다 — 안 그러면 기관을 칠 때마다 자격증명을 덮어쓴다. */
+      const gi = e.target.dataset.certIssuer;
+      if (gi != null) {
+        const name = (certState[+gi] || '').trim();
+        if (!name) return;
+        const issuer = e.target.value.trim();
+        /* 직접입력 자격증은 취득일도 함께 갖고 있다. 기관만 갈아끼우고 날짜는 지키려고
+           기존 항목을 펼쳐서 덮는다. 비우면 항목 자체를 지운다(빈 문자열을 남기면
+           '적었는데 비어 있는' 값이 저장된다). */
+        if (issuer) certMeta[name] = { ...(certMeta[name] || {}), issuer };
+        else if (certMeta[name]) {
+          const { issuer: _drop, ...rest } = certMeta[name];
+          if (Object.keys(rest).length) certMeta[name] = rest; else delete certMeta[name];
+        }
+        return;
+      }
+
       const i = e.target.dataset.certI;
       if (i == null) return;
+      /* 자격증명이 바뀌면 옛 이름에 붙어 있던 발급기관을 새 이름으로 옮긴다.
+         안 옮기면 이름을 고치는 순간 방금 적은 기관이 조용히 사라진다
+         (certMeta 는 이름을 키로 쓰기 때문). */
+      const before = (certState[+i] || '').trim();
+      const after  = e.target.value.trim();
+      if (before && after && before !== after && certMeta[before] && !certMeta[after]) {
+        certMeta[after] = certMeta[before];
+        delete certMeta[before];
+      }
       certState[+i] = e.target.value;
+      /* 빈 줄에 처음 이름을 적었거나 이름을 통째로 지웠을 때만 아랫단을 다시 그린다.
+         글자마다 그리면 발급기관 칸에서 포커스가 튄다. */
+      if (!before !== !after) paintCertDetail(+i);
       clearTimeout(certTimers[i]);
       certTimers[i] = setTimeout(() => suggestCert(+i), 250);
     });
@@ -1090,7 +1201,7 @@ window.SpecForm = (() => {
       certState.splice(+btn.dataset.certI, 1);
       if (removed && !certState.includes(removed)) delete certMeta[removed];
       paintCerts();
-      paintCertReco(document.getElementById('sf-dept').value);
+      paintCertReco(deptState);
     });
 
     document.getElementById('sf-cert-reco').addEventListener('click', e => {
@@ -1101,7 +1212,7 @@ window.SpecForm = (() => {
       if (blank >= 0) certState[blank] = btn.dataset.certReco;
       else certState.push(btn.dataset.certReco);
       paintCerts();
-      paintCertReco(document.getElementById('sf-dept').value);
+      paintCertReco(deptState);
     });
 
     document.getElementById('sf-cert-add').addEventListener('click', () => {
@@ -1333,18 +1444,93 @@ window.SpecForm = (() => {
       });
   }
 
-  function fillFieldJob(dept, currentField, currentJob) {
-    const fieldSel = document.getElementById('sf-field');
-    const opts = FIELD_OPTIONS[dept] || [];
-    fieldSel.innerHTML = `<option value="">선택 안 함</option>` +
-      opts.map(([v,l]) => `<option value="${v}" ${currentField===v?'selected':''}>${l}</option>`).join('');
-    fillJob(currentField || '', currentJob);
+  /* ── 직무 분류 (KECO 1차 → 2차) ──────────────────────────────
+     커리어 로드맵과 같은 트리를 쓴다. 데이터는 KECO.load() 가 /api/jobs 에서 한 번만
+     받아 두고, 서버가 '대학생 취업 선택지가 아닌 분류'를 이미 걸러서 준다
+     (backend/src/job-filter.js). 화면은 받은 것을 그대로 그린다 —
+     거르는 규칙을 여기에도 두면 두 곳이 반드시 어긋난다. */
+  let midState = [];        // 고른 2차 코드 배열
+  let jobMajorState = null; // 고른 1차 코드
+
+  async function initJobPicker(spec) {
+    const majorHost = document.getElementById('sf-job-major');
+    const midHost   = document.getElementById('sf-job-middles');
+    if (!majorHost || !midHost) return;
+
+    midState = Array.isArray(spec.jobMiddles) ? [...spec.jobMiddles] : [];
+    jobMajorState = spec.jobMajor || null;
+
+    /* 200KB 트리라 로드맵을 안 여는 사람에게는 안 받는다(keco.js 머리주석).
+       스펙 폼에서는 필요하므로 여기서 받는다. */
+    try {
+      await KECO.load();
+    } catch {
+      majorHost.innerHTML = '<span class="sf-hint-inline sf-hint-warn">'
+        + '직무 분류를 불러오지 못했어요. 새로고침해도 안 되면 서버가 떠 있는지 확인해주세요.</span>';
+      return;
+    }
+
+    paintJobMajors();
+    paintMiddles();
+
+    /* 칩은 누를 때마다 다시 그려지므로 개별 버튼이 아니라 상자에 위임한다. */
+    majorHost.addEventListener('click', e => {
+      const chip = e.target.closest('[data-major]');
+      if (!chip) return;
+      const code = chip.dataset.major;
+      /* 같은 칩을 다시 누르면 해제 — 잘못 골랐을 때 되돌릴 방법이 있어야 한다. */
+      const next = jobMajorState === code ? null : code;
+      /* 1차가 바뀌면 그 아래 2차 선택은 뜻이 없어진다. 남겨 두면 화면에는
+         안 보이는데 저장은 되는 값이 생긴다(조용히 틀리는 쪽). */
+      if (next !== jobMajorState) midState = [];
+      jobMajorState = next;
+      paintJobMajors();
+      paintMiddles();
+    });
+
+    midHost.addEventListener('click', e => {
+      const chip = e.target.closest('[data-mid]');
+      if (!chip) return;
+      const code = chip.dataset.mid;
+      if (midState.includes(code)) midState = midState.filter(c => c !== code);
+      else midState.push(code);
+      paintMiddles();
+    });
   }
-  function fillJob(field, currentJob) {
-    const jobSel = document.getElementById('sf-job');
-    const opts = JOB_OPTIONS[field] || [];
-    jobSel.innerHTML = `<option value="">선택 안 함</option>` +
-      opts.map(([v,l]) => `<option value="${v}" ${currentJob===v?'selected':''}>${l}</option>`).join('');
+
+  /* 멘토 찾기의 분야 칩과 같은 모양(번호 + 이름). 다른 점은 줄바꿈이라는 것 —
+     입력 폼에서 선택지가 가로 스크롤 뒤에 숨으면 있는 줄도 모르고 지나친다. */
+  function paintJobMajors() {
+    const host = document.getElementById('sf-job-major');
+    if (!host) return;
+    const majors = KECO.MAJORS();
+    /* 이모지·번호는 넣지 않는다. 분류 이름이 길어서(‘교육·법률·사회복지·경찰·소방직 및 군인’)
+       앞에 뭐가 더 붙으면 이름이 밀려 읽히고, 번호는 고르는 데 아무 도움이 안 된다. */
+    host.innerHTML = majors.map(M => `
+      <button type="button" class="chip${jobMajorState === M.code ? ' on' : ''}" data-major="${escapeHtml(M.code)}">
+        ${escapeHtml(M.name)}
+      </button>`).join('');
+  }
+
+  /* 세부직무는 진출분야를 고른 뒤에만 나온다. 안 고른 상태에서 빈 칸을 띄우면
+     '왜 아무것도 없지' 가 되므로 칸 자체를 숨긴다. */
+  function paintMiddles() {
+    const group = document.getElementById('sf-mid-group');
+    const host = document.getElementById('sf-job-middles');
+    if (!group || !host) return;
+
+    if (!jobMajorState) { group.hidden = true; host.innerHTML = ''; return; }
+
+    const mids = KECO.byId(jobMajorState)?.middles || [];
+    group.hidden = false;
+    if (!mids.length) {
+      host.innerHTML = '<span class="sf-hint-inline">이 분야에는 세부직무가 없어요.</span>';
+      return;
+    }
+    host.innerHTML = mids.map(m => `
+      <button type="button" class="chip${midState.includes(m.code) ? ' on' : ''}" data-mid="${escapeHtml(m.code)}">
+        ${escapeHtml(m.name)}
+      </button>`).join('');
   }
 
   async function handleSave(user) {
@@ -1352,25 +1538,24 @@ window.SpecForm = (() => {
     const error   = document.getElementById('sf-error');
     success.style.display = error.style.display = 'none';
 
-    const dept   = document.getElementById('sf-dept').value;
+    /* dept 는 화면에 없다 — 학과명에서 자동 판정한 값이다(initMajorSearch).
+       못 맞춰 null 이어도 저장을 막지 않는다. */
+    const dept   = deptState;
     const major  = document.getElementById('sf-major')?.value.trim() || null;
-    const field  = document.getElementById('sf-field').value || null;
-    const job    = document.getElementById('sf-job').value   || null;
+    const jobMajor = jobMajorState;
+    const jobMiddles = [...midState];
     /* 회사·기업유형 칸은 멘토 화면에만 있고, 관심기업 칸은 멘티 화면에만 있다.
        없는 칸을 읽으려 하면 여기서 죽으므로 역할에 맞는 것만 읽는다. */
     const corpType = isMentor ? (document.getElementById('sf-corpType')?.value || null) : null;
     const company  = isMentor ? (document.getElementById('sf-company')?.value.trim() || null) : null;
-    const nickname = document.getElementById('sf-nickname').value.trim() || null;
     const gpaRaw   = document.getElementById('sf-gpa').value;
     const gpaMax   = parseFloat(document.getElementById('sf-gpaMax').value);
     const gpa      = gpaRaw === '' ? null : parseFloat(gpaRaw);
 
-    if (!dept) {
-      /* 학과명은 적었는데 분류만 비어 있는 경우가 흔하다(간호·기계처럼 아직 통계가
-         없는 계열). '학과를 선택하라'고만 하면 이미 적었는데 왜 그러냐가 된다. */
-      error.textContent = major
-        ? `'${major}'가 어느 분류로 묶일지 못 찾았어요. 통계 분류를 직접 골라주세요.`
-        : '학과를 입력해주세요.';
+    /* 학과는 여전히 필수다 — 없으면 어느 계열 통계에도 못 넣고, 학과별 자격증
+       추천도 못 한다. 다만 **분류(dept) 실패는 막지 않는다**(위 주석 참고). */
+    if (!major) {
+      error.textContent = '학과를 입력해주세요.';
       error.style.display = 'block';
       return;
     }
@@ -1395,9 +1580,14 @@ window.SpecForm = (() => {
     const saveBtn = document.getElementById('sf-save');
     saveBtn.disabled = true;
     try {
-      await DB.updateUser({ nickname });
+      /* 학교는 프로필 테이블이라 스펙과 따로 저장한다. 스펙 저장보다 **먼저** 보낸다 —
+         뒤에 두면 스펙이 저장된 뒤 여기서 실패했을 때 화면은 '저장 실패'인데
+         스펙만 반영된 어중간한 상태가 된다. */
+      const university = document.getElementById('sf-university')?.value.trim() ?? null;
+      if (university !== null) await DB.updateProfile({ university });
       await DB.upsertSpec({
-        dept, major, field, job, company, corpType, gpa, gpaMax, certs, scores, activities,
+        dept, major, jobMajor, jobMiddles,
+        company, corpType, gpa, gpaMax, certs, scores, activities,
         certMeta: collectCertMeta(certs),
         /* 역할별로만 있는 값. 반대 역할의 키는 아예 보내지 않아서
            멘티 스펙에 빈 careers 가, 멘토 스펙에 빈 관심기업이 남지 않게 한다. */

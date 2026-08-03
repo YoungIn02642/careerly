@@ -222,50 +222,23 @@ function reviewsFor(m){
 }
 
 /* ── my mentoring (seed) ────────────────────────────────── */
+/* 시작 상태는 비어 있다.
+   예전에는 예시 멘토링 내역(진행 2건·완료 5건·받은 요청 1건)을 넣어 뒀는데,
+   내 것이 아닌 기록이 '내 멘토링' 에 남는 게 실제 데이터처럼 보였다.
+   신청은 서버(mentoring_requests)에서 syncApplied() 가 받아 채운다. */
 const SEED = {
-  ongoing: [
-    { mentor:'김민준', sub:'20학번 카카오', pal:'purple', topic:'프론트엔드 취업 준비 · 화상 30분',
-      status:'진행 예정', badge:'blue', when:'2026.06.25 (목) 19:00' },
-    { mentor:'이서연', sub:'19학번 토스', pal:'green', topic:'데이터 분석가 커리어 상담 · 대면 60분',
-      status:'일정 조율 중', badge:'amber', when:'멘토 응답 대기' },
-  ],
-  completed: [
-    { id:'c1', mentor:'박지훈', sub:'18학번 맥킨지', pal:'orange',
-      topic:'컨설팅 직무 자기소개서 첨삭 · 텍스트 멘토링', date:'2026.05.28', casPlus:3,
-      rating:5, review:'케이스 면접 프레임워크를 정말 친절하게 짚어주셨다.',
-      memo:'· STAR 기법으로 경험 재구성 (상황-과제-행동-결과)\n· 자소서 두괄식: 결론 → 근거 순서로 작성\n· 케이스 면접은 MECE 프레임 먼저 그리고 시작\n· 추천 도서: 『맥킨지식 문제해결』' },
-    { id:'c2', mentor:'정태윤', sub:'19학번 삼성전자', pal:'blue',
-      topic:'백엔드 포트폴리오 리뷰 · 화상 30분', date:'2026.05.14', casPlus:2,
-      rating:4, review:'프로젝트 구조에 대한 구체적 피드백을 받았다.',
-      memo:'· README에 아키텍처 다이어그램 추가하기\n· 트래픽 처리 경험을 수치로 표현 (RPS, 응답시간)\n· 테스트 커버리지 80% 이상 목표' },
-    { id:'c3', mentor:'한소희', sub:'18학번 배민', pal:'teal',
-      topic:'브랜드 마케팅 직무 탐색 상담 · 화상 30분', date:'2026.04.30', casPlus:2,
-      rating:null,  // 평점 미작성
-      review:null,
-      memo:'· 마케팅 직무도 데이터 역량이 점점 중요해지는 추세\n· 공모전 수상 경험을 포트폴리오로 정리\n· GA4, 앰플리튜드 등 분석 툴 익혀두기' },
-    { id:'c4', mentor:'최유진', sub:'17학번 스타트업', pal:'pink',
-      topic:'커리어 방향성 코칭 · 대면 60분', date:'2026.04.12', casPlus:3,
-      rating:4,
-      review:'스타트업 vs 대기업 선택 기준을 명확히 잡아주셨다.',
-      memo:null },  // 메모 미작성
-    { id:'c5', mentor:'정태윤', sub:'19학번 삼성전자', pal:'blue',
-      topic:'CS 전공지식 모의 면접 · 화상 30분', date:'2026.03.20', casPlus:2,
-      rating:null,  // 평점 미작성
-      review:null,
-      memo:null },  // 메모 미작성
-  ],
-  received: [
-    { mentee:'이도현', sub:'21학번 컴퓨터공학과', pal:'green',
-      topic:'프론트엔드 신입 포트폴리오 리뷰 요청', want:'화상 30분', when:'요청일 2026.06.18' },
-  ],
-  /* 내가 보낸 신청 — 멘토가 아직 수락/거절하지 않은 것.
-     예전에는 신청 버튼이 토스트만 띄우고 아무 데도 안 남겨서, 신청한 뒤
-     '내가 신청을 하긴 했나' 를 확인할 방법이 없었다. */
+  ongoing: [],
+  completed: [],
+  received: [],
+  /* 내가 보낸 신청 — 멘토가 아직 수락/거절하지 않은 것. 서버가 원본이다. */
   applied: [],
 };
 
 /* ── persisted state ────────────────────────────────────── */
-const LS_KEY = 'careerly_mentoring_v1';
+/* v1 → v2: 예시 데이터를 비우면서 키를 올린다.
+   **키를 그대로 두면 아무 것도 안 바뀐다** — 이미 브라우저에 저장된 v1 에는
+   옛 예시(진행 2건·완료 5건)가 들어 있어서, SEED 를 비워도 그쪽이 그대로 실린다. */
+const LS_KEY = 'careerly_mentoring_v2';
 let STATE = loadState();
 /* 저장분에 목록 하나가 없으면 renderMentoring 이 STATE.received.length 에서 죽는다.
    예전 가드는 completed 만 봐서, received 가 생기기 전에 저장된 상태가 남아 있으면
@@ -641,9 +614,41 @@ function initChipsDrag(){
   }, true);
 }
 
+/* ── 멘토 예약 가능 일정 ──────────────────────────────────────
+   진짜 출처는 멘토 페이지에서 저장하는 profiles.availability 다.
+   **그런데 지금 MENTORS 는 전부 시드 목업이라 프로필이 없다**(파일 머리주석 참고).
+   그래서 후기(reviewsFor)와 같은 방식으로 멘토 id 에서 결정론적으로 만든다 —
+   같은 멘토는 언제 봐도 같은 일정이라 화면이 흔들리지 않는다.
+
+   목업을 실제 회원으로 바꿀 때 이 함수만 API 호출로 갈아끼우면 된다. */
+const SLOT_HOURS = ['10:00', '11:00', '14:00', '15:00', '16:00', '17:00', '19:00', '20:00'];
+
+function availabilityFor(m) {
+  let h = 0; for (const ch of m.id) h = (h * 31 + ch.charCodeAt(0)) % 100000;
+  const rnd = n => { h = (h * 9301 + 49297) % 233280; return Math.floor((h / 233280) * n); };
+
+  const out = new Map();
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  /* 앞으로 6주. 멘토 페이지에서 3개월까지 열 수 있지만, 목업은 6주면 충분하다. */
+  for (let i = 1; i <= 42; i++) {
+    const d = new Date(today); d.setDate(d.getDate() + i);
+    if (d.getDay() === 0) continue;                 // 일요일은 비운다
+    if (rnd(10) < 5) continue;                      // 절반쯤만 연다
+    const times = SLOT_HOURS.filter(() => rnd(10) < 4);
+    if (!times.length) continue;
+    out.set(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+            times);
+  }
+  return out;
+}
+
 /* ════════════ MENTOR PROFILE ════════════ */
 let currentMentor = null;
 let selectedFormat = 0;
+let reqAvail = new Map();      // 이 멘토가 연 일정 'YYYY-MM-DD' → [시간]
+let reqCal = null;             // 달력이 보고 있는 달
+let reqDate = null;            // 고른 날짜
+let reqTime = null;            // 고른 시간
 /* 화면 표시용. **청구 금액의 단일 출처는 서버**(routes/mentoring.js FORMATS)다.
    id 가 서버와 맞아야 신청이 만들어진다 — 여기 값을 바꿔도 결제 금액은 안 바뀐다. */
 const FORMATS = [
@@ -690,12 +695,32 @@ function openProfile(id){
               ${tlDetails(t.s)}
             </div>`).join('')}
         </div>
+
+        <!-- 소개글은 경력 아래에 둔다. 후배가 읽는 순서가 그렇다 —
+             어떤 경력인지 먼저 보고, 그 사람이 하는 말을 읽는다.
+             멘토 페이지(#mypage/mentor)의 입력 순서와도 같다.
+             안 적은 멘토도 있으므로 있을 때만 그린다. -->
+        ${m.intro ? `
+        <div class="pp-intro">
+          <div class="pp-title">멘토 소개</div>
+          <p class="pp-intro-text">${escapeHTML(m.intro)}</p>
+        </div>` : ''}
       </div>
       <div class="card pp-card">
         <div class="pp-title">멘토링 신청</div>
         <div class="field">
           <div class="field-lab">희망 분야</div>
           <div class="field-select"><span>${m.role} 취업 준비</span><i class="ti ti-chevron-down"></i></div>
+        </div>
+        <!-- ① 날짜 → ② 시간 → ③ 형식 → ④ 하고 싶은 말 순서다.
+             멘토가 연 날짜만 고를 수 있고, 날짜를 골라야 그 날의 시간이 나온다. -->
+        <div class="field">
+          <div class="field-lab">날짜 선택</div>
+          <div class="mp-cal req-cal" id="req-cal"></div>
+        </div>
+        <div class="field" id="req-time-field" hidden>
+          <div class="field-lab" id="req-time-lab">시간 선택</div>
+          <div class="mp-time-grid" id="req-times"></div>
         </div>
         <div class="field">
           <div class="field-lab">멘토링 형식 선택</div>
@@ -739,6 +764,8 @@ function openProfile(id){
           </div>`).join('')}
       </div>
     </div>`;
+  /* innerHTML 을 넣은 뒤에 달력을 채운다 — 먼저 부르면 그릴 자리가 아직 없다. */
+  initRequestPicker(m);
   navigate('profile');
 }
 function selectFormat(i){
@@ -746,12 +773,126 @@ function selectFormat(i){
   $$('#format-opts .format-opt').forEach(o=>o.classList.toggle('on', +o.dataset.i===i));
   $('#req-cost').textContent = FORMATS[i].price;
 }
+
+/* ── 신청 달력 ────────────────────────────────────────────────
+   멘토 페이지의 달력과 같은 클래스(.mp-cal*)를 쓴다. 다른 점은 **멘토가 연 날만
+   고를 수 있다**는 것 — 나머지는 눌리지 않게 막는다. */
+const REQ_WD = ['일','월','화','수','목','금','토'];
+const reqYmd = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
+function initRequestPicker(m){
+  reqAvail = availabilityFor(m);
+  reqDate = null; reqTime = null;
+  /* 열린 날이 있는 첫 달을 보여준다. 이번 달에 아무것도 없으면 빈 달력만 보고
+     '신청을 못 하는구나' 하고 나가 버린다. */
+  const first = [...reqAvail.keys()].sort()[0];
+  const base = first ? new Date(first) : new Date();
+  reqCal = new Date(base.getFullYear(), base.getMonth(), 1);
+  paintReqCal();
+  paintReqTimes();
+}
+
+function paintReqCal(){
+  const host = $('#req-cal');
+  if (!host) return;
+
+  const y = reqCal.getFullYear(), mo = reqCal.getMonth();
+  const daysInMonth = new Date(y, mo+1, 0).getDate();
+  const openDates = [...reqAvail.keys()].sort();
+  /* 열린 날이 있는 달 사이에서만 이동한다 — 빈 달을 계속 넘기게 두지 않는다. */
+  const minM = openDates.length ? new Date(openDates[0]) : new Date();
+  const maxM = openDates.length ? new Date(openDates[openDates.length-1]) : new Date();
+  const minMonth = new Date(minM.getFullYear(), minM.getMonth(), 1);
+  const maxMonth = new Date(maxM.getFullYear(), maxM.getMonth(), 1);
+
+  const cells = [];
+  for (let i=0; i<new Date(y,mo,1).getDay(); i++) cells.push('<span class="mp-cal-pad"></span>');
+  for (let d=1; d<=daysInMonth; d++){
+    const date = reqYmd(new Date(y,mo,d));
+    const open = reqAvail.has(date);
+    const cls = ['mp-cal-day'];
+    if (!open) cls.push('past');                 // 멘토가 안 연 날은 고를 수 없다
+    if (open) cls.push('has');
+    if (date === reqDate) cls.push('on');
+    cells.push(`<button type="button" class="${cls.join(' ')}" data-reqdate="${date}"
+      ${open?'':'disabled'}>${d}${open?'<i class="mp-cal-dot"></i>':''}</button>`);
+  }
+
+  host.innerHTML = `
+    <div class="mp-cal-head">
+      <button type="button" class="mp-cal-nav" data-reqnav="-1"
+        ${reqCal<=minMonth?'disabled':''} aria-label="이전 달"><i class="ti ti-chevron-left"></i></button>
+      <span class="mp-cal-title">${y}년 <b>${mo+1}월</b></span>
+      <button type="button" class="mp-cal-nav" data-reqnav="1"
+        ${reqCal>=maxMonth?'disabled':''} aria-label="다음 달"><i class="ti ti-chevron-right"></i></button>
+    </div>
+    <div class="mp-cal-grid">
+      ${REQ_WD.map((w,i)=>`<span class="mp-cal-wd${i===0?' sun':i===6?' sat':''}">${w}</span>`).join('')}
+      ${cells.join('')}
+    </div>
+    ${openDates.length ? '' : '<div class="sf-hint-inline">멘토가 아직 일정을 열지 않았어요.</div>'}`;
+}
+
+function paintReqTimes(){
+  const field = $('#req-time-field');
+  const host = $('#req-times');
+  const lab = $('#req-time-lab');
+  if (!field || !host) return;
+
+  /* 날짜를 안 골랐으면 칸 자체를 감춘다 — 빈 자리가 있으면 뭘 해야 할지 모른다. */
+  if (!reqDate){ field.hidden = true; host.innerHTML = ''; return; }
+
+  const d = new Date(reqDate);
+  lab.textContent = `${d.getMonth()+1}월 ${d.getDate()}일 (${REQ_WD[d.getDay()]}) 시간 선택`;
+  field.hidden = false;
+  /* 시간은 24시간 표기 그대로 보여준다. 12시간으로 바꾸면 '10:00 · 11:00 · 8:00'
+     처럼 작은 수가 뒤에 와서 오전인지 오후인지 매번 되짚어야 한다. */
+  host.innerHTML = (reqAvail.get(reqDate)||[]).map(t=>`
+    <button type="button" class="mp-time${reqTime===t?' on':''}" data-reqtime="${t}">${t}</button>
+  `).join('');
+}
+
+/* 달력·시간은 다시 그려지므로 문서에 한 번만 위임한다. */
+document.addEventListener('click', e => {
+  const nav = e.target.closest('[data-reqnav]');
+  if (nav && !nav.disabled){
+    reqCal = new Date(reqCal.getFullYear(), reqCal.getMonth() + Number(nav.dataset.reqnav), 1);
+    paintReqCal();
+    return;
+  }
+  const day = e.target.closest('[data-reqdate]');
+  if (day && !day.disabled){
+    /* 날짜를 바꾸면 고른 시간은 뜻이 없어진다 — 다른 날의 시간이 남으면
+       화면과 저장값이 어긋난다. */
+    if (reqDate !== day.dataset.reqdate) reqTime = null;
+    reqDate = day.dataset.reqdate;
+    paintReqCal(); paintReqTimes();
+    return;
+  }
+  const time = e.target.closest('[data-reqtime]');
+  if (time){
+    reqTime = time.dataset.reqtime;
+    paintReqTimes();
+  }
+});
 function submitRequest(){
   // 멘토 신청은 내 계정으로 남는 개인 행동이라 로그인이 필요하다.
   // 비로그인 상태에서 눌러도 그냥 신청돼 버리던 문제 → 로그인 페이지로 보낸다.
   if (!(window.DB && DB.currentUser())){
     toast('로그인 후 멘토링을 신청할 수 있어요', { icon: false });
     setTimeout(()=>navigate('login'), 700);
+    return;
+  }
+  /* 날짜·시간을 안 고르고 보내면 서버가 400 으로 막는다. 그 전에 여기서 알려주고
+     해당 칸으로 스크롤해 준다 — 카드가 길어서 어디가 비었는지 안 보인다. */
+  if (!reqDate){
+    toast('멘토링 날짜를 선택해주세요', { icon: false });
+    $('#req-cal')?.scrollIntoView({ behavior:'smooth', block:'center' });
+    return;
+  }
+  if (!reqTime){
+    toast('멘토링 시간을 선택해주세요', { icon: false });
+    $('#req-time-field')?.scrollIntoView({ behavior:'smooth', block:'center' });
     return;
   }
   payAndApply();
@@ -774,6 +915,7 @@ async function payAndApply(){
   try {
     const { request } = await api('POST', '/api/mentoring/requests', {
       mentorId: m.id, mentorName: m.name, format: f.id, message: msg,
+      slotDate: reqDate, slotTime: reqTime,
     });
 
     const cfg = await api('GET', '/api/payments/config');
@@ -848,7 +990,28 @@ function renderMentoring(){
   $('#tabcnt-completed').textContent = STATE.completed.length;
   $('#tabcnt-received').textContent = STATE.received.length;
   $('#tabcnt-applied').textContent = STATE.applied.length;
-  $$('#mentoring-tabs .tab').forEach(t=>t.classList.toggle('on', t.dataset.tab===mentoringTab));
+
+  /* 역할에 따라 탭이 다르다.
+       멘티 — 진행 중 · 완료 · 보낸 요청   (남에게 신청하는 쪽)
+       멘토 — 진행 중 · 완료 · 받은 요청   (신청을 받는 쪽)
+     양쪽 다 보여주면 자기와 상관없는 빈 탭이 하나씩 남는다.
+     역할을 모르면(비로그인·온보딩 전) 멘티 기준으로 둔다 — 대부분이 멘티다. */
+  const role = (window.DB && DB.currentUser()?.role) || 'mentee';
+  const allowed = role === 'mentor'
+    ? ['ongoing', 'completed', 'received']
+    : ['ongoing', 'completed', 'applied'];
+
+  $$('#mentoring-tabs .tab').forEach(t => {
+    t.hidden = !allowed.includes(t.dataset.tab);
+    t.classList.toggle('on', t.dataset.tab === mentoringTab);
+  });
+  /* 숨긴 탭을 보고 있었으면(역할이 바뀌었거나 링크로 들어온 경우) 첫 탭으로 돌린다.
+     안 그러면 탭은 하나도 안 눌린 채 남의 목록이 보인다. */
+  if (!allowed.includes(mentoringTab)) {
+    mentoringTab = allowed[0];
+    $$('#mentoring-tabs .tab').forEach(t => t.classList.toggle('on', t.dataset.tab === mentoringTab));
+  }
+
   const body = $('#mentoring-body');
   if (mentoringTab==='ongoing')   body.innerHTML = renderOngoing();
   if (mentoringTab==='completed') body.innerHTML = renderCompleted();

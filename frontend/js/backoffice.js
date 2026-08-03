@@ -95,7 +95,7 @@ window.Backoffice = (() => {
         <table class="bo-table">
           <thead>
             <tr>
-              <th>유형</th><th>아이디</th><th>이름</th><th>이메일</th><th>닉네임</th>
+              <th>유형</th><th>아이디</th><th>이름</th><th>이메일</th><th>별명</th>
               <th>가입일</th><th>스펙</th><th></th>
             </tr>
           </thead>

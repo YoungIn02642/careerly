@@ -21,7 +21,7 @@
   --font-sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont,
                'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
 
-  /* --brand / --brand-dark / --brand-soft / --blue / --shadow / --font-mono 는
+  /* --brand / --brand-dark / --brand-soft / --blue / --shadow / --font-num 은
      main.css 의 홈 토큰을 그대로 쓴다. 여기서 재정의하면 로드 순서에 따라
      홈과 멘토링의 브랜드 색이 갈린다. */
   --brand-soft2: #E3E0FB;
@@ -500,6 +500,15 @@ html { scroll-behavior: smooth; }
 .rv-date { font-size: 12px; color: var(--color-text-tertiary); margin-top: 6px; }
 .pp-card { padding: 22px 24px; }
 .pp-title { font-size: 15px; font-weight: 700; margin-bottom: 18px; }
+
+/* 멘토 소개글 — 경력 타임라인 아래. 같은 카드 안이라 선으로만 나눈다 */
+.pp-intro { margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--color-border-tertiary, #eee); }
+.pp-intro .pp-title { margin-bottom: 10px; }
+.pp-intro-text {
+  margin: 0; font-size: 14px; line-height: 1.75;
+  color: var(--color-text-secondary, #3f3f46);
+  white-space: pre-wrap;      /* 멘토가 넣은 줄바꿈을 살린다 */
+}
 
 .timeline { position: relative; padding-left: 24px; }
 .timeline::before {

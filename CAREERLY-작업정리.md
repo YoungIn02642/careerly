@@ -305,6 +305,9 @@ https://www.work24.go.kr/cm/openApi/call/wk/callOpenApiSvcInfo210L31.do
 |---|---|
 | `DATA_GO_KR_SERVICE_KEY` | 공공데이터포털 (NCS·공공기관·공정위) — 계정당 하나로 전부 호출 |
 | `WORK24_API_KEY` | 고용24 별도 키. **비워두면 중견기업 자동판정만 빠지고 나머지는 정상 동작** |
+| `CAREERNET_API_KEY` | 커리어넷 자체 키(data.go.kr 키와 다르다). 대학 목록 수집 → 스펙 입력의 '학교' 자동완성. **비워두면 자동완성만 빠지고 직접 입력은 그대로 된다.** 점검: `node scripts/check-careernet-api.js` |
+| `ADMIN_USERNAMES` | 백오피스에 들어갈 수 있는 아이디(쉼표 구분). 서버 부팅 때 `users.is_admin` 을 켠다. **첫 관리자를 만드는 유일한 방법** — 비어 있으면 아무도 백오피스에 못 들어간다. 이름을 빼도 권한이 해제되지는 않는다(설정 실수로 전원이 잠기지 않게). |
+| `NICE_SITE_CODE` / `NICE_SITE_PASSWORD` / `NICE_RETURN_URL` | 본인확인(CI) — '한 사람 = 한 계정'. **비워두면 개발 모드**(휴대폰 번호 해시로 모의 CI)로 돌아 중복 차단까지 그대로 확인된다. 단 `NODE_ENV=production` 에서는 개발 모드가 503 으로 막히므로 **배포 전 실제 키 필수**. 자세한 것은 `src/nice-auth.js` |
 | `CAS_AI_PROVIDER` | **`groq`(기본)** \| `ollama` |
 | `GROQ_API_KEY` | **필수** (미설정 시 AI 기능만 503). 무료 발급: https://console.groq.com/keys |
 | `GROQ_MODEL` | 기본 `llama-3.3-70b-versatile`. **모델 폐기 공지가 뜨면 여기만 바꾼다** |

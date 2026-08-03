@@ -28,10 +28,16 @@ function seed() {
 }
 
 // ── 변환 ────────────────────────────────────────────────────
+/* ci·phone 은 개인식별정보다. 여기서는 들고 오되(중복 검사·본인확인 여부 판단에 쓴다)
+   **server.js 의 publicUser() 가 반드시 걸러낸다** — 화면으로 나가면 안 된다. */
 const toUser = r => r && ({
   id: r.id, username: r.username, passwordHash: r.password_hash,
   name: r.name, email: r.email, role: r.role, nickname: r.nickname,
   provider: r.provider, providerId: r.provider_id, createdAt: r.created_at,
+  ci: r.ci ?? null, phone: r.phone ?? null, verifiedAt: r.verified_at ?? null,
+  /* MySQL 은 BOOLEAN 을 TINYINT 로 준다(0/1). 그대로 흘리면 화면에서
+     `user.isAdmin === true` 가 false 가 되어 조용히 권한이 없는 것처럼 보인다. */
+  isAdmin: !!r.is_admin,
 });
 
 /* JSON 컬럼은 드라이버가 파싱해 주지만, 옛 데이터나 수동 입력으로 문자열이 올 수 있다. */
@@ -47,6 +53,7 @@ function toSpec(r, certs = [], activities = []) {
     userId: r.user_id,
     dept: r.dept ?? null, major: r.major ?? null,
     field: r.field ?? null, job: r.job ?? null,
+    jobMajor: r.job_major ?? null,
     company: r.company ?? null, corpType: r.corp_type ?? null,
     /* DECIMAL 은 드라이버가 문자열로 준다. 화면이 숫자로 계산하므로 되돌린다
        (안 하면 평균이 문자열 연결로 나온다). */
@@ -59,6 +66,9 @@ function toSpec(r, certs = [], activities = []) {
   const qual = asJson(r.qual);               if (qual) s.qual = qual;
   const detail = asJson(r.detail);           if (detail) s.detail = detail;
   const certMeta = asJson(r.cert_meta);      if (certMeta) s.certMeta = certMeta;
+  /* 세부직무는 여러 개다. 빈 배열도 '고른 게 없다'는 뜻이라 그대로 실어 보낸다 —
+     없는 것(null)과 구분되지 않으면 화면이 이전 선택을 지운 건지 알 수 없다. */
+  const jobMiddles = asJson(r.job_middles);  if (jobMiddles) s.jobMiddles = jobMiddles;
   const ic = asJson(r.interest_companies);   if (ic) s.interestCompanies = ic;
   const careers = asJson(r.careers);         if (careers) s.careers = careers;
   return s;
@@ -85,12 +95,19 @@ const users = {
   /* 이메일은 NULL 을 허용한다(카카오 선택 동의). NULL 은 중복 검사 대상이 아니다. */
   emailTaken: async e => !!e && !!(await queryOne('SELECT 1 AS x FROM users WHERE email=?', [e])),
 
+  /* 본인확인 CI 로 이미 가입한 사람인지 본다. 옛 회원은 ci 가 NULL 이라
+     여기서 안 잡힌다 — 소급 강제하지 않기로 한 결과이고, 의도한 동작이다. */
+  ciTaken: async ci => !!ci && !!(await queryOne('SELECT 1 AS x FROM users WHERE ci=?', [ci])),
+  byCi: async ci => (ci ? toUser(await queryOne('SELECT * FROM users WHERE ci=?', [ci])) : null),
+
   async create(u) {
     await query(
-      `INSERT INTO users (id, username, password_hash, name, email, role, nickname, provider, provider_id)
-       VALUES (?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO users (id, username, password_hash, name, email, role, nickname,
+                          provider, provider_id, ci, phone, verified_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
       [u.id, u.username, u.passwordHash ?? null, u.name, u.email || null,
-       u.role || null, u.nickname ?? null, u.provider || null, u.providerId || null]);
+       u.role || null, u.nickname ?? null, u.provider || null, u.providerId || null,
+       u.ci || null, u.phone || null, u.ci ? new Date() : null]);
     await query('INSERT INTO profiles (user_id, nickname) VALUES (?,?) ON DUPLICATE KEY UPDATE nickname=VALUES(nickname)',
       [u.id, u.nickname ?? null]);
     return users.byId(u.id);
@@ -98,7 +115,15 @@ const users = {
 
   /* 부분 수정. 넘긴 키만 건드린다 — 전체를 덮어쓰면 동시에 다른 값을 고친 요청이 지워진다. */
   async update(id, patch) {
-    const map = { name: 'name', email: 'email', role: 'role', nickname: 'nickname' };
+    const map = {
+      name: 'name', email: 'email', role: 'role', nickname: 'nickname',
+      /* 본인확인 결과. 소셜 가입자는 온보딩에서 뒤늦게 채운다. */
+      ci: 'ci', phone: 'phone', verifiedAt: 'verified_at',
+      /* 관리자 권한. **화면에서 오는 요청으로는 절대 이 키를 넣지 말 것** —
+         server.js 의 허용 목록이 걸러 준다. 여기 있는 것은 백오피스와
+         부팅 시 ADMIN_USERNAMES 반영을 위해서다. */
+      isAdmin: 'is_admin',
+    };
     const sets = [], vals = [];
     for (const [k, col] of Object.entries(map)) {
       if (Object.prototype.hasOwnProperty.call(patch, k)) { sets.push(`\`${col}\`=?`); vals.push(patch[k]); }
@@ -108,6 +133,22 @@ const users = {
       if ('nickname' in patch) await query('UPDATE profiles SET nickname=? WHERE user_id=?', [patch.nickname, id]);
     }
     return users.byId(id);
+  },
+
+  /* ADMIN_USERNAMES 에 적힌 아이디를 관리자로 올린다. 부팅 때 한 번 돈다.
+     '첫 관리자를 누가 만드나' 문제를 푸는 유일한 경로다 — 이게 없으면 백오피스에
+     들어갈 수 있는 사람이 아무도 없어서 다른 관리자도 지정할 수 없다.
+     **권한을 내리지는 않는다.** 환경변수에서 이름을 뺐다고 관리자를 해제해 버리면
+     배포 설정을 잠깐 잘못 건드렸을 때 전원이 백오피스에서 잠긴다. */
+  async promoteAdmins(usernames) {
+    const list = [...new Set(usernames.map(s => String(s).trim()).filter(Boolean))];
+    if (!list.length) return [];
+    await query(
+      `UPDATE users SET is_admin=TRUE WHERE username IN (${list.map(() => '?').join(',')})`, list);
+    const rows = await query(
+      `SELECT username FROM users WHERE is_admin=TRUE AND username IN (${list.map(() => '?').join(',')})`,
+      list);
+    return rows.map(r => r.username);
   },
 
   async countByRole() {
@@ -155,14 +196,42 @@ const sessions = {
 const profiles = {
   async get(userId) {
     const r = await queryOne('SELECT * FROM profiles WHERE user_id=?', [userId]);
-    return r ? { userId: r.user_id, nickname: r.nickname, university: r.university,
-                 currentJob: r.current_job, tips: r.tips } : { userId };
+    if (!r) return { userId };
+    return {
+      userId: r.user_id, nickname: r.nickname, university: r.university,
+      currentJob: r.current_job, tips: r.tips,
+      avatar: r.avatar ?? null,
+      gender: r.gender ?? null,
+      /* DATE 는 드라이버가 dateStrings:true 라 'YYYY-MM-DD' 문자열로 온다.
+         <input type="date"> 가 그대로 받는 형식이라 변환하지 않는다. */
+      birthdate: r.birthdate ?? null,
+      phone: r.phone ?? null,
+      address: r.address ?? null,
+      intro: r.intro ?? null,
+      /* JSON 컬럼은 안 채워졌으면 undefined 가 아니라 **빈 배열**로 준다.
+         화면이 `.map()` 을 바로 걸기 때문이다(없으면 거기서 죽는다). */
+      specialties: asJson(r.specialties) || [],
+      timeline: asJson(r.timeline) || [],
+      modes: asJson(r.modes) || [],
+      availability: asJson(r.availability) || [],
+    };
   },
   async update(userId, patch) {
-    const map = { nickname: 'nickname', university: 'university', currentJob: 'current_job', tips: 'tips' };
+    /* **여기와 server.js 의 허용 목록을 함께 늘려야 한다.** 한쪽만 고치면
+       저장은 성공했다고 나오는데 값이 조용히 사라진다. */
+    const map = {
+      nickname: 'nickname', university: 'university', currentJob: 'current_job', tips: 'tips',
+      avatar: 'avatar', gender: 'gender', birthdate: 'birthdate',
+      phone: 'phone', address: 'address',
+      intro: 'intro', specialties: 'specialties', timeline: 'timeline', modes: 'modes',
+      availability: 'availability',
+    };
+    const jsonKeys = new Set(['specialties', 'timeline', 'modes', 'availability']);
     const cols = [], vals = [];
     for (const [k, col] of Object.entries(map)) {
-      if (Object.prototype.hasOwnProperty.call(patch, k)) { cols.push(col); vals.push(patch[k]); }
+      if (!Object.prototype.hasOwnProperty.call(patch, k)) continue;
+      cols.push(col);
+      vals.push(jsonKeys.has(k) ? (patch[k] == null ? null : JSON.stringify(patch[k])) : patch[k]);
     }
     if (!cols.length) return profiles.get(userId);
     await query(
@@ -205,11 +274,13 @@ const specs = {
   async upsert(userId, patch) {
     const col = {
       dept: 'dept', major: 'major', field: 'field', job: 'job',
+      jobMajor: 'job_major', jobMiddles: 'job_middles',
       company: 'company', corpType: 'corp_type', gpa: 'gpa', gpaMax: 'gpa_max',
       scores: 'scores', qual: 'qual', detail: 'detail', certMeta: 'cert_meta',
       interestCompanies: 'interest_companies', careers: 'careers',
     };
-    const jsonKeys = new Set(['scores', 'qual', 'detail', 'certMeta', 'interestCompanies', 'careers']);
+    const jsonKeys = new Set(['scores', 'qual', 'detail', 'certMeta',
+                              'interestCompanies', 'careers', 'jobMiddles']);
 
     await transaction(async conn => {
       const cols = ['user_id'], vals = [userId];

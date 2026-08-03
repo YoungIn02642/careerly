@@ -41,7 +41,13 @@
   --acc-yellow:   #ffae13;
 
   --font:         'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
-  --font-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+  /* 숫자 전용. 고정폭(JetBrains/DM Mono)은 코드용이라 딱딱했고, 본문 Pretendard 를
+     그대로 쓰면 숫자가 밋밋해 통계 화면의 무게중심이 사라졌다. Nunito Sans 는 그 사이다 —
+     자족 끝이 둥글어 부드럽게 읽히면서도 숫자 골격이 또렷해 수치가 제대로 도드라진다.
+     한글 자소가 없으므로 같은 요소 안의 한글은 자동으로 Pretendard 로 떨어진다.
+     자릿수 정렬은 폰트가 아니라 body 의 tabular-nums 가 맡는다(Nunito Sans 도 지원). */
+  --font-num:     'Nunito Sans', var(--font);
+  --font-code:    ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
   --c-bg:         #f6f6f4;
   --c-surface:    #ffffff;
@@ -71,12 +77,14 @@ body {
   font-family: var(--font); font-size: 14px; line-height: 1.6;
   min-height: 100vh; display: flex; flex-direction: column;
   -webkit-font-smoothing: antialiased;
+  /* 숫자만 고정폭으로. 상속되므로 표·통계 어디서든 자릿수가 세로로 맞는다 */
+  font-variant-numeric: tabular-nums;
 }
 
 .page { display: none; flex-direction: column; flex: 1; }
 .page.active { display: flex; }
 
-code { font-family: var(--font-mono); background: var(--c-bg); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+code { font-family: var(--font-code); background: var(--c-bg); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
 
 /* ── NAVBAR (Wanted-style) ──────────────────────────────── */
 .navbar {
@@ -409,13 +417,13 @@ code { font-family: var(--font-mono); background: var(--c-bg); padding: 1px 6px;
   padding: 5px 10px; background: var(--brand-soft); border-radius: 6px;
 }
 .hv-tag-n {
-  font-family: var(--font-mono); font-size: 11px;
+  font-family: var(--font-num); font-size: 11px; font-weight: 600;
   color: var(--text-m); font-weight: 500;
 }
 .hv-stat-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px; }
 .hv-stat-label { font-size: 11px; color: var(--text-m); font-weight: 600; margin-bottom: 4px; }
 .hv-stat-value {
-  font-family: var(--font-mono); font-size: 26px; font-weight: 500;
+  font-family: var(--font-num); font-size: 28px; font-weight: 700;
   letter-spacing: -0.02em; color: var(--text-p);
 }
 .hv-stat-unit { font-size: 12px; color: var(--text-m); margin-left: 3px; font-weight: 400; }
@@ -431,7 +439,7 @@ code { font-family: var(--font-mono); background: var(--c-bg); padding: 1px 6px;
   font-size: 12px;
 }
 .hv-cert span { color: var(--text-s); font-weight: 500; }
-.hv-cert b { font-family: var(--font-mono); font-weight: 500; color: var(--text-p); }
+.hv-cert b { font-family: var(--font-num); font-weight: 700; color: var(--text-p); }
 
 .hv-card--floating, .hv-card--floating-2 {
   position: absolute;
@@ -459,7 +467,7 @@ code { font-family: var(--font-mono); background: var(--c-bg); padding: 1px 6px;
 .hv-float-icon { font-size: 22px; }
 .hv-float-label { font-size: 11px; color: var(--text-m); font-weight: 600; margin-bottom: 2px; }
 .hv-float-value {
-  font-family: var(--font-mono); font-size: 20px; font-weight: 500;
+  font-family: var(--font-num); font-size: 21px; font-weight: 700;
   color: var(--text-p); letter-spacing: -0.02em;
 }
 .hv-float-value span { font-size: 13px; color: var(--text-m); margin-left: 2px; }
@@ -470,7 +478,7 @@ code { font-family: var(--font-mono); background: var(--c-bg); padding: 1px 6px;
   display: flex; justify-content: center; gap: 80px; flex-wrap: wrap;
 }
 .stat-item { text-align: center; }
-.stat-num { font-size: 32px; font-weight: 800; letter-spacing: -1px; margin-bottom: 4px; font-family: var(--font-mono); }
+.stat-num { font-size: 34px; font-weight: 800; letter-spacing: -0.6px; margin-bottom: 4px; font-family: var(--font-num); }
 .stat-label { font-size: 13px; color: rgba(255,255,255,0.6); font-weight: 500; }
 
 /* ── 멘토 · 멘티 카운트 스트립 ─────────────────────────── */
@@ -534,7 +542,7 @@ code { font-family: var(--font-mono); background: var(--c-bg); padding: 1px 6px;
 }
 .mm-card-sub { font-size: 12px; color: var(--text-m); font-weight: 500; }
 .mm-card-share {
-  font-family: var(--font-mono); font-size: 13px;
+  font-family: var(--font-num); font-size: 13px;
   font-weight: 600; color: var(--text-s);
   background: var(--bg); padding: 4px 10px; border-radius: 99px;
 }
@@ -542,8 +550,8 @@ code { font-family: var(--font-mono); background: var(--c-bg); padding: 1px 6px;
 .mm-card--mentee .mm-card-share { color: #16a34a; background: #e7f7ee; }
 
 .mm-card-num {
-  font-family: var(--font-mono); font-size: 56px;
-  font-weight: 500; letter-spacing: -2px;
+  font-family: var(--font-num); font-size: 58px;
+  font-weight: 800; letter-spacing: -1.4px;
   color: var(--text-p); line-height: 1;
   margin-top: 4px;
   position: relative; z-index: 1;
@@ -693,6 +701,36 @@ input.input-error { border-color: var(--c-red); }
 .field-error { font-size: 12px; color: var(--c-red); display: none; }
 .field-hint { font-size: 12px; color: var(--text-m); }
 
+/* 필수 항목 표시. 별표는 장식이라 aria-hidden 으로 달고, 실제 필수 여부는
+   input 의 required / aria-required 가 전한다. */
+.req { color: var(--c-red); margin-left: 2px; font-weight: 700; }
+
+/* 중복확인 같은 즉시 응답 문구 — 통과/실패를 색으로 가른다. */
+.field-note { font-size: 12px; color: var(--text-m); }
+.field-note.ok  { color: var(--c-green); }
+.field-note.bad { color: var(--c-red); }
+
+/* 본인확인 — 상태 한 줄 + 버튼 */
+.verify-row { display: flex; align-items: center; gap: 10px; }
+.verify-state {
+  flex: 1; min-width: 0; font-size: 13px; color: var(--text-m);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.verify-state.ok { color: var(--c-green); font-weight: 600; }
+
+/* 입력칸 + 옆 버튼 (아이디 중복확인) */
+.input-with-btn { display: flex; gap: 8px; align-items: stretch; }
+.input-with-btn input { flex: 1; min-width: 0; }
+.btn-inline {
+  flex-shrink: 0; padding: 0 14px; white-space: nowrap;
+  background: var(--surface-2); color: var(--text-s);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 13px; font-weight: 600; font-family: var(--font); cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.btn-inline:hover { background: var(--brand-soft); border-color: var(--brand); }
+.btn-inline:disabled { opacity: 0.55; cursor: not-allowed; }
+
 .btn-submit {
   width: 100%; padding: 14px; background: var(--cta);
   color: #fff; border: none; border-radius: var(--radius-sm);
@@ -761,6 +799,21 @@ input.input-error { border-color: var(--c-red); }
 }
 .sf-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .sf-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+/* 진출분야(select) + 세부직무(체크박스 여러 개). 오른쪽이 넓어야 칩이 안 접힌다.
+   select 는 너무 좁으면 분류 이름('교육·법률·사회복지·경찰·소방직 및 군인')이 잘린다. */
+.sf-row-job {
+  display: grid; grid-template-columns: minmax(190px, 0.9fr) 1.6fr;
+  gap: 12px; align-items: start;
+}
+/* 좁은 화면에서는 2열이 오히려 읽기 나쁘다 — 한 칸씩 세로로 편다. */
+@media (max-width: 640px) {
+  .sf-row-2, .sf-row-3, .sf-row-job { grid-template-columns: 1fr; }
+}
+/* 학과 칸에 딸린 안내·토글. 2열 그리드 밖에 두어야 옆 칸 높이가 안 늘어난다. */
+.sf-major-note {
+  display: flex; flex-direction: column; gap: 4px;
+  margin: -8px 0 16px;      /* 위 줄의 form-group 아래 여백을 당겨 붙인다 */
+}
 .sf-hint-block {
   padding: 12px; background: var(--bg); border-radius: 8px;
   font-size: 12px; color: var(--text-s); line-height: 1.5;
@@ -773,6 +826,50 @@ input.input-error { border-color: var(--c-red); }
    못 찾은 건 오류가 아니라 '직접 고르세요' 안내라 경고색까지는 쓰지 않는다. */
 .sf-hint-ok   { color: #085041; font-weight: 600; }
 .sf-hint-warn { color: #8A5A12; }
+
+/* 진출분야·세부직무 선택 — 멘토 찾기의 분야 칩(.chip)과 같은 모양을 쓴다.
+   다만 저쪽은 가로 스크롤 한 줄이고 여기는 **줄바꿈**이다.
+   입력 폼에서 선택지가 스크롤 뒤에 숨으면 있는 줄도 모르고 지나친다.
+   .chip / .chip-no 정의는 css/mentoring.css 에 있다(main.css 뒤에 로드된다). */
+/* 상자를 두르지 않는다 — 칩 자체가 이미 테두리를 갖고 있어서, 바깥에 회색 배경까지
+   깔면 테두리가 두 겹으로 보이고 폼이 답답해진다. */
+.sf-chip-pick {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  padding: 2px 0;
+}
+/* 멘토 찾기 칩(.chip)을 그대로 쓰되 폼에 맞게 다시 칠한다.
+     · 바탕색 — 회색 알약이 여러 개 깔리면 폼이 무거워진다
+     · 고른 것은 **연한 반투명 채움 + 진한 테두리** — 꽉 찬 색으로 칠하면
+       여러 개 고르는 세부직무에서 화면이 온통 보라색이 된다. 띠로 알린다. */
+.sf-chip-pick .chip {
+  font-family: var(--font); font-size: 13.5px; padding: 9px 15px;
+  background: var(--canvas); color: var(--text-s);
+  border: 1px solid var(--border);
+}
+.sf-chip-pick .chip:hover {
+  border-color: var(--brand); color: var(--brand);
+  background: var(--canvas);
+}
+.sf-chip-pick .chip.on {
+  /* 반투명이라 뒤 배경이 비쳐 채도가 낮게 보인다 */
+  background: rgba(109, 58, 255, 0.10);
+  color: var(--brand-dark);
+  border: 1.5px solid var(--brand);
+  font-weight: 600;
+  /* 테두리를 한 겹 더 — 두께만 키우면 칩이 들썩이므로 그림자로 덧댄다 */
+  box-shadow: 0 0 0 2px rgba(109, 58, 255, 0.12);
+}
+.sf-chip-pick .sf-hint-inline { padding: 4px 2px; }
+
+/* 안내문 옆에 붙는 작은 조작 링크(예: '통계 분류 직접 고르기').
+   button 으로 두는 이유는 키보드·스크린리더에서 그대로 눌리기 때문이다. */
+.sf-link-btn {
+  display: inline-block; margin-top: 4px; padding: 0;
+  background: none; border: none; font-family: var(--font);
+  font-size: 12px; font-weight: 600; color: var(--brand);
+  text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+}
+.sf-link-btn:hover { color: var(--brand-dark); }
 .sf-optional {
   font-size: 10px; font-weight: 500; color: var(--text-s);
   border: 1px solid currentColor; border-radius: 99px;
@@ -888,6 +985,228 @@ input.input-error { border-color: var(--c-red); }
 }
 .sf-chip-x:hover { background: #f1f5f9; color: var(--text-p); }
 
+/* ── 마이페이지 탭 (계정 관리 / 스펙 관리) ─────────────────── */
+.mp-tabs {
+  display: flex; gap: 4px; margin-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+}
+.mp-tab {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 12px 18px; border: 0; background: none; cursor: pointer;
+  font-family: var(--font); font-size: 14px; font-weight: 600; color: var(--text-m);
+  /* 밑줄이 테두리 위에 겹쳐야 탭이 '붙어 있는' 것으로 보인다 */
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+  transition: color .15s, border-color .15s;
+}
+/* display 를 준 요소는 hidden 속성이 먹지 않는다(UA 의 [hidden]{display:none} 을
+   클래스가 이긴다). '멘토 페이지' 탭은 initMypage() 가 hidden 으로 끄는데,
+   이 줄이 없으면 멘티에게도 그대로 보인다. */
+.mp-tab[hidden] { display: none; }
+.mp-tab:hover { color: var(--text-s); }
+.mp-tab.on { color: var(--brand); border-bottom-color: var(--brand); }
+.mp-tab i { font-size: 17px; }
+/* 되돌릴 수 없는 탭은 오른쪽 끝으로 밀고 색으로도 구분한다 */
+.mp-tab--danger { margin-left: auto; }
+.mp-tab--danger:hover { color: var(--c-red); }
+.mp-tab--danger.on { color: var(--c-red); border-bottom-color: var(--c-red); }
+
+/* ── 탈퇴하기 ─────────────────────────────────────────────── */
+.wd-warn {
+  border: 1px solid #fecaca; background: var(--c-red-light);
+  border-radius: var(--radius); padding: 16px 18px; margin-bottom: 20px;
+}
+.wd-warn-title {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 14px; font-weight: 700; color: #b91c1c; margin-bottom: 10px;
+}
+.wd-warn ul { margin: 0 0 12px; padding-left: 20px; }
+.wd-warn li { font-size: 13px; color: var(--text-s); line-height: 1.9; }
+.wd-warn-note { margin: 0; font-size: 12.5px; color: #b91c1c; line-height: 1.6; }
+.btn-save.wd-danger { background: var(--c-red); }
+.btn-save.wd-danger:hover:not(:disabled) { background: #c81328; }
+.btn-save.wd-danger:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ── 계정 관리 — 프로필 사진 ───────────────────────────────── */
+.ac-avatar-row { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.ac-avatar {
+  width: 96px; height: 96px; flex-shrink: 0;
+  border-radius: 50%; overflow: hidden;
+  background: var(--brand-soft); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+}
+.ac-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ac-avatar-initial { font-size: 36px; font-weight: 700; color: var(--brand); }
+.ac-avatar-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.ac-avatar-actions .btn-inline { padding: 8px 14px; }
+
+/* 읽기 전용 칸(이름·이메일)은 눌러도 안 바뀐다는 게 보여야 한다 */
+input[readonly] {
+  background: var(--surface-2); color: var(--text-s); cursor: default;
+}
+input[readonly]:focus { border-color: var(--border); box-shadow: none; }
+
+/* ── 멘토 프로필 (#mentor-profile) ────────────────────────── */
+/* 칩 입력 — 입력칸 + 추가 버튼 한 줄 */
+.sf-chip-input { display: flex; gap: 8px; align-items: stretch; }
+.sf-chip-input input { flex: 1; min-width: 0; }
+
+/* 경력 타임라인 한 줄: [제목][기간][삭제] + 아래 한 줄로 세부내용 */
+.mp-tl-row {
+  padding: 12px; margin-bottom: 10px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.mp-tl-grid {
+  display: grid; grid-template-columns: 1fr 1fr auto;
+  gap: 8px; align-items: center; margin-bottom: 8px;
+}
+@media (max-width: 720px) {
+  .mp-tl-grid { grid-template-columns: 1fr auto; }
+  .mp-tl-grid input:first-child { grid-column: 1 / -1; }
+}
+
+/* ── 멘토링 가능 일정 (달력 + 시간) ────────────────────────── */
+/* 날짜 칸이 커져서(최대 44px × 7 + 여백) 왼쪽 폭을 넉넉히 준다.
+   좁으면 칸이 찌그러져 숫자가 가운데를 벗어난다. */
+.mp-sched {
+  display: grid; grid-template-columns: minmax(320px, 360px) 1fr;
+  gap: 28px; align-items: start;
+}
+@media (max-width: 860px) { .mp-sched { grid-template-columns: 1fr; gap: 20px; } }
+
+/* 달력은 테두리를 두르지 않는다 — 날짜 칸마다 이미 모양이 있어서
+   바깥 상자까지 그리면 표처럼 빽빽해 보인다. */
+.mp-cal { padding: 4px 2px; }
+
+/* 월 이동은 가운데 정렬 — 화살표가 양 끝에 떨어져 있으면 시선이 두 번 움직인다 */
+.mp-cal-head {
+  display: flex; align-items: center; justify-content: center; gap: 18px;
+  margin-bottom: 18px;
+}
+.mp-cal-title { font-size: 17px; font-weight: 600; color: var(--text-p); }
+.mp-cal-title b { color: var(--brand); font-weight: 700; }
+.mp-cal-nav {
+  width: 30px; height: 30px; border: 0; border-radius: 50%;
+  background: none; color: var(--text-m); cursor: pointer; font-size: 18px;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background .12s, color .12s;
+}
+.mp-cal-nav:hover:not(:disabled) { background: var(--surface-2); color: var(--text-p); }
+.mp-cal-nav:disabled { opacity: .25; cursor: not-allowed; }
+
+/* 가로·세로 간격을 같은 값으로 둔다. 예전에는 열 간격이 0 인데 날짜 칸에
+   max-width 를 줘서 넓은 열 가운데에 놓였고, 그래서 옆 간격만 벌어져 보였다. */
+.mp-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.mp-cal-wd {
+  text-align: center; font-size: 13px; font-weight: 500; color: var(--text-m);
+  padding: 0 0 10px;
+}
+.mp-cal-wd.sun { color: var(--c-red); }
+.mp-cal-wd.sat { color: var(--blue-info); }
+.mp-cal-pad { aspect-ratio: 1; }
+
+.mp-cal-day {
+  position: relative; aspect-ratio: 1;
+  display: flex; align-items: center; justify-content: center;
+  /* 열 폭을 그대로 채운다 — 가운데 정렬로 띄우면 간격이 어긋난다 */
+  width: 100%;
+  border: 0; border-radius: 10px;
+  background: none; font-family: var(--font); font-size: 15px; font-weight: 500;
+  color: var(--text-p); cursor: pointer;
+  transition: background .12s, color .12s;
+}
+.mp-cal-day:hover:not(:disabled) { background: var(--surface-2); }
+/* 시간을 연 날 — 달력을 다시 훑지 않고도 어디를 열었는지 보이게 */
+.mp-cal-day.has { background: var(--brand-soft); color: var(--brand); font-weight: 700; }
+/* 고른 날은 꽉 찬 사각형. 레퍼런스와 같은 방식이고, 테두리보다 멀리서도 눈에 띈다 */
+.mp-cal-day.on,
+.mp-cal-day.on.has { background: var(--brand); color: #fff; font-weight: 700; }
+.mp-cal-day.past { color: var(--mute-soft); cursor: not-allowed; }
+/* 몇 시간 열었는지 — 숫자를 겹쳐 쓰면 날짜와 섞여 읽히므로 점으로 표시한다 */
+.mp-cal-dot {
+  position: absolute; left: 50%; bottom: 5px; transform: translateX(-50%);
+  width: 4px; height: 4px; border-radius: 50%;
+  background: currentColor; font-size: 0; opacity: .8;
+}
+
+/* ── 멘토링 신청 카드 안의 달력 ─────────────────────────────
+   멘토 페이지 달력과 뜻이 다르다. 저기서는 '내가 연 날'을 강조해야 하지만,
+   여기서는 **고를 수 있는 날이 기본**이고 안 되는 날만 빠져 보이면 된다.
+   전부 색칠하면 달력이 알록달록해서 오히려 어디가 되는지 안 읽힌다. */
+/* 신청 카드 안이라 작게 둔다. 멘토 페이지 달력은 그 화면의 주인공이지만
+   여기서는 날짜·시간·형식·메시지 네 단계 중 하나일 뿐이라, 크면 카드가
+   화면을 넘겨 아래 단계가 안 보인다.
+   폭을 묶어 두지 않으면 카드가 넓을 때 칸이 같이 커진다. */
+/* 카드 가운데에 놓는다 — 왼쪽에 붙여 두면 오른쪽이 휑하게 남는다. */
+.req-cal { max-width: 370px; margin: 0 auto; }
+.req-cal .mp-cal-grid { gap: 4px; }
+.req-cal .mp-cal-day { font-size: 15px; border-radius: 10px; }
+.req-cal .mp-cal-head { margin-bottom: 16px; gap: 16px; }
+.req-cal .mp-cal-title { font-size: 16px; }
+.req-cal .mp-cal-nav { width: 30px; height: 30px; font-size: 18px; }
+.req-cal .mp-cal-wd { font-size: 12.5px; padding-bottom: 8px; }
+/* 시간 목록도 달력과 같은 폭·가운데 정렬로 맞춘다. 날짜와 시간은 한 흐름이라
+   폭이 어긋나면 두 덩어리가 따로 노는 것처럼 보인다. */
+#req-times { max-width: 370px; margin: 0 auto; }
+#req-time-lab { text-align: center; }
+
+/* 신청 가능한 날 — 보통 달력과 똑같이 보이게 둔다(배경·점 없음) */
+.req-cal .mp-cal-day.has { background: none; color: var(--text-p); font-weight: 500; }
+.req-cal .mp-cal-day.has:hover { background: var(--surface-2); }
+.req-cal .mp-cal-dot { display: none; }
+
+/* 멘토가 안 연 날 — 연한 회색으로 빠뜨린다 */
+.req-cal .mp-cal-day.past { color: var(--mute-soft); background: none; }
+
+/* 고른 날 — 연보라. 꽉 찬 색보다 눈이 덜 피로하고 숫자도 그대로 읽힌다 */
+.req-cal .mp-cal-day.on,
+.req-cal .mp-cal-day.on.has {
+  background: rgba(109, 58, 255, 0.14);
+  color: var(--brand-dark); font-weight: 700;
+  box-shadow: inset 0 0 0 1.5px var(--brand);
+}
+
+/* ── 시간 선택 ─────────────────────────────────────────────── */
+.mp-times { min-width: 0; }
+.mp-times-head {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  margin-bottom: 16px; font-size: 15px;
+}
+.mp-times-sep { color: var(--border); }
+.mp-times-sub { font-size: 13px; color: var(--text-m); font-weight: 500; }
+.mp-times-head .sf-link-btn { margin: 0 0 0 auto; }
+.mp-times-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; padding: 44px 16px; text-align: center;
+  color: var(--text-m); font-size: 13px;
+}
+.mp-times-empty i { font-size: 26px; color: var(--mute-soft); }
+
+/* 24칸(00:00~23:00)이 들어가므로 한 칸을 조금 좁힌다 —
+   92px 로 두면 좁은 화면에서 두 줄짜리가 열두 줄이 된다. */
+.mp-time-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 8px; }
+/* 레퍼런스처럼 흰 바탕 + 얇은 테두리. 고른 것만 브랜드색으로 채운다 */
+.mp-time {
+  padding: 13px 6px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--canvas); font-family: var(--font); font-size: 14px;
+  color: var(--text-p); cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.mp-time:hover { border-color: var(--brand); color: var(--brand); }
+.mp-time.on { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 600; }
+
+/* 달력만으로는 '다음 달에 뭘 열었더라'를 알 수 없어 아래에 목록으로 한 번 더 */
+.mp-avail-summary { margin-top: 16px; }
+.mp-avail-title { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+.mp-avail-list { display: flex; flex-direction: column; gap: 6px; }
+.mp-avail-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface-2); font-size: 13px;
+}
+.mp-avail-date { font-weight: 700; flex-shrink: 0; }
+.mp-avail-times { color: var(--text-s); flex: 1; min-width: 0; font-size: 12px; }
+
 /* ── 경력 (멘토) ─────────────────────────────────────────── */
 .sf-career-list { display: flex; flex-direction: column; gap: 12px; }
 .sf-career-row {
@@ -940,6 +1259,23 @@ input.input-error { border-color: var(--c-red); }
 .sf-cert-edit {
   margin-left: auto; border: 0; background: none; cursor: pointer;
   font-family: var(--font); font-size: 12px; color: var(--brand); font-weight: 600;
+}
+/* 발급기관·취득일 슬롯. 내용만 바꿔 끼우려고 감싼 껍데기라 **레이아웃에서 빠진다**.
+   .sf-cert-row 가 flex column + gap:8px 이어서, 비워 두면 빈 껍데기가 줄마다
+   8px 여백을 만든다(자격증명을 아직 안 적은 줄). display:contents 로 두면
+   안쪽 .sf-cert-detail 이 그대로 flex 자식이 되어 원래 간격이 유지된다. */
+.sf-cert-detail-slot { display: contents; }
+
+/* 목록에서 고른 자격증의 발급기관 — 직접 적는다(카탈로그에 없는 정보) */
+.sf-cert-issuer { display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0; }
+.sf-cert-issuer input {
+  flex: 1; min-width: 0; padding: 5px 8px; font-size: 12px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-family: var(--font); background: var(--canvas);
+}
+.sf-cert-issuer input:focus {
+  outline: none; border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(109,58,255,0.10);
 }
 @media (max-width: 720px) {
   .sf-cert-main { grid-template-columns: 1fr auto; }
@@ -1091,7 +1427,7 @@ input.input-error { border-color: var(--c-red); }
 }
 .up-info { flex: 1; min-width: 0; }
 .up-name { font-size: 13px; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 4px; }
-.up-level { font-family: var(--font-mono); font-size: 10px; background: var(--c-accent); color: #fff; padding: 2px 5px; border-radius: 4px; }
+.up-level { font-family: var(--font-num); font-size: 10px; font-weight: 700; background: var(--c-accent); color: #fff; padding: 2px 5px; border-radius: 4px; }
 .up-tags { display: flex; gap: 4px; flex-wrap: wrap; }
 .up-tag { font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-ink2); }
 
@@ -1127,7 +1463,7 @@ input.input-error { border-color: var(--c-red); }
 /* NCS 24개 대분류 — 항목이 많아 목록만 따로 스크롤시킨다 */
 #job-major-list { flex: 1; min-height: 0; overflow-y: auto; }
 .jm-code {
-  font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+  font-family: var(--font-num); font-size: 11px; font-weight: 600;
   color: var(--c-ink3); width: 18px; flex-shrink: 0;
 }
 .dept-item.active .jm-code { color: rgba(255,255,255,0.6); }
@@ -1167,7 +1503,7 @@ input.input-error { border-color: var(--c-red); }
 .phase-tab.active { background: var(--c-ink); }
 .phase-tab.active .pt-num { color: rgba(255,255,255,0.5); }
 .phase-tab.active .pt-label { color: #fff; }
-.pt-num { font-family: var(--font-mono); font-size: 10px; color: var(--c-ink3); margin-bottom: 3px; }
+.pt-num { font-family: var(--font-num); font-size: 10px; font-weight: 600; color: var(--c-ink3); margin-bottom: 3px; }
 .pt-label { font-size: 12px; font-weight: 600; color: var(--c-ink2); }
 
 .section-title {
@@ -1198,7 +1534,7 @@ input.input-error { border-color: var(--c-red); }
 .ct-icon { font-size: 14px; line-height: 1; }
 .ct-label { font-size: 12px; font-weight: 600; color: var(--c-ink2); }
 .ct-count {
-  font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+  font-family: var(--font-num); font-size: 10px; font-weight: 700;
   padding: 1px 6px; border-radius: 99px;
   background: var(--c-bg); color: var(--c-ink3);
 }
@@ -1221,7 +1557,7 @@ input.input-error { border-color: var(--c-red); }
 .job-hero-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
 .job-hero-top h2 { font-size: 20px; font-weight: 800; letter-spacing: -0.4px; color: var(--c-ink); }
 .job-hero-badge {
-  font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+  font-family: var(--font-num); font-size: 11px; font-weight: 600;
   padding: 3px 9px; border-radius: 99px;
   background: var(--brand-soft); color: var(--brand);
 }
@@ -1384,12 +1720,12 @@ input.input-error { border-color: var(--c-red); }
 .spec-card.full { grid-column: 1 / -1; }
 
 .gpa-display { display: flex; align-items: baseline; gap: 4px; margin-bottom: 10px; }
-.gpa-num { font-family: var(--font-mono); font-size: 32px; font-weight: 500; color: var(--c-ink); letter-spacing: -0.02em; }
+.gpa-num { font-family: var(--font-num); font-size: 34px; font-weight: 700; color: var(--c-ink); letter-spacing: -0.03em; }
 .gpa-max { font-size: 14px; color: var(--c-ink3); }
 .gpa-label { font-size: 12px; color: var(--c-ink3); margin-bottom: 10px; }
 .gpa-bar-bg { height: 6px; background: var(--c-border); border-radius: 99px; overflow: hidden; }
 .gpa-bar-fill { height: 100%; background: var(--c-ink); border-radius: 99px; transition: width 0.8s cubic-bezier(0.16,1,0.3,1); }
-.gpa-range { display: flex; justify-content: space-between; margin-top: 6px; font-size: 10px; color: var(--c-ink3); font-family: var(--font-mono); }
+.gpa-range { display: flex; justify-content: space-between; margin-top: 6px; font-size: 10px; font-weight: 600; color: var(--c-ink3); font-family: var(--font-num); }
 
 .cert-list { display: flex; flex-direction: column; gap: 8px; }
 .cert-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--c-bg); border-radius: var(--radius-sm); }
@@ -1398,14 +1734,14 @@ input.input-error { border-color: var(--c-red); }
 .cert-desc { font-size: 11px; color: var(--c-ink3); font-weight: 400; }
 .cert-track { height: 4px; background: var(--c-border); border-radius: 99px; overflow: hidden; }
 .cert-fill { height: 100%; border-radius: 99px; transition: width 1s cubic-bezier(0.16,1,0.3,1); }
-.cert-pct { font-family: var(--font-mono); font-size: 12px; font-weight: 500; color: var(--c-ink2); min-width: 36px; text-align: right; }
+.cert-pct { font-family: var(--font-num); font-size: 12px; font-weight: 700; color: var(--c-ink2); min-width: 36px; text-align: right; }
 
 .lang-list { display: flex; flex-direction: column; gap: 8px; }
 .lang-item { display: flex; align-items: center; gap: 12px; padding: 9px 12px; background: var(--c-bg); border: 1px solid var(--c-border); border-radius: var(--radius-sm); }
 .lang-item--empty { opacity: 0.6; }
 .lang-name { font-size: 12px; font-weight: 600; color: var(--c-ink); min-width: 130px; }
 .lang-score-wrap { flex: 1; }
-.lang-avg { font-family: var(--font-mono); font-size: 13px; font-weight: 500; color: var(--c-ink); }
+.lang-avg { font-family: var(--font-num); font-size: 13px; font-weight: 700; color: var(--c-ink); }
 .lang-avg--empty { color: var(--c-ink3); font-family: var(--font); font-size: 12px; }
 .lang-range { font-size: 11px; color: var(--c-ink3); }
 .lang-badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 4px; }
@@ -1425,8 +1761,8 @@ input.input-error { border-color: var(--c-red); }
 .activity-name { font-size: 14px; font-weight: 600; color: var(--c-ink); margin-bottom: 2px; }
 .activity-desc { font-size: 12px; color: var(--c-ink3); line-height: 1.5; }
 .activity-right { text-align: right; flex-shrink: 0; }
-.activity-pct { font-family: var(--font-mono); font-size: 18px; font-weight: 500; color: var(--c-green); }
-.activity-n { font-size: 11px; color: var(--c-ink3); font-family: var(--font-mono); }
+.activity-pct { font-family: var(--font-num); font-size: 19px; font-weight: 700; color: var(--c-green); }
+.activity-n { font-size: 11px; font-weight: 600; color: var(--c-ink3); font-family: var(--font-num); }
 
 /* 정성 CAS 가중치 안내 + 유형별 가중치(tier) 칩 */
 .qual-weight-note { padding: 8px 16px; font-size: 11.5px; color: var(--c-ink3); background: var(--c-bg); border-bottom: 1px solid var(--c-border); line-height: 1.5; }
@@ -1486,7 +1822,7 @@ input.input-error { border-color: var(--c-red); }
   border-radius: 10px; padding: 16px;
 }
 .bo-kpi-label { font-size: 11px; color: var(--text-m); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 6px; }
-.bo-kpi-value { font-family: var(--font-mono); font-size: 28px; font-weight: 500; color: var(--text-p); letter-spacing: -0.02em; }
+.bo-kpi-value { font-family: var(--font-num); font-size: 30px; font-weight: 700; color: var(--text-p); letter-spacing: -0.03em; }
 
 .bo-tabs {
   display: flex; gap: 4px; margin-bottom: 16px;
@@ -1572,7 +1908,7 @@ input.input-error { border-color: var(--c-red); }
   letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 8px;
 }
 .bo-agg-big {
-  font-family: var(--font-mono); font-size: 26px; font-weight: 500;
+  font-family: var(--font-num); font-size: 28px; font-weight: 700;
   color: var(--text-p); letter-spacing: -0.02em; margin-bottom: 4px;
 }
 .bo-agg-block {
@@ -1588,8 +1924,8 @@ input.input-error { border-color: var(--c-red); }
 .bo-bar-track { height: 8px; background: var(--bg); border-radius: 99px; overflow: hidden; }
 .bo-bar-fill { height: 100%; background: var(--brand); border-radius: 99px; transition: width 0.6s ease; }
 .bo-bar-fill--alt { background: var(--c-green); }
-.bo-bar-pct { font-family: var(--font-mono); font-size: 13px; font-weight: 500; text-align: right; }
-.bo-bar-n { font-size: 11px; color: var(--text-m); text-align: right; font-family: var(--font-mono); }
+.bo-bar-pct { font-family: var(--font-num); font-size: 13px; font-weight: 700; text-align: right; }
+.bo-bar-n { font-size: 11px; font-weight: 600; color: var(--text-m); text-align: right; font-family: var(--font-num); }
 
 /* ── Responsive ──────────────────────────────────────────── */
 /* 드로어가 열려 있는 동안 뒤 페이지 스크롤 잠금 */
