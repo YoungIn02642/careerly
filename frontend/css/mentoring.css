@@ -21,7 +21,7 @@
   --font-sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont,
                'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
 
-  /* --brand / --brand-dark / --brand-soft / --blue / --shadow / --font-mono 는
+  /* --brand / --brand-dark / --brand-soft / --blue / --shadow / --font-num 은
      main.css 의 홈 토큰을 그대로 쓴다. 여기서 재정의하면 로드 순서에 따라
      홈과 멘토링의 브랜드 색이 갈린다. */
   --brand-soft2: #E3E0FB;

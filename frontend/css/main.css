@@ -41,7 +41,13 @@
   --acc-yellow:   #ffae13;
 
   --font:         'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
-  --font-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+  /* 숫자 전용. 고정폭(JetBrains/DM Mono)은 코드용이라 딱딱했고, 본문 Pretendard 를
+     그대로 쓰면 숫자가 밋밋해 통계 화면의 무게중심이 사라졌다. Nunito Sans 는 그 사이다 —
+     자족 끝이 둥글어 부드럽게 읽히면서도 숫자 골격이 또렷해 수치가 제대로 도드라진다.
+     한글 자소가 없으므로 같은 요소 안의 한글은 자동으로 Pretendard 로 떨어진다.
+     자릿수 정렬은 폰트가 아니라 body 의 tabular-nums 가 맡는다(Nunito Sans 도 지원). */
+  --font-num:     'Nunito Sans', var(--font);
+  --font-code:    ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
   --c-bg:         #f6f6f4;
   --c-surface:    #ffffff;
@@ -71,12 +77,14 @@ body {
   font-family: var(--font); font-size: 14px; line-height: 1.6;
   min-height: 100vh; display: flex; flex-direction: column;
   -webkit-font-smoothing: antialiased;
+  /* 숫자만 고정폭으로. 상속되므로 표·통계 어디서든 자릿수가 세로로 맞는다 */
+  font-variant-numeric: tabular-nums;
 }
 
 .page { display: none; flex-direction: column; flex: 1; }
 .page.active { display: flex; }
 
-code { font-family: var(--font-mono); background: var(--c-bg); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+code { font-family: var(--font-code); background: var(--c-bg); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
 
 /* ── NAVBAR (Wanted-style) ──────────────────────────────── */
 .navbar {
@@ -409,13 +417,13 @@ code { font-family: var(--font-mono); background: var(--c-bg); padding: 1px 6px;
   padding: 5px 10px; background: var(--brand-soft); border-radius: 6px;
 }
 .hv-tag-n {
-  font-family: var(--font-mono); font-size: 11px;
+  font-family: var(--font-num); font-size: 11px; font-weight: 600;
   color: var(--text-m); font-weight: 500;
 }
 .hv-stat-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px; }
 .hv-stat-label { font-size: 11px; color: var(--text-m); font-weight: 600; margin-bottom: 4px; }
 .hv-stat-value {
-  font-family: var(--font-mono); font-size: 26px; font-weight: 500;
+  font-family: var(--font-num); font-size: 28px; font-weight: 700;
   letter-spacing: -0.02em; color: var(--text-p);
 }
 .hv-stat-unit { font-size: 12px; color: var(--text-m); margin-left: 3px; font-weight: 400; }
@@ -431,7 +439,7 @@ code { font-family: var(--font-mono); background: var(--c-bg); padding: 1px 6px;
   font-size: 12px;
 }
 .hv-cert span { color: var(--text-s); font-weight: 500; }
-.hv-cert b { font-family: var(--font-mono); font-weight: 500; color: var(--text-p); }
+.hv-cert b { font-family: var(--font-num); font-weight: 700; color: var(--text-p); }
 
 .hv-card--floating, .hv-card--floating-2 {
   position: absolute;
@@ -459,7 +467,7 @@ code { font-family: var(--font-mono); background: var(--c-bg); padding: 1px 6px;
 .hv-float-icon { font-size: 22px; }
 .hv-float-label { font-size: 11px; color: var(--text-m); font-weight: 600; margin-bottom: 2px; }
 .hv-float-value {
-  font-family: var(--font-mono); font-size: 20px; font-weight: 500;
+  font-family: var(--font-num); font-size: 21px; font-weight: 700;
   color: var(--text-p); letter-spacing: -0.02em;
 }
 .hv-float-value span { font-size: 13px; color: var(--text-m); margin-left: 2px; }
@@ -470,7 +478,7 @@ code { font-family: var(--font-mono); background: var(--c-bg); padding: 1px 6px;
   display: flex; justify-content: center; gap: 80px; flex-wrap: wrap;
 }
 .stat-item { text-align: center; }
-.stat-num { font-size: 32px; font-weight: 800; letter-spacing: -1px; margin-bottom: 4px; font-family: var(--font-mono); }
+.stat-num { font-size: 34px; font-weight: 800; letter-spacing: -0.6px; margin-bottom: 4px; font-family: var(--font-num); }
 .stat-label { font-size: 13px; color: rgba(255,255,255,0.6); font-weight: 500; }
 
 /* ── 멘토 · 멘티 카운트 스트립 ─────────────────────────── */
@@ -534,7 +542,7 @@ code { font-family: var(--font-mono); background: var(--c-bg); padding: 1px 6px;
 }
 .mm-card-sub { font-size: 12px; color: var(--text-m); font-weight: 500; }
 .mm-card-share {
-  font-family: var(--font-mono); font-size: 13px;
+  font-family: var(--font-num); font-size: 13px;
   font-weight: 600; color: var(--text-s);
   background: var(--bg); padding: 4px 10px; border-radius: 99px;
 }
@@ -542,8 +550,8 @@ code { font-family: var(--font-mono); background: var(--c-bg); padding: 1px 6px;
 .mm-card--mentee .mm-card-share { color: #16a34a; background: #e7f7ee; }
 
 .mm-card-num {
-  font-family: var(--font-mono); font-size: 56px;
-  font-weight: 500; letter-spacing: -2px;
+  font-family: var(--font-num); font-size: 58px;
+  font-weight: 800; letter-spacing: -1.4px;
   color: var(--text-p); line-height: 1;
   margin-top: 4px;
   position: relative; z-index: 1;
@@ -1419,7 +1427,7 @@ input[readonly]:focus { border-color: var(--border); box-shadow: none; }
 }
 .up-info { flex: 1; min-width: 0; }
 .up-name { font-size: 13px; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 4px; }
-.up-level { font-family: var(--font-mono); font-size: 10px; background: var(--c-accent); color: #fff; padding: 2px 5px; border-radius: 4px; }
+.up-level { font-family: var(--font-num); font-size: 10px; font-weight: 700; background: var(--c-accent); color: #fff; padding: 2px 5px; border-radius: 4px; }
 .up-tags { display: flex; gap: 4px; flex-wrap: wrap; }
 .up-tag { font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-ink2); }
 
@@ -1455,7 +1463,7 @@ input[readonly]:focus { border-color: var(--border); box-shadow: none; }
 /* NCS 24개 대분류 — 항목이 많아 목록만 따로 스크롤시킨다 */
 #job-major-list { flex: 1; min-height: 0; overflow-y: auto; }
 .jm-code {
-  font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+  font-family: var(--font-num); font-size: 11px; font-weight: 600;
   color: var(--c-ink3); width: 18px; flex-shrink: 0;
 }
 .dept-item.active .jm-code { color: rgba(255,255,255,0.6); }
@@ -1495,7 +1503,7 @@ input[readonly]:focus { border-color: var(--border); box-shadow: none; }
 .phase-tab.active { background: var(--c-ink); }
 .phase-tab.active .pt-num { color: rgba(255,255,255,0.5); }
 .phase-tab.active .pt-label { color: #fff; }
-.pt-num { font-family: var(--font-mono); font-size: 10px; color: var(--c-ink3); margin-bottom: 3px; }
+.pt-num { font-family: var(--font-num); font-size: 10px; font-weight: 600; color: var(--c-ink3); margin-bottom: 3px; }
 .pt-label { font-size: 12px; font-weight: 600; color: var(--c-ink2); }
 
 .section-title {
@@ -1526,7 +1534,7 @@ input[readonly]:focus { border-color: var(--border); box-shadow: none; }
 .ct-icon { font-size: 14px; line-height: 1; }
 .ct-label { font-size: 12px; font-weight: 600; color: var(--c-ink2); }
 .ct-count {
-  font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+  font-family: var(--font-num); font-size: 10px; font-weight: 700;
   padding: 1px 6px; border-radius: 99px;
   background: var(--c-bg); color: var(--c-ink3);
 }
@@ -1549,7 +1557,7 @@ input[readonly]:focus { border-color: var(--border); box-shadow: none; }
 .job-hero-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
 .job-hero-top h2 { font-size: 20px; font-weight: 800; letter-spacing: -0.4px; color: var(--c-ink); }
 .job-hero-badge {
-  font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+  font-family: var(--font-num); font-size: 11px; font-weight: 600;
   padding: 3px 9px; border-radius: 99px;
   background: var(--brand-soft); color: var(--brand);
 }
@@ -1712,12 +1720,12 @@ input[readonly]:focus { border-color: var(--border); box-shadow: none; }
 .spec-card.full { grid-column: 1 / -1; }
 
 .gpa-display { display: flex; align-items: baseline; gap: 4px; margin-bottom: 10px; }
-.gpa-num { font-family: var(--font-mono); font-size: 32px; font-weight: 500; color: var(--c-ink); letter-spacing: -0.02em; }
+.gpa-num { font-family: var(--font-num); font-size: 34px; font-weight: 700; color: var(--c-ink); letter-spacing: -0.03em; }
 .gpa-max { font-size: 14px; color: var(--c-ink3); }
 .gpa-label { font-size: 12px; color: var(--c-ink3); margin-bottom: 10px; }
 .gpa-bar-bg { height: 6px; background: var(--c-border); border-radius: 99px; overflow: hidden; }
 .gpa-bar-fill { height: 100%; background: var(--c-ink); border-radius: 99px; transition: width 0.8s cubic-bezier(0.16,1,0.3,1); }
-.gpa-range { display: flex; justify-content: space-between; margin-top: 6px; font-size: 10px; color: var(--c-ink3); font-family: var(--font-mono); }
+.gpa-range { display: flex; justify-content: space-between; margin-top: 6px; font-size: 10px; font-weight: 600; color: var(--c-ink3); font-family: var(--font-num); }
 
 .cert-list { display: flex; flex-direction: column; gap: 8px; }
 .cert-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--c-bg); border-radius: var(--radius-sm); }
@@ -1726,14 +1734,14 @@ input[readonly]:focus { border-color: var(--border); box-shadow: none; }
 .cert-desc { font-size: 11px; color: var(--c-ink3); font-weight: 400; }
 .cert-track { height: 4px; background: var(--c-border); border-radius: 99px; overflow: hidden; }
 .cert-fill { height: 100%; border-radius: 99px; transition: width 1s cubic-bezier(0.16,1,0.3,1); }
-.cert-pct { font-family: var(--font-mono); font-size: 12px; font-weight: 500; color: var(--c-ink2); min-width: 36px; text-align: right; }
+.cert-pct { font-family: var(--font-num); font-size: 12px; font-weight: 700; color: var(--c-ink2); min-width: 36px; text-align: right; }
 
 .lang-list { display: flex; flex-direction: column; gap: 8px; }
 .lang-item { display: flex; align-items: center; gap: 12px; padding: 9px 12px; background: var(--c-bg); border: 1px solid var(--c-border); border-radius: var(--radius-sm); }
 .lang-item--empty { opacity: 0.6; }
 .lang-name { font-size: 12px; font-weight: 600; color: var(--c-ink); min-width: 130px; }
 .lang-score-wrap { flex: 1; }
-.lang-avg { font-family: var(--font-mono); font-size: 13px; font-weight: 500; color: var(--c-ink); }
+.lang-avg { font-family: var(--font-num); font-size: 13px; font-weight: 700; color: var(--c-ink); }
 .lang-avg--empty { color: var(--c-ink3); font-family: var(--font); font-size: 12px; }
 .lang-range { font-size: 11px; color: var(--c-ink3); }
 .lang-badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 4px; }
@@ -1753,8 +1761,8 @@ input[readonly]:focus { border-color: var(--border); box-shadow: none; }
 .activity-name { font-size: 14px; font-weight: 600; color: var(--c-ink); margin-bottom: 2px; }
 .activity-desc { font-size: 12px; color: var(--c-ink3); line-height: 1.5; }
 .activity-right { text-align: right; flex-shrink: 0; }
-.activity-pct { font-family: var(--font-mono); font-size: 18px; font-weight: 500; color: var(--c-green); }
-.activity-n { font-size: 11px; color: var(--c-ink3); font-family: var(--font-mono); }
+.activity-pct { font-family: var(--font-num); font-size: 19px; font-weight: 700; color: var(--c-green); }
+.activity-n { font-size: 11px; font-weight: 600; color: var(--c-ink3); font-family: var(--font-num); }
 
 /* 정성 CAS 가중치 안내 + 유형별 가중치(tier) 칩 */
 .qual-weight-note { padding: 8px 16px; font-size: 11.5px; color: var(--c-ink3); background: var(--c-bg); border-bottom: 1px solid var(--c-border); line-height: 1.5; }
@@ -1814,7 +1822,7 @@ input[readonly]:focus { border-color: var(--border); box-shadow: none; }
   border-radius: 10px; padding: 16px;
 }
 .bo-kpi-label { font-size: 11px; color: var(--text-m); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 6px; }
-.bo-kpi-value { font-family: var(--font-mono); font-size: 28px; font-weight: 500; color: var(--text-p); letter-spacing: -0.02em; }
+.bo-kpi-value { font-family: var(--font-num); font-size: 30px; font-weight: 700; color: var(--text-p); letter-spacing: -0.03em; }
 
 .bo-tabs {
   display: flex; gap: 4px; margin-bottom: 16px;
@@ -1900,7 +1908,7 @@ input[readonly]:focus { border-color: var(--border); box-shadow: none; }
   letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 8px;
 }
 .bo-agg-big {
-  font-family: var(--font-mono); font-size: 26px; font-weight: 500;
+  font-family: var(--font-num); font-size: 28px; font-weight: 700;
   color: var(--text-p); letter-spacing: -0.02em; margin-bottom: 4px;
 }
 .bo-agg-block {
@@ -1916,8 +1924,8 @@ input[readonly]:focus { border-color: var(--border); box-shadow: none; }
 .bo-bar-track { height: 8px; background: var(--bg); border-radius: 99px; overflow: hidden; }
 .bo-bar-fill { height: 100%; background: var(--brand); border-radius: 99px; transition: width 0.6s ease; }
 .bo-bar-fill--alt { background: var(--c-green); }
-.bo-bar-pct { font-family: var(--font-mono); font-size: 13px; font-weight: 500; text-align: right; }
-.bo-bar-n { font-size: 11px; color: var(--text-m); text-align: right; font-family: var(--font-mono); }
+.bo-bar-pct { font-family: var(--font-num); font-size: 13px; font-weight: 700; text-align: right; }
+.bo-bar-n { font-size: 11px; font-weight: 600; color: var(--text-m); text-align: right; font-family: var(--font-num); }
 
 /* ── Responsive ──────────────────────────────────────────── */
 /* 드로어가 열려 있는 동안 뒤 페이지 스크롤 잠금 */

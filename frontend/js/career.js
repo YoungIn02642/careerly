@@ -3,7 +3,7 @@
 //   • 사이드바      : 1차 분류 10개 (js/keco.js · 임금직업정보시스템)
 //   • STEP 01       : 2차 분류 선택    (미용·여행…경비·청소직 → 경호·경비직)
 //   • STEP 02       : 직업 선택        (경호·경비직 → 경호원) · 9개씩 페이지로 나눈다
-//   • STEP 03       : 커리어 로드맵 — 연봉 → 기업 유형 → 정량/정성 스펙
+//   • STEP 03       : 커리어 로드맵 — 기업 유형 → 정량/정성 스펙
 //   • 정량/정성 스펙 섹션은 Aggregator.compute() 결과로 동적 생성
 //   • 데이터가 없으면 "데이터 없음" 빈 상태 표시
 //
@@ -138,7 +138,7 @@ window.CareerPage = (() => {
         ${majorHero(major)}
         ${middleSelect(major)}
         ${middle ? jobSelect(middle) : ''}
-        ${job ? renderRoadmap(major, middle, job) : ''}
+        ${job ? renderRoadmap(major, middle) : ''}
       </div>
     `;
     animateBars();
@@ -279,7 +279,7 @@ window.CareerPage = (() => {
   }
 
   // ── STEP 03 · 커리어 로드맵 ───────────────────────────────
-  function renderRoadmap(major, middle, job) {
+  function renderRoadmap(major, middle) {
     /* 스펙 레코드는 아직 학과(dept) 스키마다. 2차 분류에 얹힌 legacy 조건으로 집계한다.
        집계 범위는 좁은 것부터 넓은 순으로 시도한다:
          2차 분류+기업유형 → 2차 분류 전체 → 1차 분류 전체
@@ -288,7 +288,7 @@ window.CareerPage = (() => {
 
        ── 집계 단위는 '직업'이 아니라 '2차 분류'다 ──
        직업 461개 단위로 선배 스펙을 나누면 표본이 한 자릿수로 쪼개져 평균이 의미를
-       잃는다. 임금은 직업 단위로 보여주되, 스펙 통계는 2차 분류 단위로 낸다.
+       잃는다. 스펙 통계는 2차 분류 단위로 낸다.
        화면에도 그렇게 적어 둔다 — 무엇의 평균인지 헷갈리면 안 된다. */
     const midFn = KECO.middleMatcher(currentMajor, currentMiddle);
     const majFn = KECO.majorMatcher(currentMajor);
@@ -327,7 +327,6 @@ window.CareerPage = (() => {
     }
 
     const head = `
-      ${wageBlock(job)}
       ${corpTabBar(corpCounts)}
       <div class="section-title">${esc(middle.name)} 선배 스펙
         ${agg.empty ? '' : `<span class="scope-tag">${esc(scope)} · n = ${agg.count}명</span>`}
@@ -344,21 +343,6 @@ window.CareerPage = (() => {
                     )
                     .join('')
                 : `<span class="chip chip--empty">전공 무관</span>`
-            }
-          </div>
-        </div>
-        <div class="roadmap-card">
-          <div class="roadmap-card-title">같은 갈래의 다른 직업</div>
-          <div class="roadmap-chips">
-            ${
-              middle.jobs
-                .filter((j) => j.code !== job.code)
-                .slice(0, 12)
-                .map(
-                  (j) => `<span class="chip chip--small">${esc(j.name)}</span>`,
-                )
-                .join('') ||
-              `<span class="chip chip--empty">이 갈래에는 이 직업뿐이에요</span>`
             }
           </div>
         </div>
@@ -386,32 +370,6 @@ window.CareerPage = (() => {
           <span class="empty-or">또는</span>
           <a class="empty-cta" onclick="navigate('backoffice')">백오피스에서 데모 시드 추가 →</a>
         </div>
-      </div>`;
-  }
-
-  /* ── 연봉 ────────────────────────────────────────────────────
-     기업 유형보다 **위에** 둔다. 기업 유형은 "같은 직업 안에서 어디로 갈까"를 고르는
-     칸인데, 그 직업이 얼마를 버는지를 모르고 고를 수는 없다. 연봉이 먼저다.
-
-     같은 중분류 안에서의 위치도 같이 보여준다. 절대 금액만 주면 "3,500만원이 이 갈래에서
-     높은 편인가"를 알 수 없는데, 그게 실제로 궁금한 것이다.
-
-     ── 선배 데이터의 연봉이 아니다 ──
-     이 값은 임금직업정보시스템의 **직업별 평균임금**(전체 재직자 기준)이다. careerly
-     선배 표본과 무관하고 신입 초봉도 아니다. 그 구분을 화면에 적어두지 않으면
-     "선배들이 이만큼 받는다"로 읽힌다. */
-  function wageBlock(job) {
-    return `
-      <div class="section-title">연봉</div>
-      <div class="wage-card">
-        <div class="wage-main">
-          <div class="wage-label">${esc(job.name)} 평균임금</div>
-          <div class="wage-amount">${KECO.wageText(job.avgWage)}</div>
-        </div>
-      </div>
-      <div class="wage-note">
-        임금직업정보시스템의 <b>직업별 평균임금</b>이에요 — 해당 직업 <b>전체 재직자</b> 기준이라
-        신입 초봉이 아니고, 아래 선배 스펙 통계와도 다른 자료입니다.
       </div>`;
   }
 
