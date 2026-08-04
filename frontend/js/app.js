@@ -45,6 +45,7 @@ function showPage(page) {
     Backoffice.render(document.querySelector('#page-backoffice .bo-wrap'));
   }
   if (page === 'main')       { if (window.renderHome) renderHome(); }
+  else if (window.leaveHome) leaveHome();   // 홈을 떠났으니 다음 진입 때 등장 효과를 다시 재생
   if (page === 'jd')         JdCoach.onEnter();
   if (MENTORING_PAGES.includes(page)) Mentoring.onEnter(page);
 
