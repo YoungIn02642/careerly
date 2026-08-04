@@ -53,6 +53,11 @@ function revealTargets(section) {
 }
 
 let revealObserver = null;
+/* 홈을 떠났다 돌아왔을 때만 처음부터 다시 재생한다. 이 값이 false 면
+   이미 뜬 요소는 그대로 두고, 아직 안 뜬 요소만 다시 관찰한다.
+   (첫 로드 때 DOMContentLoaded 와 showPage('main') 이 각각 replayReveal 을
+    부르는데, 둘 다 리셋하면 모션이 두 번 보인다.) */
+let revealPending = true;
 
 function setupReveal() {
   const home = document.querySelector('#page-main .home');
@@ -80,13 +85,21 @@ function setupReveal() {
 
   home.querySelectorAll(':scope > section').forEach(section => {
     revealTargets(section).forEach((el, i) => {
+      /* 이미 다 뜬 요소를 되돌리면 같은 모션이 한 번 더 보인다.
+         dir 을 바꿔 새로 나타난 요소는 rv-in 이 없으므로 아래로 내려간다. */
+      if (!revealPending && el.classList.contains('rv-in')) return;
       el.classList.add('rv');
       el.classList.remove('rv-in');
       el.style.setProperty('--rv-i', String(Math.min(i, 6)));  // 계단은 6칸에서 멈춘다
       revealObserver.observe(el);
     });
   });
+  revealPending = false;
 }
+
+/* 홈을 벗어날 때 호출된다(app.js showPage). 다음 진입에서 다시 처음부터 재생. */
+function leaveHome() { revealPending = true; }
+window.leaveHome = leaveHome;
 
 /* SPA 라 홈을 떠났다 돌아오면 클래스가 남아 있어 효과가 한 번만 돌고 끝난다.
    showPage 가 renderHome 을 다시 부르므로 여기서 매번 새로 건다. */

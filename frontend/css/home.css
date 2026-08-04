@@ -62,12 +62,74 @@ body.dir-c .home-hero-dark { display: block; }
 .home-hero-cta { display: flex; gap: 10px; flex-wrap: wrap; }
 .home-hero-cta button { white-space: nowrap; }
 
-.home-hero-visual { position: relative; }
+/* isolation — 아래 ::after(바닥 그림자)가 z-index:-1 이라, 여기서 쌓임 맥락을
+   끊지 않으면 섹션 배경 뒤로 숨어 안 보인다. */
+.home-hero-visual {
+  position: relative; isolation: isolate;
+  /* 뒤 카드가 오른쪽으로 32px 밀려 나가므로 그만큼 자리를 비워 둔다.
+     안 그러면 화면 오른쪽 끝에서 잘린다. */
+  margin-right: 32px;
+}
 .hcard {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 24px;
   box-shadow: var(--shadow-layered);
 }
+/* 두둥실 — 카드가 아주 천천히 위아래로 떠 있는다.
+   등장(reveal)은 부모 .home-hero-visual 의 transform 이 맡으므로, 떠다니는
+   건 자식인 .hcard 에 건다. 한 요소에 둘을 겹치면 서로를 덮어쓴다.
+   진입 모션이 끝난 뒤(0.9s) 시작해야 들어오다 말고 흔들리지 않는다. */
+.hcard {
+  animation: hcard-float 6.5s ease-in-out 0.9s infinite;
+  will-change: transform;
+}
+@keyframes hcard-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-10px); }
+}
+/* 뒤에 겹쳐 둔 빈 카드 2장(.hcard-ghost) — 계단식. 내용은 없다. 있으면
+   읽으려 들어 앞 카드의 숫자를 방해한다.
+   기울이지 않고 위·오른쪽으로 같은 간격씩 밀어낸다. 간격이 일정해야
+   '쌓여 있다'로 읽힌다 — 들쭉날쭉하면 그냥 어긋난 것처럼 보인다. */
+.hcard-ghost {
+  position: absolute; inset: 0; pointer-events: none;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-layered);
+  will-change: transform;
+}
+.hcard-ghost.g1 {
+  z-index: -1; opacity: 0.7;
+  transform: translate(16px, -14px);
+  animation: hcard-float-g1 8s ease-in-out 0.9s infinite;
+}
+.hcard-ghost.g2 {
+  z-index: -2; opacity: 0.4;
+  transform: translate(32px, -28px);
+  animation: hcard-float-g2 9.5s ease-in-out 0.9s infinite;
+}
+/* 세 장의 주기가 모두 다르다. 같으면 한 덩어리로 붙어 보여 겹친 의미가 없다.
+   뒤로 갈수록 진폭을 키워, 뜰 때 계단 간격이 살짝 벌어졌다 좁아진다. */
+@keyframes hcard-float-g1 {
+  0%, 100% { transform: translate(16px, -14px); }
+  50%      { transform: translate(16px, -25px); }
+}
+@keyframes hcard-float-g2 {
+  0%, 100% { transform: translate(32px, -28px); }
+  50%      { transform: translate(32px, -41px); }
+}
+
+/* 그림자도 같이 숨쉬면 '떠 있다'가 읽힌다 (카드가 내려올 때 그림자가 좁아진다) */
+.home-hero-visual::after {
+  content: ''; position: absolute; left: 8%; right: 8%; bottom: -18px; height: 22px;
+  background: radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, 0.16), transparent 70%);
+  filter: blur(6px); z-index: -3; pointer-events: none;
+  animation: hcard-shadow 6.5s ease-in-out 0.9s infinite;
+}
+@keyframes hcard-shadow {
+  0%, 100% { transform: scaleX(1);    opacity: 0.75; }
+  50%      { transform: scaleX(0.92); opacity: 0.45; }
+}
+
 .hcard-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .hcard-tag {
   font-size: 12.8px; font-weight: 550; color: var(--brand);
@@ -239,6 +301,9 @@ body.dir-c .home-hero-dark { display: block; }
   .home-articles { grid-template-columns: repeat(2, 1fr); }
   .home-hero { grid-template-columns: 1fr; }
   body.dir-b .home-hero { display: flex; flex-direction: column; }
+  /* 좁은 화면에선 오른쪽으로 삐져나갈 자리가 없다. 계단을 위로만 쌓는다. */
+  .home-hero-visual { margin-right: 0; }
+  .hcard-ghost.g1, .hcard-ghost.g2 { display: none; }
   .home-hero h1 { font-size: 48px; }
   .home-hero-dark h1 { font-size: 40px; }
 }
@@ -282,4 +347,8 @@ body.dir-c .home-hero-dark { display: block; }
   .rv, .rv.rv-in, .home-hero-visual.rv {
     opacity: 1; transform: none; transition: none;
   }
+  /* 계속 움직이는 모션은 끄는 게 요지다. 카드는 제자리에 둔다. */
+  .hcard,
+  .hcard-ghost,
+  .home-hero-visual::after { animation: none; }
 }
