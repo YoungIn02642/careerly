@@ -253,6 +253,14 @@ window.DB = (() => {
     return user;
   }
 
+  /* 멘토⇄멘티 전환 신청. 실패하면(대기 기간 미충족·이미 신청 중) 서버 메시지를
+     그대로 던진다 — 호출부(spec-form.js)가 상태 문구로 보여준다. */
+  async function requestRoleChange() {
+    const { user } = await api('POST', '/api/users/me/role-change');
+    _me = user;
+    return user;
+  }
+
   async function upsertSpec(spec) {
     await api('PUT', '/api/specs/me', spec);
     await refreshSpecs();
@@ -287,7 +295,7 @@ window.DB = (() => {
     hydrate, refreshSpecs, refreshUsers,
     currentUser, getAllSpecs, getSpec, getUsers, countByRole, stats,
     checkUsername, verifyStatus, verifyRequest,
-    createUser, login, logout, withdraw, completeOnboarding, confirmPayment, updateUser, upsertSpec, getProfile, updateProfile,
+    createUser, login, logout, withdraw, completeOnboarding, confirmPayment, updateUser, requestRoleChange, upsertSpec, getProfile, updateProfile,
     classifyCompany, suggestCompanies, suggestCerts, suggestMajors, suggestUniversities, classifyMajor, jobCatalog,
     analyzeCas, coachJd, companyNews,
     seedDemo, seedRandom, clearAll, deleteUser,

@@ -40,6 +40,12 @@ CREATE TABLE IF NOT EXISTS users (
   -- 최초 관리자는 ADMIN_USERNAMES 환경변수로 지정한다(server.js 부팅 시 반영).
   is_admin       BOOLEAN      NOT NULL DEFAULT FALSE,
   created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  -- 멘토⇄멘티 전환 신청. 가입 10일 후부터 신청할 수 있고, 신청 후 7일 뒤 실제로 바뀐다
+  -- (server.js requestRoleChange 주석). 세 값은 항상 같이 채워지고 같이 비워진다 —
+  -- 신청이 없으면 셋 다 NULL 이다.
+  pending_role             ENUM('mentor','mentee') NULL,
+  role_change_requested_at DATETIME NULL,
+  role_change_effective_at DATETIME NULL,
   -- 소셜 로그인은 (제공자, 제공자 계정) 으로 회원을 찾는다. 매 로그인마다 조회된다.
   UNIQUE KEY uk_provider (provider, provider_id),
   -- 기존 회원 1,508명은 ci 가 NULL 이다. MySQL 은 NULL 을 중복으로 보지 않아
@@ -258,3 +264,4 @@ CREATE TABLE IF NOT EXISTS jobs (
   KEY idx_jobs_middle (middle_code),
   KEY idx_jobs_wage (avg_wage)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+

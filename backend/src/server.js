@@ -25,6 +25,11 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const SESSION_COOKIE = 'careerly_session';
 const ONE_DAY = 24 * 60 * 60 * 1000;
+/* 멘토⇄멘티 전환 신청 — 가입 후 최소 대기 기간과, 신청 뒤 실제로 바뀌기까지의 유예.
+   너무 자주 오가면 멘토 검색·통계가 흔들려서 가입 직후 신청, 신청 직후 취소·재신청을
+   못 하게 막는다. */
+const ROLE_CHANGE_MIN_ACCOUNT_AGE_MS = 10 * ONE_DAY;
+const ROLE_CHANGE_EFFECTIVE_DELAY_MS = 7 * ONE_DAY;
 
 /* origin:true 는 모든 출처에 쿠키 실은 요청을 허용해 CSRF 에 노출된다.
    운영에서는 ALLOWED_ORIGINS 로 배포 도메인만 허용한다.
@@ -89,14 +94,24 @@ function publicUser(user) {
        실제 차단은 서버의 requireAdmin 이 한다 — 화면에서 숨기는 것만으로는
        주소를 직접 쳐서 들어오는 것을 못 막는다. */
     isAdmin: !!user.isAdmin,
+    /* 멘토⇄멘티 전환 신청 상태. pendingRole 이 있으면 화면이 "예정일" 을 보여주고,
+       없으면 신청 가능일(가입 10일 후)을 보여준다 — 계산은 여기서 한 번만 한다.
+       프론트가 createdAt 으로 다시 계산하게 하면 서버·화면의 판단이 어긋날 수 있다. */
+    pendingRole: user.pendingRole || null,
+    roleChangeEffectiveAt: user.roleChangeEffectiveAt || null,
+    roleChangeAvailableAt: new Date(new Date(user.createdAt).getTime() + ROLE_CHANGE_MIN_ACCOUNT_AGE_MS),
   };
 }
 
 /* 세션 조회는 DB 왕복이라 비동기다. 예전에는 파일을 통째로 읽어 동기였다.
    호출부가 await 를 빠뜨리면 Promise 가 그대로 user 로 들어가 "로그인된 것처럼"
-   보이므로(빈 객체는 truthy), 여기서만 쓰고 라우트는 requireAuth 를 통과시킨다. */
+   보이므로(빈 객체는 truthy), 여기서만 쓰고 라우트는 requireAuth 를 통과시킨다.
+
+   여기서 finalizeRoleChangeIfDue 를 같이 태운다 — 예정일이 지난 전환 신청은
+   스케줄러 없이 '다음에 이 사람이 아무 요청이나 보내는 순간' 반영된다. */
 async function getCurrentUser(req) {
-  return repo.sessions.userByToken(req.cookies[SESSION_COOKIE]);
+  const user = await repo.sessions.userByToken(req.cookies[SESSION_COOKIE]);
+  return user ? repo.users.finalizeRoleChangeIfDue(user) : null;
 }
 
 async function requireAuth(req, res, next) {
@@ -684,6 +699,33 @@ app.put('/api/users/me', requireAuth, ah(async (req, res) => {
   }
   const user = await repo.users.update(req.user.id, patch);
   res.json({ message: '저장되었습니다.', user: publicUser(user) });
+}));
+
+/* 멘티→멘토 전환 신청. **멘토→멘티는 없다** — 후배로 돌아가는 방향은 만들지
+   않기로 했다. 되돌리기 어려운 결정이라(스펙·통계가 새 역할 기준으로 다시
+   쌓인다) 세 가지를 확인한다.
+     ① 멘토는 애초에 신청 대상이 아니다 — 위 이유로 막는다
+     ② 가입 10일 미만이면 막는다 — 가입 직후 뒤집는 것을 막기 위해서다
+     ③ 이미 신청이 진행 중이면 또 받지 않는다 — 신청 두 번이 겹치면 예정일이 뭐가
+        맞는지 알 수 없어진다 */
+app.post('/api/users/me/role-change', requireAuth, ah(async (req, res) => {
+  const user = req.user;
+  if (user.role !== 'mentee') {
+    return res.status(400).json({ error: '멘티만 멘토로 전환을 신청할 수 있어요.' });
+  }
+  if (user.pendingRole) {
+    return res.status(409).json({ error: '이미 멘토 전환 신청이 진행 중이에요.' });
+  }
+  const availableAt = new Date(user.createdAt).getTime() + ROLE_CHANGE_MIN_ACCOUNT_AGE_MS;
+  if (Date.now() < availableAt) {
+    return res.status(403).json({
+      error: `가입 후 10일이 지나야 신청할 수 있어요. (${new Date(availableAt).toISOString().slice(0, 10)}부터)`,
+    });
+  }
+
+  const effectiveAt = new Date(Date.now() + ROLE_CHANGE_EFFECTIVE_DELAY_MS);
+  const updated = await repo.users.requestRoleChange(user.id, 'mentor', effectiveAt);
+  res.json({ message: '멘토 전환이 신청되었습니다.', user: publicUser(updated) });
 }));
 
 // 멘토/멘티 회원 수 — 홈·백오피스의 통계 카드용. 개인정보는 내보내지 않는다.
