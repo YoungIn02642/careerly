@@ -17,7 +17,6 @@ const NiceAuth = require('./nice-auth');
 const recommendationsRouter = require("./routes/recommendations");
 const casAnalyzeRouter = require("./routes/casAnalyze");
 const jdCoachRouter = require("./routes/jdCoach");
-const newsRouter = require("./routes/news");
 const { router: mentoringRouter } = require("./routes/mentoring");
 const { router: paymentsRouter } = require("./routes/payments");
 
@@ -60,7 +59,6 @@ app.use(express.static(FRONTEND_DIR));
 app.use("/api/recommendations", recommendationsRouter);
 app.use("/api/cas", casAnalyzeRouter);
 app.use("/api/jd", jdCoachRouter);
-app.use("/api/news", newsRouter);
 /* 멘토링·결제는 로그인한 사람의 행동이다. 라우터 안에서 req.user 를 보므로
    세션을 먼저 붙여 준다(전역 requireAuth 는 아니다 — 가격표는 비로그인도 본다). */
 app.use(["/api/mentoring", "/api/payments"], async (req, res, next) => {
