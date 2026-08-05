@@ -1,0 +1,124 @@
+/* ════════════════════════════════════════════════════════════
+   커리어 인사이트 — 정보를 주고받는 커뮤니티 게시판
+   page-head·wrap·section-title·btn-brand·btn-save·btn-cancel·error-box·
+   empty-block·pager 는 main.css/mentoring.css 걸 그대로 쓴다.
+   ════════════════════════════════════════════════════════════ */
+
+.insight-loading, .insight-error {
+  padding: 60px 20px; text-align: center; color: var(--text-s); font-size: 14px;
+}
+.insight-error { color: #dc2626; }
+
+/* ── 목록 상단 — 카테고리 탭 + 글쓰기 ─────────────────────── */
+.insight-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 18px;
+}
+.insight-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.insight-tab {
+  padding: 8px 16px; border: 1px solid var(--border); border-radius: 999px;
+  background: #fff; color: var(--text-s); font: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer;
+}
+.insight-tab:hover { border-color: var(--brand); color: var(--brand); }
+.insight-tab.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+.insight-login-hint { font-size: 12.5px; color: var(--text-s); }
+
+/* ── 목록 ─────────────────────────────────────────────────── */
+.insight-list { display: flex; flex-direction: column; border-top: 1px solid var(--border); }
+.insight-row {
+  display: flex; align-items: center; gap: 16px; width: 100%;
+  padding: 16px 4px; border: 0; border-bottom: 1px solid var(--border);
+  background: none; text-align: left; cursor: pointer; font: inherit;
+}
+.insight-row:hover { background: var(--bg); }
+.insight-row-cat {
+  flex: none; padding: 4px 10px; border-radius: 999px; background: var(--brand-soft);
+  color: var(--brand-dark); font-size: 11.5px; font-weight: 700;
+}
+.insight-row-body { flex: 1; min-width: 0; }
+.insight-row-title {
+  display: block; font-size: 14.5px; font-weight: 700; color: var(--text-p);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.insight-row-cc { margin-left: 6px; color: var(--brand); font-size: 12px; font-weight: 700; }
+.insight-row-preview {
+  display: block; margin-top: 3px; font-size: 12.5px; color: var(--text-s);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.insight-row-meta {
+  flex: none; display: flex; align-items: center; gap: 12px;
+  font-size: 11.5px; color: var(--text-m);
+}
+.insight-row-meta i { margin-right: 2px; }
+@media (max-width: 640px) {
+  .insight-row-meta { display: none; }
+}
+
+/* ── 상세 ─────────────────────────────────────────────────── */
+.insight-back {
+  display: inline-flex; align-items: center; gap: 6px; margin-bottom: 16px;
+  padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px;
+  background: #fff; color: var(--text-s); font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.insight-back:hover { color: var(--brand); border-color: var(--brand); }
+.insight-post {
+  padding-bottom: 22px; border-bottom: 1px solid var(--border);
+}
+.insight-post-cat {
+  display: inline-block; margin-bottom: 8px; padding: 4px 10px; border-radius: 999px;
+  background: var(--brand-soft); color: var(--brand-dark); font-size: 11.5px; font-weight: 700;
+}
+.insight-post-title { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; line-height: 1.4; }
+.insight-post-meta {
+  display: flex; gap: 14px; margin-top: 10px; font-size: 12.5px; color: var(--text-s);
+}
+.insight-post-body {
+  margin-top: 22px; font-size: 14.5px; line-height: 1.85; color: var(--text-p);
+  white-space: pre-wrap; word-break: break-word;
+}
+.insight-post-actions { margin-top: 18px; }
+
+/* ── 댓글 ─────────────────────────────────────────────────── */
+.insight-comments { margin-top: 26px; }
+.insight-comment-list { display: flex; flex-direction: column; gap: 14px; margin-top: 12px; }
+.insight-no-comment { padding: 20px 0; text-align: center; color: var(--text-s); font-size: 13px; }
+.insight-comment {
+  padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: #fff;
+}
+.insight-comment-head {
+  display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-s);
+}
+.insight-comment-head b { color: var(--text-p); font-size: 13px; }
+.insight-comment-del {
+  margin-left: auto; border: 0; background: none; color: var(--text-m);
+  cursor: pointer; font-size: 14px; padding: 2px;
+}
+.insight-comment-del:hover { color: #dc2626; }
+.insight-comment-body { margin-top: 6px; font-size: 13.5px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+.insight-comment-form { display: flex; gap: 10px; margin-top: 16px; align-items: flex-start; }
+.insight-comment-form textarea {
+  flex: 1; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px;
+  font-family: inherit; font-size: 13.5px; resize: vertical; min-height: 44px;
+}
+.insight-comment-form textarea:focus { outline: none; border-color: var(--brand); }
+.insight-comment-form .btn-brand { flex: none; }
+
+/* ── 글쓰기 ───────────────────────────────────────────────── */
+.insight-write { display: flex; flex-direction: column; gap: 12px; max-width: 720px; }
+.insight-write select {
+  align-self: flex-start; padding: 9px 32px 9px 12px; border: 1px solid var(--border);
+  border-radius: 9px; font: inherit; font-size: 13.5px; background: #fff;
+}
+.insight-write input[type="text"] {
+  padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px;
+  font-family: inherit; font-size: 15px; font-weight: 600;
+}
+.insight-write textarea {
+  padding: 14px; border: 1px solid var(--border); border-radius: 10px;
+  font-family: inherit; font-size: 14px; line-height: 1.7; resize: vertical;
+}
+.insight-write input[type="text"]:focus, .insight-write textarea:focus, .insight-write select:focus {
+  outline: none; border-color: var(--brand);
+}
+.insight-write-actions { display: flex; gap: 10px; }

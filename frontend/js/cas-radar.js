@@ -5,63 +5,24 @@
 //  위에 겹쳐 보여준다. 요구 수준은 직무마다 다르므로(합격자 분포가 다름)
 //  직무를 바꾸면 바깥 다각형의 모양이 달라진다.
 //
-//  6개 축
-//    정량 : 학점 · 어학 · 자격증        (js/cas.js 의 환산·채점 재사용)
-//    정성 : 인턴십 · 공모전 · 대외활동  (합격자 보유율 vs 내 보유 여부)
+//  6개 축: 학점 · 봉사활동 · 어학 · 자격증 · 대내활동 · 대외활동.
+//  활동 분류와 복합 어학 계산은 cas-profile.js 를 단일 출처로 쓴다.
 //
 //  각 축은 0~100. me(내 수준)와 req(합격자/요구 수준)를 같은 척도로 둔다.
 // ════════════════════════════════════════════════════════════
 window.CASRadar = (() => {
 
-  const AXES = [
-    { key: 'gpa',    label: '학점',    kind: 'quant' },
-    { key: 'lang',   label: '어학',    kind: 'quant' },
-    { key: 'cert',   label: '자격증',  kind: 'quant' },
-    { key: 'internship',      label: '인턴십',   kind: 'qual' },
-    { key: 'competition',     label: '공모전',   kind: 'qual' },
-    { key: 'extracurricular', label: '대외활동', kind: 'qual' },
-  ];
+  const AXES = CASProfile.GROUPS;
 
   const clamp = (n, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, n));
 
-  /* 벤치마크(Aggregator 결과)의 어학 평균을 langIndex 가 먹는 형태로 */
-  function benchLangScores(agg) {
-    const s = agg?.scores; if (!s) return null;
-    return {
-      toeic: s.toeic?.avg, toefl: s.toefl?.avg,
-      opic: s.opic?.avg, toeicSpeaking: s.toeicSpeaking?.avg,
-    };
-  }
-  const qualPct = (agg, id) => agg?.qual?.find(q => q.id === id)?.pct ?? 0;
-
-  /* 내 스펙 + 벤치마크 → 축별 { me, req } (0~100) */
-  function buildValues(spec, agg, catalogIds) {
-    const myGpa = (spec.gpa != null && spec.gpaMax) ? (spec.gpa / spec.gpaMax) * 4.5 : null;
-    const benchGpa = agg?.gpa?.avg ?? null;
-
-    const myLang = CAS.langIndex(spec.scores);
-    const benchLang = CAS.langIndex(benchLangScores(agg));
-
+  /* 모든 축을 '선배 평균=80'인 동일 상대척도로 변환한다. 활동을 한 번 했다는 이유로
+     무조건 100점이 되던 기존 보유 여부 방식 대신 횟수·기간·성과를 함께 반영한다. */
+  function buildValues(spec, agg) {
     const values = {};
     for (const ax of AXES) {
-      let me = null, req = null;
-      switch (ax.key) {
-        case 'gpa':
-          me = myGpa != null ? clamp(myGpa / 4.5 * 100) : null;
-          req = benchGpa != null ? clamp(benchGpa / 4.5 * 100) : null;
-          break;
-        case 'lang':
-          me = myLang; req = benchLang;
-          break;
-        case 'cert':
-          me = clamp(CAS.certScore(spec.certs, agg, catalogIds) * 100);
-          req = 100;   // 이 직무 핵심 자격증을 모두 갖춘 상태를 100 으로 본다
-          break;
-        default:        // qual: internship / competition / extracurricular
-          me = CAS.normalizeActivities(spec).some(a => a.type === ax.key) ? 100 : 0;
-          req = qualPct(agg, ax.key);
-      }
-      values[ax.key] = { me, req };
+      const c = CASProfile.comparison(spec, agg, ax.key);
+      values[ax.key] = { me: clamp((c.ratio || 0) * 100), req: c.peer > 0 ? 80 : 0 };
     }
     return values;
   }
@@ -144,7 +105,7 @@ window.CASRadar = (() => {
     if (!card) return;
 
     const user = DB.currentUser();
-    const spec = user ? DB.getSpec(user.username) : null;
+    const spec = user ? (window.CASDashboardContext?.spec || DB.getSpec(user.username)) : null;
 
     const head = `<div class="radar-head"><i class="ti ti-radar-2"></i>직무역량 레이더</div>`;
 
@@ -161,7 +122,8 @@ window.CASRadar = (() => {
 
     // 저장된 스펙의 직무(dept/field/job)로 같은 직무 합격자 벤치마크를 낸다.
     // 좁게 시작해 데이터가 없으면 넓힌다.
-    let agg = Aggregator.compute({ dept: spec.dept, field: spec.field, job: spec.job });
+    let agg = window.CASDashboardContext?.agg;
+    if (!agg) agg = Aggregator.compute({ dept: spec.dept, field: spec.field, job: spec.job });
     if (agg.empty) agg = Aggregator.compute({ dept: spec.dept, field: spec.field });
     if (agg.empty) agg = Aggregator.compute({ dept: spec.dept });
 
@@ -171,8 +133,7 @@ window.CASRadar = (() => {
       return;
     }
 
-    const catalogIds = (Aggregator.CERT_CATALOG[spec.dept] || []).map(c => c.id);
-    const values = buildValues(spec, agg, catalogIds);
+    const values = buildValues(spec, agg);
 
     card.innerHTML = `
       ${head}

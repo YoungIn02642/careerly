@@ -18,7 +18,7 @@
 window.CASCompare = (() => {
 
   const PEER_MARK = 80;              // 평균 = 만점의 80% (CAS.relativeScore 규칙)
-  const QUAL_IDS = ['internship', 'competition', 'extracurricular', 'project'];
+  const QUAL_GROUPS = ['volunteer', 'internal', 'external'];
 
   const $ = id => document.getElementById(id);
   const pct = r => Math.round(Math.max(0, Math.min(1, r ?? 0)) * 100);
@@ -41,6 +41,11 @@ window.CASCompare = (() => {
   function peerAvgCerts(specs) {
     if (!specs?.length) return null;
     return specs.reduce((sum, s) => sum + (s.certs?.length || 0), 0) / specs.length;
+  }
+
+  function peerAvgGroup(specs, key) {
+    if (!specs?.length) return null;
+    return specs.reduce((sum, s) => sum + CASProfile.activityCount(s, key), 0) / specs.length;
   }
 
   /* 격차 뱃지 — 평균 대비 얼마나 앞/뒤인지 */
@@ -80,7 +85,7 @@ window.CASCompare = (() => {
     const rows = [];
 
     // 학점 — 4.5 만점으로 환산해 비교 (스펙마다 만점이 다르다)
-    const myGpa = (spec.gpa != null && spec.gpaMax) ? (spec.gpa / spec.gpaMax) * 4.5 : null;
+    const myGpa = CASProfile.gpa45(spec);
     const benchGpa = agg.gpa?.avg ?? null;
     if (myGpa != null && benchGpa) {
       rows.push(row('학점 (4.5 환산)',
@@ -91,21 +96,20 @@ window.CASCompare = (() => {
     }
 
     // 어학 — 내가 가진 시험을 우선 보여준다. 비교는 환산 지수로 (시험이 서로 달라도 비교되도록)
-    const myLang = CAS.langIndex(spec.scores);
-    const benchLang = CAS.langIndex({
-      toeic: agg.scores?.toeic?.avg, toefl: agg.scores?.toefl?.avg,
-      opic: agg.scores?.opic?.avg, toeicSpeaking: agg.scores?.toeicSpeaking?.avg,
-    });
+    const myLang = CASProfile.languageValue(spec);
+    const benchLang = CASProfile.peerAverage(agg.specs, 'language');
     const shown = spec.scores?.toeic ? `TOEIC <b>${spec.scores.toeic}</b>`
       : spec.scores?.opic ? `OPIc <b>${spec.scores.opic}</b>`
       : spec.scores?.toeicSpeaking ? `TOEIC Speaking <b>${spec.scores.toeicSpeaking}</b>`
-      : spec.scores?.toefl ? `TOEFL <b>${spec.scores.toefl}</b>` : null;
+      : spec.scores?.toefl ? `TOEFL <b>${spec.scores.toefl}</b>`
+      : spec.scores?.topik ? `TOPIK <b>${spec.scores.topik}</b>` : null;
     const benchToeic = agg.scores?.toeic?.avg;
     /* 격차는 같은 시험끼리만 보여준다 — OPIc IH 와 TOEIC 843 의 차이는 숫자로 못 쓴다 */
     const toeicGap = (spec.scores?.toeic && benchToeic) ? gapBadge(spec.scores.toeic - benchToeic, '', 0) : '';
-    rows.push(row('어학',
+    const exchangeCount = CASProfile.activityCount(spec, 'language');
+    rows.push(row('어학·글로벌 경험',
       shown ? `${shown}${benchToeic ? ` · 선배 평균 TOEIC ${benchToeic}` : ''} ${toeicGap}`
-            : `<span class="cmp-none">미입력</span>`,
+            : exchangeCount ? `<b>교환학생·어학연수 ${exchangeCount}회</b>` : `<span class="cmp-none">미입력</span>`,
       myLang != null && benchLang ? CAS.relativeScore(myLang, benchLang) : 0, 'quant'));
 
     // 자격증 — 개수로 비교하고, 어떤 걸 따야 하는지는 아래 '부족한 항목' 이 다룬다
@@ -121,11 +125,11 @@ window.CASCompare = (() => {
   /* ── 경험 스펙 ─────────────────────────────────────────────
      보유 여부가 아니라 횟수로 비교한다. 인턴 1회와 3회는 전혀 다른 스펙이다. */
   function qualRows(spec, agg) {
-    return QUAL_IDS.map(id => {
-      const t = CAS.ACTIVITY_TYPES.find(x => x.id === id);
-      const mine = countByType(spec, id);
-      const bench = peerAvgCount(agg.specs, id);
-      return row(t?.label || id,
+    return QUAL_GROUPS.map(key => {
+      const group = CASProfile.GROUPS.find(g => g.key === key);
+      const mine = CASProfile.activityCount(spec, key);
+      const bench = peerAvgGroup(agg.specs, key);
+      return row(group?.label || key,
         `<b>${mine}</b>회${bench != null ? ` · 선배 평균 ${round1(bench)}회` : ''} ${gapBadge(bench != null ? mine - bench : null, '회')}`,
         bench ? CAS.relativeScore(mine, bench) : (mine ? 1 : 0), 'qual');
     }).join('');

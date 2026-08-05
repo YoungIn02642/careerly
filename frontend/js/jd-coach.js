@@ -71,10 +71,7 @@
     const runBtn = $('#jd-run');
     if (runBtn) runBtn.addEventListener('click', run);
 
-    const newsBtn = $('#jd-news-run');
-    if (newsBtn) newsBtn.addEventListener('click', runNews);
     const companyEl = $('#jd-company');
-    if (companyEl) companyEl.addEventListener('keydown', e => { if (e.key === 'Enter') runNews(); });
 
     const sampleBtn = $('#jd-sample');
     if (sampleBtn) sampleBtn.addEventListener('click', () => {
@@ -83,14 +80,6 @@
       $('#jd-text').focus();
     });
 
-    // 회사명 자동완성 — 스펙 입력 화면과 같은 캐시를 쓴다
-    if (companyEl) {
-      let t = null;
-      companyEl.addEventListener('input', () => {
-        clearTimeout(t);
-        t = setTimeout(() => fillCompanyOptions(companyEl.value), 400);
-      });
-    }
   }
 
   async function fillCompanyOptions(q) {
@@ -108,12 +97,15 @@
   function onEnter() {
     /* 지난번 분석 결과를 지우고 들어온다. 안 지우면 다른 회사를 보러 다시 들어와도
        이전 회사 기사·문항 카드가 그대로 남아, 새 회사의 결과인 줄 알고 읽게 된다. */
-    ['#jd-result', '#jd-questions-result', '#jd-news-result', '#jd-news-card']
+    ['#jd-result', '#jd-questions-result']
       .forEach(sel => { const el = $(sel); if (el) el.hidden = true; });
-    const newsStatus = $('#jd-news-status');
-    if (newsStatus) newsStatus.textContent = '';
     const status = $('#jd-status');
     if (status) status.textContent = '';
+    const pickedCompany = localStorage.getItem('careerly_selected_company');
+    if (pickedCompany && $('#jd-company')) {
+      $('#jd-company').value = pickedCompany;
+      localStorage.removeItem('careerly_selected_company');
+    }
 
     /* 예전에는 여기서 "내 활동 N건을 불러왔어요" 안내를 띄웠다. 아무것도 안 한 상태에서
        먼저 말을 거는 배너라 페이지를 열자마자 눈에 걸렸고, 정작 필요한 시점(역량 카드에
@@ -144,7 +136,6 @@
     const btn      = $('#jd-run');
     const statusEl = $('#jd-status');
     const resultEl = $('#jd-result');
-    const useAi    = $('#jd-use-ai')?.checked !== false;
     const text     = analysisText();
 
     if (text.length < 30) {
@@ -153,21 +144,15 @@
     }
 
     btn.disabled = true;
-    /* 규칙만 쓰면 즉시 끝나지만 AI 보강이 붙으면 로컬 모델에서 1분 이상 걸린다.
-       기다리는 이유를 적어두지 않으면 사용자가 멈춘 줄 안다. */
-    statusEl.textContent = useAi
-      ? '공고를 읽고 있어요… (AI 보강이 필요하면 1분 이상 걸릴 수 있어요)'
-      : '공고를 읽고 있어요…';
+    /* AI 보강은 항상 켠다(끄는 토글을 없앴다). 규칙만 쓰면 즉시 끝나지만
+       AI 보강이 붙으면 로컬 모델에서 1분 이상 걸릴 수 있어 그 이유를 적어둔다 —
+       안 그러면 사용자가 멈춘 줄 안다. */
+    statusEl.textContent = '공고를 읽고 있어요… (AI 보강이 필요하면 1분 이상 걸릴 수 있어요)';
     resultEl.hidden = true;
     $('#jd-questions-result').hidden = true;
 
-    /* 회사 소식은 역량 분석과 **독립적으로** 흘려보낸다. 뉴스가 늦거나 실패해도
-       역량 카드는 그대로 나와야 하고, 반대도 마찬가지다(예전 구조의 원칙 유지). */
-    const company = ($('#jd-company')?.value || '').trim();
-    if (company.length >= 2) runNews();
-
     try {
-      _last = await DB.coachJd(text, { useAi });
+      _last = await DB.coachJd(text, { useAi: true });
       statusEl.textContent = '';
       renderQuestions(parseQuestions(), _last);
       render(_last);
@@ -272,8 +257,8 @@
       ? `<div class="jd-block jd-block--mine">
            <div class="jd-block-h"><i class="ti ti-news"></i> 이 문항의 근거</div>
            <p class="jd-frame">${company
-             ? `아래 <b>“이 회사, 지금”</b>의 주간 기사 중 <b>한 건만</b> 고르세요. 공고 내용으로는 이 문항을 채울 수 없습니다.`
-             : `회사명을 입력하고 다시 분석하면 최근 5주 기사를 모아드려요. 지원동기는 공고가 아니라 회사의 최근 활동에서 나옵니다.`}</p>
+             ? `<b>회사 검색과 자소서</b> 페이지에서 정한 관점 하나를 사용하세요. 회사명은 이 문항의 작성 방향을 맞추는 보조 정보입니다.`
+             : `<b>회사 검색과 자소서</b> 페이지에서 회사를 먼저 선택하면 지원동기 작성 순서를 준비할 수 있어요.`}</p>
          </div>`
       : comps.length
         ? `<div class="jd-block jd-block--mine">
@@ -487,140 +472,6 @@
     });
   }
 
-  // ── 이 회사, 지금 (지원동기 소재) ──────────────────────────
-  /* 기사를 요약하지 않는다. 제목·링크를 그대로 보여주고 원문을 읽게 한다.
-     요약을 AI 에 시키면 없는 사실이 섞여 들어가고, 자소서에 지어낸 사실을 쓰면
-     면접에서 그대로 무너진다(서버 news.js 머리주석과 같은 이유). */
-  async function runNews() {
-    const name     = $('#jd-company').value.trim();
-    const btn      = $('#jd-news-run');
-    const statusEl = $('#jd-news-status');
-    const resultEl = $('#jd-news-result');
-
-    if (name.length < 2) {
-      statusEl.textContent = '회사명을 2글자 이상 입력해 주세요.';
-      return;
-    }
-
-    btn.disabled = true;
-    statusEl.textContent = '최근 5주 소식을 모으는 중…';
-    resultEl.hidden = true;
-    $('#jd-news-card').hidden = false;
-
-    try {
-      const r = await DB.companyNews(name);
-      statusEl.textContent = '';
-      renderNews(r);
-    } catch (e) {
-      statusEl.textContent = '';
-      resultEl.hidden = false;
-      resultEl.innerHTML = `<div class="jd-err">${esc(e.message)}</div>`;
-    } finally {
-      btn.disabled = false;
-    }
-  }
-
-  /* 주간 대표 기사 — 최근 5주를 한 주씩. 화제성(같은 사건을 다룬 언론사 수)과
-     직무트렌드 관련 단어를 같이 보여줘서, 학생이 왜 이 기사가 뽑혔는지 알 수 있게 한다.
-     서버가 뽑아준 것만 그리고, 여기서 다시 판단하지 않는다. */
-  function weeklyHtml(r) {
-    if (!r.weekly?.length) {
-      return r.weeklyNote
-        ? `<div class="jd-block"><div class="jd-kw-note">${esc(r.weeklyNote)}</div></div>`
-        : '';
-    }
-    const rows = r.weekly.map(w => `
-      <li class="jd-week">
-        <div class="jd-week-tag">${esc(w.weekLabel)}</div>
-        <div class="jd-article-body">
-          <a href="${esc(w.url)}" target="_blank" rel="noopener noreferrer">${esc(w.title)}</a>
-          ${w.summary ? `<div class="jd-article-sum">${esc(w.summary.slice(0, 140))}</div>` : ''}
-          <div class="jd-week-meta">
-            ${esc(w.date || '')}
-            ${w.outlets > 1 ? `<span class="jd-week-hot">언론사 ${w.outlets}곳이 함께 다룸</span>` : ''}
-            ${w.alsoInWeek > 0 ? `<span>· 같은 주 다른 기사 ${w.alsoInWeek}건</span>` : ''}
-            ${w.looseMatch ? `<span class="jd-week-loose" title="제목에 회사명이 없어요">⚠ 스쳐 지나간 언급일 수 있어요</span>` : ''}
-          </div>
-          ${w.trendHit?.length
-            ? `<div class="jd-week-trend">${w.trendHit.map(t => `<span class="jd-kw">${esc(t)}</span>`).join('')}</div>`
-            : ''}
-        </div>
-      </li>`).join('');
-
-    return `<div class="jd-block jd-block--mine">
-        <div class="jd-block-h"><i class="ti ti-calendar-stats"></i> 주간 흐름 · 최근 ${r.weekly.length}주</div>
-        <ul class="jd-weeks">${rows}</ul>
-        <div class="jd-kw-note">${esc(r.weeklyNote)}</div>
-      </div>`;
-  }
-
-  function renderNews(r) {
-    const resultEl = $('#jd-news-result');
-    resultEl.hidden = false;
-
-    if (!r.items.length) {
-      resultEl.innerHTML = `<div class="jd-news-empty">
-          <b>${esc(r.company)}</b> 관련 기사를 찾지 못했어요.
-          회사 정식 명칭으로 다시 검색해 보세요(예: "아주" → "아주산업").
-        </div>`;
-      return;
-    }
-
-    /* 키워드마다 몇 번째 기사에서 나왔는지 함께 보여준다. 근거를 못 짚는 키워드는
-       학생이 검증할 수 없고, 검증 못 한 표현을 자소서에 쓰면 위험하다. */
-    const chips = r.keywords.map(k =>
-      `<span class="jd-kw" title="기사 ${k.articles.map(i => i + 1).join(', ')}번에 등장">
-         ${esc(k.term)}<b>${k.count}건</b>
-       </span>`).join('');
-
-    const articles = r.items.map((it, i) => `
-      <li class="jd-article">
-        <span class="jd-article-n">${i + 1}</span>
-        <div class="jd-article-body">
-          <a href="${esc(it.url)}" target="_blank" rel="noopener noreferrer">${esc(it.title)}</a>
-          ${it.summary ? `<div class="jd-article-sum">${esc(it.summary.slice(0, 140))}</div>` : ''}
-          ${it.date ? `<div class="jd-article-date">${esc(it.date)}</div>` : ''}
-        </div>
-      </li>`).join('');
-
-    const g = r.guide;
-    resultEl.innerHTML = `
-      ${r.keywords.length ? `<div class="jd-block">
-          <div class="jd-block-h"><i class="ti ti-tags"></i> 자소서에 쓸 키워드</div>
-          <div class="jd-kws">${chips}</div>
-          <div class="jd-kw-note">${esc(r.keywordNote)}</div>
-        </div>` : ''}
-
-      ${weeklyHtml(r)}
-
-      <div class="jd-block">
-        <div class="jd-block-h"><i class="ti ti-list-search"></i> 검색된 기사 ${r.items.length}건</div>
-        <ul class="jd-articles">${articles}</ul>
-      </div>
-
-      <div class="jd-block jd-block--frame">
-        <div class="jd-block-h"><i class="ti ti-list-numbers"></i> 지원동기, 이 순서로 쓰세요</div>
-        <p class="jd-frame">${esc(g.frame)}</p>
-      </div>
-
-      <div class="jd-block">
-        <div class="jd-block-h"><i class="ti ti-bulb"></i> 쓸 때 주의</div>
-        <ul class="jd-list">${g.tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul>
-      </div>
-
-      <div class="jd-block jd-block--avoid">
-        <div class="jd-block-h"><i class="ti ti-circle-x"></i> 이렇게 쓰면 감점</div>
-        <ul class="jd-list">${g.avoid.map(t => `<li>${esc(t)}</li>`).join('')}</ul>
-      </div>
-
-      <div class="jd-followup">
-        <i class="ti ti-messages"></i> 이렇게 쓰면 면접에서 이걸 물어봅니다 —
-        <b>“${esc(g.followup)}”</b>
-      </div>
-
-      <div class="jd-disclaimer"><i class="ti ti-alert-circle"></i> ${esc(r.disclaimer)}</div>`;
-  }
-
   /* ── 요약 칩 → 그 역량만 보기 ────────────────────────────────
      예전에는 해당 카드로 스크롤만 했다. 역량이 7개면 카드 하나가 화면보다 길어서,
      스크롤로 옮겨가도 위아래에 다른 역량이 걸쳐 보여 "이 역량만" 읽기가 어려웠다.
@@ -659,7 +510,7 @@
   }
 
   const api = {
-    init, onEnter, focusItem, runNews,
+    init, onEnter, focusItem,
     // 화면 없이 검증하는 규칙들 (test/jd-questions.test.js)
     classifyQuestion, competenciesFor, parseQuestions, questionDraftKey, QUESTION_TYPES,
   };

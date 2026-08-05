@@ -142,6 +142,25 @@ window.CareerPage = (() => {
       </div>
     `;
     animateBars();
+    syncTopbarCompact(main);
+    bindTopbarScroll(main);
+  }
+
+  /* 스크롤해서 breadcrumb 가 상단에 붙어 있을 때는 작게 접는다 — 맨 위에 있을 때와
+     똑같은 크기면 본문을 계속 가리는 느낌이 든다. render() 가 innerHTML 로 매번
+     새로 그리므로, 다시 그릴 때마다 지금 스크롤 위치를 그대로 반영해 맞춰 둔다. */
+  function syncTopbarCompact(main) {
+    const topbar = main.querySelector('.topbar');
+    if (topbar) topbar.classList.toggle('is-compact', main.scrollTop > 4);
+  }
+
+  /* 리스너는 한 번만 붙인다 — render() 는 #career-main 의 자식(innerHTML)만
+     바꾸고 main 자체는 그대로 두므로, 매번 다시 붙이면 스크롤할 때마다
+     같은 처리가 여러 번 겹쳐 불린다. */
+  function bindTopbarScroll(main) {
+    if (main.dataset.topbarScrollBound) return;
+    main.dataset.topbarScrollBound = '1';
+    main.addEventListener('scroll', () => syncTopbarCompact(main));
   }
 
   function phaseBar() {
@@ -348,13 +367,15 @@ window.CareerPage = (() => {
         </div>
       </div>`;
 
-    if (agg.empty) return head + emptySpecBlock(middle);
+    if (agg.empty) return `<div class="roadmap-section">${head}${emptySpecBlock(middle)}</div>`;
 
     return `
-      ${head}
-      ${tabBar()}
-      <div id="spec-quant" class="spec-tab-content ${specTab === 'quant' ? 'active' : ''}">${renderQuant(agg)}</div>
-      <div id="spec-qual"  class="spec-tab-content ${specTab === 'qual' ? 'active' : ''}">${renderQual(agg)}</div>
+      <div class="roadmap-section">
+        ${head}
+        ${tabBar()}
+        <div id="spec-quant" class="spec-tab-content ${specTab === 'quant' ? 'active' : ''}">${renderQuant(agg)}</div>
+        <div id="spec-qual"  class="spec-tab-content ${specTab === 'qual' ? 'active' : ''}">${renderQual(agg)}</div>
+      </div>
     `;
   }
 
