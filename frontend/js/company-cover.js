@@ -1,6 +1,11 @@
 // 회사 탐색과 지원동기 준비를 자소서 코치 입력부에서 분리한 화면.
 window.CompanyCover = (() => {
-  const COMPANIES = [
+  /* 잘 알려진 7곳은 업종·관점 문구를 미리 써 둔다 — 검색 없이 들어와도 바로 감이
+     잡히게 하기 위해서다. 그 밖의 회사는 실제 기업 카탈로그(6,600여 개 — 스펙
+     입력의 회사명 검색과 같은 API, /api/company/suggest)에서 찾는다. 추천에
+     없다고 자소서를 못 쓰게 막을 이유가 없어서, 검색되는 회사는 뭐든 눌러서
+     바로 이어서 쓸 수 있다(select() 의 폴백). */
+  const FEATURED = [
     { name:'삼성전자', industry:'전자·반도체', color:'#2563eb', angle:'기술 변화와 대규모 제품·서비스가 지원 직무에 미치는 영향' },
     { name:'카카오', industry:'IT·플랫폼', color:'#f5c400', angle:'사용자 경험과 플랫폼 생태계 안에서 지원 직무가 만드는 변화' },
     { name:'네이버', industry:'IT·검색·콘텐츠', color:'#03c75a', angle:'기술과 콘텐츠를 연결해 사용자의 문제를 해결하는 방식' },
@@ -9,28 +14,64 @@ window.CompanyCover = (() => {
     { name:'SK하이닉스', industry:'반도체', color:'#ef4444', angle:'반도체 경쟁력과 직무 전문성을 연결할 수 있는 실제 경험' },
     { name:'LG에너지솔루션', industry:'배터리', color:'#a50034', angle:'에너지 전환과 품질·기술 경쟁력에 기여할 수 있는 역량' },
   ];
-  let selected = COMPANIES[0];
+  let selected = FEATURED[0];
   let bound = false;
   const esc = s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-  function paintList(query = '') {
+  /* 검색어가 없으면 추천 7곳을 보여준다. 검색어가 있으면 추천 중 걸리는 것을
+     먼저 보여주고(관점 문구가 미리 있다), 실제 카탈로그 검색 결과 중 추천에
+     없는 회사를 이어 붙인다 — 같은 회사가 두 번 뜨지 않게 한다. */
+  async function paintList(query = '') {
     const box = document.getElementById('company-cover-list');
     if (!box) return;
-    const q = query.trim().toLowerCase();
-    const list = COMPANIES.filter(c => !q || `${c.name} ${c.industry}`.toLowerCase().includes(q));
+    const q = query.trim();
+
+    if (!q) { renderList(box, FEATURED); return; }
+
+    box.dataset.q = q;
+    const items = await DB.suggestCompanies(q, 8).catch(() => []);
+    if (box.dataset.q !== q) return;   // 늦게 온 응답으로 방금 친 검색어를 덮지 않는다
+
+    const featuredHit = FEATURED.filter(c => c.name.includes(q));
+    const rest = items
+      .filter(it => !featuredHit.some(c => c.name === it.name))
+      .map(it => ({ name: it.name, industry: null, color: '#6d3aff' }));
+    renderList(box, [...featuredHit, ...rest]);
+  }
+
+  function renderList(box, list) {
     box.innerHTML = list.length ? list.map(c => `
       <button class="company-sub ${c.name === selected.name ? 'is-on' : ''}" data-company="${esc(c.name)}">
         <span class="company-avatar" style="--company-color:${c.color}">${esc(c.name.charAt(0))}</span>
-        <span class="company-sub-text"><b>${esc(c.name)}</b><small>${esc(c.industry)}</small></span>
+        <span class="company-sub-text"><b>${esc(c.name)}</b>${c.industry ? `<small>${esc(c.industry)}</small>` : ''}</span>
         <span class="company-live-dot" aria-hidden="true"></span>
       </button>`).join('') : `<div class="company-no-result">검색 결과가 없습니다.</div>`;
     box.querySelectorAll('[data-company]').forEach(btn => btn.addEventListener('click', () => select(btn.dataset.company)));
   }
 
-  function select(name) {
-    selected = COMPANIES.find(c => c.name === name) || { name, industry:'검색한 회사', color:'#6d3aff', angle:'회사의 최근 움직임과 지원 직무, 내 경험의 접점' };
+  /* 추천 7곳이면 미리 써 둔 업종·관점을 그대로 쓴다. 그 밖의 회사는 일단
+     일반적인 문구로 바로 그려 두고(기다리게 하지 않는다), 기업분류 API 로
+     규모(대기업·중견기업…)를 확인되면 업종 자리만 조용히 바꿔 끼운다. */
+  async function select(name) {
+    const featured = FEATURED.find(c => c.name === name);
+    if (featured) {
+      selected = featured;
+      paintList(document.getElementById('company-cover-search')?.value || '');
+      paintResult();
+      return;
+    }
+
+    selected = { name, industry: '검색한 회사', color: '#6d3aff',
+      angle: '회사의 최근 움직임과 지원 직무, 내 경험의 접점' };
     paintList(document.getElementById('company-cover-search')?.value || '');
     paintResult();
+
+    const r = await DB.classifyCompany(name).catch(() => null);
+    /* 그새 다른 회사를 골랐으면(비동기로 기다리는 동안) 지금 값을 덮지 않는다. */
+    if (r?.matched && selected.name === name) {
+      selected.industry = r.label;
+      paintResult();
+    }
   }
 
   function paintResult() {
@@ -63,7 +104,11 @@ window.CompanyCover = (() => {
   function onEnter() {
     const input = document.getElementById('company-cover-search');
     if (!bound && input) {
-      input.addEventListener('input', e => paintList(e.target.value));
+      let timer = null;
+      input.addEventListener('input', e => {
+        clearTimeout(timer);
+        timer = setTimeout(() => paintList(e.target.value), 250);
+      });
       input.addEventListener('keydown', e => {
         if (e.key === 'Enter' && e.target.value.trim()) select(e.target.value.trim());
       });
