@@ -265,3 +265,35 @@ CREATE TABLE IF NOT EXISTS jobs (
   KEY idx_jobs_wage (avg_wage)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ════════════════════════════════════════════════════════════
+--  커리어 인사이트 — 정보를 주고받는 커뮤니티 게시판
+-- ════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS insight_posts (
+  id          VARCHAR(32)  PRIMARY KEY,
+  user_id     VARCHAR(32)  NOT NULL,
+  -- 카테고리는 코드에 고정 목록으로 둔다(frontend/js/insight.js CATEGORIES 가 단일 출처).
+  -- ENUM 으로 박아 두면 카테고리 하나 늘릴 때마다 ALTER 가 필요해 VARCHAR 로 둔다.
+  category    VARCHAR(16)  NOT NULL,
+  title       VARCHAR(200) NOT NULL,
+  body        TEXT         NOT NULL,
+  view_count  INT          NOT NULL DEFAULT 0,
+  created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  -- 글쓴이가 탈퇴하면 글도 같이 지운다. 남의 글만 남고 작성자가 사라지면
+  -- '탈퇴한 회원' 처리를 화면마다 따로 해야 한다 — 다른 사용자 소유 데이터
+  -- (스펙·멘토링 신청)와 같은 원칙이다.
+  CONSTRAINT fk_ipost_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  KEY idx_ipost_category (category, created_at),
+  KEY idx_ipost_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS insight_comments (
+  id          VARCHAR(32)  PRIMARY KEY,
+  post_id     VARCHAR(32)  NOT NULL,
+  user_id     VARCHAR(32)  NOT NULL,
+  body        VARCHAR(1000) NOT NULL,
+  created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_icmt_post FOREIGN KEY (post_id) REFERENCES insight_posts(id) ON DELETE CASCADE,
+  CONSTRAINT fk_icmt_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  KEY idx_icmt_post (post_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="css/home.css">
 <link rel="stylesheet" href="css/mentoring.css">
 <link rel="stylesheet" href="css/jd-coach.css">
+<link rel="stylesheet" href="css/insight.css">
 
 <template id="__bundler_thumbnail" data-bg-color="#f1f7f4">
   <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
@@ -49,6 +50,7 @@
     <span class="nav-link" data-nav="jd" onclick="navigate('jd')">자소서 코치</span>
     <span class="nav-link" data-nav="search" onclick="navigate('search')">멘토 찾기</span>
     <span class="nav-link" data-nav="mentoring" onclick="navigate('mentoring')">내 멘토링</span>
+    <span class="nav-link" data-nav="insight" onclick="navigate('insight')">커리어 인사이트</span>
   </nav>
   <div class="nav-right">
     <button class="nav-search" onclick="navigate('career')" aria-label="검색"><i class="ti ti-search"></i></button>
@@ -106,6 +108,7 @@
       <span class="nav-link" data-nav="jd"        onclick="navigate('jd')">자소서 코치</span>
       <span class="nav-link" data-nav="search"    onclick="navigate('search')">멘토 찾기</span>
       <span class="nav-link" data-nav="mentoring" onclick="navigate('mentoring')">내 멘토링</span>
+      <span class="nav-link" data-nav="insight"   onclick="navigate('insight')">커리어 인사이트</span>
     </nav>
   </aside>
 </header>
@@ -853,6 +856,13 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- ══ 커리어 인사이트 (커뮤니티 게시판) ══
+     목록·상세·글쓰기 세 화면을 js/insight.js 가 #insight-root 하나에 통째로
+     그린다 — 커리어 로드맵(#career-main)과 같은 방식이다. -->
+<main class="page page--doc" id="page-insight" data-screen-label="커리어 인사이트">
+  <div class="wrap" id="insight-root"></div>
+</main>
+
 <!-- ══ 자소서 코치 (직무기술서 → 요구역량 → 작성 가이드) ══
      결과 영역은 js/jd-coach.js 가 채운다. 목업 값을 두지 않는다 — CAS 히어로가
      87/100 하드코딩이라 누가 로그인해도 같은 점수가 떴던 일을 반복하지 않는다. -->
@@ -1022,6 +1032,7 @@
 <script src="js/mentoring.js"></script>
 <script src="js/jd-coach.js"></script>
 <script src="js/company-cover.js"></script>
+<script src="js/insight.js"></script>
 <script src="js/app.js"></script>
 
 <!-- ══ TWEAKS PANEL ══ -->

@@ -176,6 +176,36 @@ window.DB = (() => {
     });
   }
 
+  /* ── 커리어 인사이트(커뮤니티 게시판) ─────────────────────────
+     읽기는 비로그인도 된다(가격표와 같은 원칙 — mentoring.js FORMATS 주석).
+     글쓰기·댓글·삭제만 로그인이 필요하고, 그 판단은 서버가 401/404 로 한다. */
+  async function insightCategories() {
+    return api('GET', '/api/insights/categories');
+  }
+  async function listInsights({ category = '', page = 1, limit = 20 } = {}) {
+    const qs = new URLSearchParams({ page, limit });
+    if (category) qs.set('category', category);
+    return api('GET', '/api/insights?' + qs.toString());
+  }
+  async function getInsight(id) {
+    return api('GET', '/api/insights/' + encodeURIComponent(id));
+  }
+  async function createInsight({ category, title, body }) {
+    return api('POST', '/api/insights', { category, title, body });
+  }
+  async function updateInsight(id, { title, body }) {
+    return api('PUT', '/api/insights/' + encodeURIComponent(id), { title, body });
+  }
+  async function deleteInsight(id) {
+    return api('DELETE', '/api/insights/' + encodeURIComponent(id));
+  }
+  async function addInsightComment(postId, body) {
+    return api('POST', '/api/insights/' + encodeURIComponent(postId) + '/comments', { body });
+  }
+  async function deleteInsightComment(postId, commentId) {
+    return api('DELETE', '/api/insights/' + encodeURIComponent(postId) + '/comments/' + encodeURIComponent(commentId));
+  }
+
   // ── 쓰기 (비동기) ──────────────────────────────────────────
   /* nickname 을 빠뜨리지 말 것. 화면·서버 양쪽 다 받는데 여기서만 안 실어
      보내서, 가입할 때 적은 닉네임이 조용히 사라지고 스펙 입력창에서 다시
@@ -291,6 +321,8 @@ window.DB = (() => {
     createUser, login, logout, withdraw, completeOnboarding, confirmPayment, updateUser, requestRoleChange, upsertSpec, getProfile, updateProfile,
     classifyCompany, suggestCompanies, suggestCerts, suggestMajors, suggestUniversities, classifyMajor, jobCatalog,
     analyzeCas, coachJd,
+    insightCategories, listInsights, getInsight, createInsight, updateInsight, deleteInsight,
+    addInsightComment, deleteInsightComment,
     seedDemo, seedRandom, clearAll, deleteUser,
   };
 })();

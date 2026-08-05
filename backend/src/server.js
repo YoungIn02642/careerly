@@ -19,6 +19,7 @@ const casAnalyzeRouter = require("./routes/casAnalyze");
 const jdCoachRouter = require("./routes/jdCoach");
 const { router: mentoringRouter } = require("./routes/mentoring");
 const { router: paymentsRouter } = require("./routes/payments");
+const { router: insightRouter } = require("./routes/insight");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -59,14 +60,15 @@ app.use(express.static(FRONTEND_DIR));
 app.use("/api/recommendations", recommendationsRouter);
 app.use("/api/cas", casAnalyzeRouter);
 app.use("/api/jd", jdCoachRouter);
-/* 멘토링·결제는 로그인한 사람의 행동이다. 라우터 안에서 req.user 를 보므로
-   세션을 먼저 붙여 준다(전역 requireAuth 는 아니다 — 가격표는 비로그인도 본다). */
-app.use(["/api/mentoring", "/api/payments"], async (req, res, next) => {
+/* 멘토링·결제·인사이트는 라우터 안에서 req.user 를 보므로 세션을 먼저 붙여 준다
+   (전역 requireAuth 는 아니다 — 가격표·게시판 읽기는 비로그인도 본다). */
+app.use(["/api/mentoring", "/api/payments", "/api/insights"], async (req, res, next) => {
   try { req.user = await getCurrentUser(req); next(); }
   catch (e) { next(e); }
 });
 app.use("/api/mentoring", mentoringRouter);
 app.use("/api/payments", paymentsRouter);
+app.use("/api/insights", insightRouter);
 
 function publicUser(user) {
   return {
