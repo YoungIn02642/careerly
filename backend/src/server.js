@@ -108,6 +108,14 @@ async function requireAuth(req, res, next) {
   } catch (e) { next(e); }
 }
 
+/* express 4 는 async 라우트 핸들러가 던진 예외를 자동으로 못 잡는다 — 라우트 안에서
+   직접 try/catch 해서 next(e) 를 부르지 않으면, 실패한 Promise 가 그대로 버려져
+   **아래의 에러 핸들러(app.use((err,...)))에도 닿지 못하고 unhandledRejection 이 된다.**
+   그러면 Node 가 프로세스 전체를 죽인다 — 카탈로그 테이블 하나가 없어서
+   서버 전체가 재시작 루프에 빠졌던 사고(2026-08-05, universities 테이블 누락)가 이 경로였다.
+   매 라우트에 try/catch 를 반복해 적는 대신, 이 한 겹으로 감싸 next(e) 로 흘려보낸다. */
+const ah = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
 function isValidUsername(username) {
   return /^[a-zA-Z0-9_]{4,20}$/.test(username);
 }
@@ -187,7 +195,7 @@ app.post('/api/verify/result', (req, res) => {
   }
 });
 
-app.post('/api/auth/signup', async (req, res) => {
+app.post('/api/auth/signup', ah(async (req, res) => {
   const { username, password, name, email, role, nickname } = req.body || {};
 
   if (!username || !password || !name || !email) {
@@ -263,9 +271,9 @@ app.post('/api/auth/signup', async (req, res) => {
     }
     throw e;
   }
-});
+}));
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', ah(async (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) {
     return res.status(400).json({ error: '아이디와 비밀번호를 입력해주세요.' });
@@ -289,7 +297,7 @@ app.post('/api/auth/login', async (req, res) => {
 
   await startSession(res, user);
   res.json({ message: '로그인 성공', user: publicUser(user) });
-});
+}));
 
 /* ── 소셜 로그인 ─────────────────────────────────────────────
    흐름과 보안 판단은 src/oauth.js 머리주석에 있다.
@@ -338,7 +346,7 @@ function checkRateLimited(ip) {
   return hit.count > CHECK_MAX_PER_WINDOW;
 }
 
-app.get('/api/auth/check-username', async (req, res) => {
+app.get('/api/auth/check-username', ah(async (req, res) => {
   const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
 
   if (!isValidUsername(username)) {
@@ -350,7 +358,7 @@ app.get('/api/auth/check-username', async (req, res) => {
 
   const taken = await repo.users.usernameTaken(username);
   res.json({ available: !taken });
-});
+}));
 
 /* :provider 는 /api/auth/me · /api/auth/providers 까지 삼킨다.
    **모르는 이름이면 반드시 next() 로 흘려보내야** 로그인 상태 조회가 살아남는다.
@@ -417,7 +425,7 @@ app.get('/api/auth/:provider/callback', async (req, res, next) => {
 
 /* 소셜 가입 직후 받는 값. 이미 역할이 정해진 계정은 여기서 바꾸지 못하게 한다 —
    역할이 바뀌면 그동안 쌓인 스펙이 어느 통계에 속하는지 흔들린다. */
-app.post('/api/auth/onboarding', requireAuth, async (req, res) => {
+app.post('/api/auth/onboarding', requireAuth, ah(async (req, res) => {
   const { role, nickname } = req.body || {};
   if (!['mentor', 'mentee'].includes(role)) {
     return res.status(400).json({ error: '회원 유형(멘토/멘티)을 선택해주세요.' });
@@ -456,7 +464,7 @@ app.post('/api/auth/onboarding', requireAuth, async (req, res) => {
   }
   const user = await repo.users.update(req.user.id, patch);
   res.json({ message: '가입이 완료되었습니다.', user: publicUser(user) });
-});
+}));
 
 /* ── 회원 탈퇴 ────────────────────────────────────────────────
    본인이 자기 계정을 지운다(백오피스의 강제 삭제와는 다른 길이다).
@@ -468,7 +476,7 @@ app.post('/api/auth/onboarding', requireAuth, async (req, res) => {
 
    소셜 가입자는 비밀번호가 없다(passwordHash null). 그때는 아이디를 받아 대조한다 —
    비밀번호가 없다고 확인 없이 지우면 가장 위험한 동작이 가장 쉬워진다. */
-app.post('/api/auth/withdraw', requireAuth, async (req, res) => {
+app.post('/api/auth/withdraw', requireAuth, ah(async (req, res) => {
   const { password, username } = req.body || {};
 
   if (req.user.passwordHash) {
@@ -493,23 +501,23 @@ app.post('/api/auth/withdraw', requireAuth, async (req, res) => {
   await repo.users.deleteByUsername(req.user.username);
   res.clearCookie(SESSION_COOKIE);
   res.json({ message: '탈퇴가 완료되었습니다.' });
-});
+}));
 
-app.post('/api/auth/logout', async (req, res) => {
+app.post('/api/auth/logout', ah(async (req, res) => {
   await repo.sessions.deleteByToken(req.cookies[SESSION_COOKIE]);
   res.clearCookie(SESSION_COOKIE);
   res.json({ message: '로그아웃되었습니다.' });
-});
+}));
 
 app.get('/api/auth/me', requireAuth, (req, res) => {
   res.json({ user: publicUser(req.user) });
 });
 
-app.get('/api/profile', requireAuth, async (req, res) => {
+app.get('/api/profile', requireAuth, ah(async (req, res) => {
   res.json({ profile: await repo.profiles.get(req.user.id) });
-});
+}));
 
-app.put('/api/profile', requireAuth, async (req, res) => {
+app.put('/api/profile', requireAuth, ah(async (req, res) => {
   /* 예전에는 아무 키나 받아 파일에 그대로 넣었다. 테이블에는 컬럼이 있는 것만 넣는다
      — 없는 컬럼을 보내면 조용히 버려지는 대신 여기서 걸러진 것이 보인다. */
   /* **repo.profiles.update 의 map 과 함께 늘려야 한다.** 한쪽만 고치면 저장은
@@ -592,7 +600,7 @@ app.put('/api/profile', requireAuth, async (req, res) => {
 
   const profile = await repo.profiles.update(req.user.id, patch);
   res.json({ message: '프로필이 저장되었습니다.', profile });
-});
+}));
 
 /* ── 회원 스펙 (커리어 로드맵 집계의 원천) ─────────────────────
    userSpecs: [{ userId, dept, field, job, company, corpType, gpa, gpaMax, certs, scores, qual, detail, activities }]
@@ -609,17 +617,17 @@ app.put('/api/profile', requireAuth, async (req, res) => {
 // 집계용 전체 조회. 누가 입력했는지는 내보내지 않는다 —
 // 학점·자격증은 개인정보이고, 화면은 분포만 필요로 한다.
 /* 집계용 전체 목록. userId·detail 은 남의 것이므로 빼고 준다(예전과 같은 규칙). */
-app.get('/api/specs', async (req, res) => {
+app.get('/api/specs', ah(async (req, res) => {
   const all = await repo.specs.listAll();
   res.json({ specs: all.map(({ userId, detail, ...rest }) => rest) });
-});
+}));
 
 // 내 스펙 조회 / 저장
-app.get('/api/specs/me', requireAuth, async (req, res) => {
+app.get('/api/specs/me', requireAuth, ah(async (req, res) => {
   res.json({ spec: await repo.specs.byUser(req.user.id) });
-});
+}));
 
-app.put('/api/specs/me', requireAuth, async (req, res) => {
+app.put('/api/specs/me', requireAuth, ah(async (req, res) => {
   /* 허용 목록 방식이라 **새 필드를 여기 추가하지 않으면 조용히 버려진다.**
      화면에서는 저장한 것처럼 보이는데 다시 열면 비어 있어 원인을 찾기 어렵다.
      스펙 입력 폼에 칸을 늘렸다면 여기와 repo.specs.upsert 의 컬럼 표를 함께 늘릴 것.
@@ -665,10 +673,10 @@ app.put('/api/specs/me', requireAuth, async (req, res) => {
 
   const spec = await repo.specs.upsert(req.user.id, patch);
   res.json({ message: '스펙이 저장되었습니다.', spec });
-});
+}));
 
 // 닉네임 등 회원 정보 수정
-app.put('/api/users/me', requireAuth, async (req, res) => {
+app.put('/api/users/me', requireAuth, ah(async (req, res) => {
   const patch = {};
   if (Object.prototype.hasOwnProperty.call(req.body, 'nickname')) {
     const n = req.body.nickname;
@@ -676,10 +684,10 @@ app.put('/api/users/me', requireAuth, async (req, res) => {
   }
   const user = await repo.users.update(req.user.id, patch);
   res.json({ message: '저장되었습니다.', user: publicUser(user) });
-});
+}));
 
 // 멘토/멘티 회원 수 — 홈·백오피스의 통계 카드용. 개인정보는 내보내지 않는다.
-app.get('/api/stats', async (req, res) => {
+app.get('/api/stats', ah(async (req, res) => {
   /* 예전에는 회원 배열을 전부 읽어 세었다. 이제 COUNT 로 센다 —
      회원이 늘어도 응답 크기와 시간이 그대로다. */
   const [counts, userCount, specCount] = await Promise.all([
@@ -690,13 +698,13 @@ app.get('/api/stats', async (req, res) => {
     userCount,
     specCount,
   });
-});
+}));
 
 /* ── 회사명 → 기업 규모 자동 분류 ──────────────────────────────
    공식 명단(공정위 대규모기업집단 / 공공기관 지정현황) 기반 조회.
    로컬 캐시만 보므로 외부 API 를 부르지 않는다 — 입력할 때마다 호출돼도 즉시 답한다.
    판정은 추천일 뿐이라 회원이 화면에서 고쳐 저장할 수 있다. */
-app.get('/api/company/classify', async (req, res) => {
+app.get('/api/company/classify', ah(async (req, res) => {
   const name = String(req.query.name || '').trim();
   if (!name) return res.status(400).json({ error: '회사명이 필요합니다.' });
 
@@ -716,35 +724,35 @@ app.get('/api/company/classify', async (req, res) => {
        설명하려면 이게 필요하다. corpType 과 분리해 두어야 저장으로 새지 않는다. */
     fallbackCorpType: r.matched ? null : 'small',
   });
-});
+}));
 
 /* 회사명 자동완성 — '삼성' → 삼성전자 · 삼성물산 …
    분류와 같은 로컬 캐시를 보므로 입력 중 타이핑마다 불러도 외부 API 를 타지 않는다. */
-app.get('/api/company/suggest', async (req, res) => {
+app.get('/api/company/suggest', ah(async (req, res) => {
   const q = String(req.query.q || '').trim();
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 8, 1), 20);
   res.json({ query: q, items: q ? await catalog.suggestCompanies(q, limit) : [] });
-});
+}));
 
 // 분류 캐시 상태 — 배치를 돌렸는지 확인용
-app.get('/api/company/stats', async (req, res) => res.json(await catalog.companyStats()));
+app.get('/api/company/stats', ah(async (req, res) => res.json(await catalog.companyStats())));
 
 /* ── 자격증 카탈로그 ────────────────────────────────────────────
    스펙 입력 화면의 자격증 선택 목록. 국가자격(큐넷 API 캐시) + 민간자격(수기).
    650종 남짓 · 60KB 정도라 페이징 없이 통째로 준다 — 프론트가 한 번 받아
    메모리에서 검색하면 입력 중 서버를 다시 부를 일이 없다.
    내용이 하루에도 바뀌는 데이터가 아니므로 캐시를 길게 잡는다. */
-app.get('/api/certs', async (req, res) => {
+app.get('/api/certs', ah(async (req, res) => {
   res.set('Cache-Control', 'no-cache');   // ETag 로 재검증 — 아래 /api/jobs 주석 참고
   res.json(await catalog.certCatalog());
-});
+}));
 
 /* 자격증 검색 — /api/company/suggest · /api/majors/suggest 와 같은 규약(q · limit → items). */
-app.get('/api/certs/suggest', async (req, res) => {
+app.get('/api/certs/suggest', ah(async (req, res) => {
   const q = String(req.query.q || '').trim();
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 8, 1), 20);
   res.json({ query: q, items: q ? await catalog.searchCerts(q, limit) : [] });
-});
+}));
 
 /* ── 직업 분류 (커리어 로드맵) ──────────────────────────────────
    한국고용직업분류 대분류 10 → 중분류 35 → 직업 461 (임금·전망 포함).
@@ -759,10 +767,10 @@ app.get('/api/certs/suggest', async (req, res) => {
    그래서 'no-cache' 로 둔다. 이름과 달리 '캐시 금지'가 아니라 **쓰기 전에 물어보라**는
    뜻이다. express 가 붙여 주는 ETag 로 재검증해서, 안 바뀌었으면 304(본문 없음)로
    끝나고 바뀌었을 때만 200KB 를 다시 받는다. 대역폭은 거의 그대로면서 갱신은 즉시 된다. */
-app.get('/api/jobs', async (req, res) => {
+app.get('/api/jobs', ah(async (req, res) => {
   res.set('Cache-Control', 'no-cache');
   res.json(await catalog.jobCatalog());
-});
+}));
 
 /* ── 학과 카탈로그 ────────────────────────────────────────────
    스펙 입력의 '학과' 검색 목록. 지금은 손으로 추린 임시 목록이고,
@@ -770,10 +778,10 @@ app.get('/api/jobs', async (req, res) => {
 
    dept 는 careerly 통계를 묶는 키다. 학과명만 저장하면 스펙이 수천 갈래로 흩어져
    합격자 평균이 무의미해지므로, 학과명과 함께 어느 분류로 묶이는지도 같이 준다. */
-app.get('/api/majors', async (req, res) => {
+app.get('/api/majors', ah(async (req, res) => {
   res.set('Cache-Control', 'no-cache');
   res.json(await catalog.majorCatalog());
-});
+}));
 
 /* 학과 검색 — 입력할 때마다 부른다(프론트가 debounce 로 묶는다).
    회사명 자동완성(/api/company/suggest)과 같은 규약이다: q · limit 을 받고
@@ -781,28 +789,28 @@ app.get('/api/majors', async (req, res) => {
 
    지금 카탈로그는 193개라 목록을 통째로 내려도 되지만, 커리어넷 학과정보 키가 나오면
    수천 개가 된다. 그때 구조를 다시 바꾸지 않도록 처음부터 서버 검색으로 둔다. */
-app.get('/api/majors/suggest', async (req, res) => {
+app.get('/api/majors/suggest', ah(async (req, res) => {
   const q = String(req.query.q || '').trim();
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 8, 1), 20);
   res.json({ query: q, items: q ? await catalog.searchMajors(q, limit) : [] });
-});
+}));
 
 /* 학교 검색 — 위 세 검색(회사·자격증·학과)과 같은 규약이다.
    카탈로그는 scripts/fetch-universities.js 가 커리어넷에서 받아 채운다.
    **비어 있어도 화면은 동작한다** — 자동완성만 안 뜨고 직접 입력은 계속된다.
    대학은 이름 표기가 비교적 일정해서(‘서울대학교’) 학과만큼 흔들리지 않는다. */
-app.get('/api/universities/suggest', async (req, res) => {
+app.get('/api/universities/suggest', ah(async (req, res) => {
   const q = String(req.query.q || '').trim();
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 8, 1), 20);
   res.json({ query: q, items: q ? await catalog.searchUniversities(q, limit) : [] });
-});
+}));
 
 /* 목록에 없는 학과명을 직접 적었을 때 어느 분류로 묶일지 알려준다.
    못 맞추면 dept:null — 화면이 '직접 골라주세요'로 빠진다. */
-app.get('/api/majors/classify', async (req, res) => {
+app.get('/api/majors/classify', ah(async (req, res) => {
   const name = String(req.query.name || '').trim();
   res.json({ major: name, dept: await catalog.deptOfMajor(name) });
-});
+}));
 
 /* ── 백오피스 (관리자 전용) ────────────────────────────────────
    회원 목록 조회·삭제, 데모 시드, 전체 초기화. 남의 계정을 지울 수 있는 곳이라
@@ -826,37 +834,37 @@ function requireAdmin(req, res, next) {
 /* requireAuth 를 먼저 태워야 req.user 가 채워진다. 순서를 바꾸면 항상 404 다. */
 const adminOnly = [requireAuth, requireAdmin];
 
-app.get('/api/admin/users', adminOnly, async (req, res) => {
+app.get('/api/admin/users', adminOnly, ah(async (req, res) => {
   const users = await repo.users.listAll();
   res.json({ users: users.map(u => ({ ...publicUser(u), hasSpec: u.hasSpec })) });
-});
+}));
 
-app.delete('/api/admin/users/:username', adminOnly, async (req, res) => {
+app.delete('/api/admin/users/:username', adminOnly, ah(async (req, res) => {
   /* 프로필·세션·스펙·자격증·활동은 외래키 CASCADE 로 함께 지워진다.
      예전에는 배열마다 직접 걸러냈고, 새 컬렉션이 생길 때마다 빠뜨리기 쉬웠다. */
   const removed = await repo.users.deleteByUsername(req.params.username);
   if (!removed) return res.status(404).json({ error: '회원을 찾을 수 없습니다.' });
   res.json({ message: '삭제되었습니다.' });
-});
+}));
 
-app.post('/api/admin/clear', adminOnly, async (req, res) => {
+app.post('/api/admin/clear', adminOnly, ah(async (req, res) => {
   // users 만 지우면 프로필·세션·스펙은 CASCADE 로 따라간다
   await query('DELETE FROM users');
   res.clearCookie(SESSION_COOKIE);
   res.json({ message: '초기화되었습니다.' });
-});
+}));
 
-app.post('/api/admin/seed', adminOnly, async (req, res) => {
+app.post('/api/admin/seed', adminOnly, ah(async (req, res) => {
   // 고정 데모는 계정마다 비밀번호가 다를 수 있어 개별 해싱한다
   for (const { u, s } of DEMO_SEED) {
     if (await repo.users.usernameTaken(u.username)) continue;
     await insertSeedUser(u, s, await bcrypt.hash(u.password, 10));
   }
   res.json({ message: '데모 데이터가 추가되었습니다.' });
-});
+}));
 
 // 무작위 N명 추가 — 커리어 로드맵·CAS 집계를 채우기 위한 대량 시드
-app.post('/api/admin/seed-random', adminOnly, async (req, res) => {
+app.post('/api/admin/seed-random', adminOnly, ah(async (req, res) => {
   const count = Math.min(Math.max(parseInt(req.body?.count, 10) || 50, 1), 200);
 
   // 무작위 계정은 비밀번호가 모두 같으므로 해시를 한 번만 계산해 재사용한다
@@ -869,7 +877,7 @@ app.post('/api/admin/seed-random', adminOnly, async (req, res) => {
     added++;
   }
   res.json({ message: `무작위 회원 ${added}명이 추가되었습니다.`, added });
-});
+}));
 
 async function insertSeedUser(u, s, passwordHash) {
   const user = await repo.users.create({
