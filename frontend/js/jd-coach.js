@@ -136,7 +136,6 @@
     const btn      = $('#jd-run');
     const statusEl = $('#jd-status');
     const resultEl = $('#jd-result');
-    const useAi    = $('#jd-use-ai')?.checked !== false;
     const text     = analysisText();
 
     if (text.length < 30) {
@@ -145,16 +144,15 @@
     }
 
     btn.disabled = true;
-    /* 규칙만 쓰면 즉시 끝나지만 AI 보강이 붙으면 로컬 모델에서 1분 이상 걸린다.
-       기다리는 이유를 적어두지 않으면 사용자가 멈춘 줄 안다. */
-    statusEl.textContent = useAi
-      ? '공고를 읽고 있어요… (AI 보강이 필요하면 1분 이상 걸릴 수 있어요)'
-      : '공고를 읽고 있어요…';
+    /* AI 보강은 항상 켠다(끄는 토글을 없앴다). 규칙만 쓰면 즉시 끝나지만
+       AI 보강이 붙으면 로컬 모델에서 1분 이상 걸릴 수 있어 그 이유를 적어둔다 —
+       안 그러면 사용자가 멈춘 줄 안다. */
+    statusEl.textContent = '공고를 읽고 있어요… (AI 보강이 필요하면 1분 이상 걸릴 수 있어요)';
     resultEl.hidden = true;
     $('#jd-questions-result').hidden = true;
 
     try {
-      _last = await DB.coachJd(text, { useAi });
+      _last = await DB.coachJd(text, { useAi: true });
       statusEl.textContent = '';
       renderQuestions(parseQuestions(), _last);
       render(_last);
