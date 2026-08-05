@@ -324,12 +324,17 @@ app.post('/api/auth/login', ah(async (req, res) => {
      #login?error= — 실패 (사유를 화면이 보여준다) */
 async function startSession(res, user) {
   const token = nanoid(48);
+  /* 세션은 DB 에서 24시간 뒤 만료된다(로그인한 채로 하루가 지나면 자동 로그아웃) —
+     이 값은 그대로 둔다. 쿠키 쪽 maxAge 는 **일부러 안 준다.** maxAge 가 있으면
+     디스크에 저장되는 영구 쿠키가 되어, 24시간 안이면 컴퓨터를 껐다 켜도 로그인이
+     유지된다. maxAge 를 빼면 브라우저 세션 쿠키가 되어 브라우저를 완전히 종료하면
+     (컴퓨터 재부팅 포함) 즉시 로그아웃된다 — "탭 복원" 설정을 켜 둔 브라우저는
+     예외일 수 있다. */
   await repo.sessions.create(token, user.id, Date.now() + ONE_DAY);
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
-    maxAge: ONE_DAY,
   });
 }
 
