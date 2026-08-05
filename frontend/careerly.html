@@ -600,7 +600,13 @@
   <div class="wrap">
     <div class="page-head">
       <div class="page-eyebrow">CAS · Career Asset Score</div>
-      <h1 class="page-title">내 역량 자산 점수</h1>
+      <div class="cas-title-row">
+        <h1 class="page-title">내 역량 자산 점수</h1>
+        <label class="cas-job-picker" for="cas-job-select">
+          <span>비교 직무</span>
+          <select id="cas-job-select" onchange="CASHero.selectJob(this.value)"></select>
+        </label>
+      </div>
       <p class="page-desc">학점·어학·자격증처럼 <b>숫자로 남는 스펙</b>과 인턴·공모전처럼
         <b>경험으로 쌓이는 스펙</b>을 합쳐 1,000점으로 나타낸 점수예요.
         취업에 성공한 선배들의 실제 데이터와 비교해 계산합니다.</p>
@@ -670,7 +676,7 @@
       <div class="gap-head">
         <div>
           <h3>선배 대비 부족한 스펙을 채워보세요</h3>
-          <p>합격한 유사 경로 선배 <b>24명</b>의 데이터와 비교해 보완이 필요한 항목을 분석했어요.</p>
+          <p id="gap-summary">직무별 선배 데이터와 비교해 보완이 필요한 항목을 분석했어요.</p>
         </div>
       </div>
       <div class="gap-tabs">
@@ -683,7 +689,7 @@
         <span class="gap-foot-ic">🎯</span>
         <div class="gap-foot-body">
           <div class="gap-foot-title">이 항목들을 먼저 경험한 선배에게 물어보세요</div>
-          <div class="gap-foot-desc">내 경로와 유사한 선배 24명이 멘토 매칭 가능해요</div>
+          <div class="gap-foot-desc" id="gap-foot-desc">내 경로와 유사한 선배에게 직접 물어볼 수 있어요</div>
         </div>
         <button class="btn-brand" onclick="navigate('search')"><i class="ti ti-users"></i>동문 멘토 찾기</button>
       </div>
@@ -850,7 +856,38 @@
 <!-- ══ 자소서 코치 (직무기술서 → 요구역량 → 작성 가이드) ══
      결과 영역은 js/jd-coach.js 가 채운다. 목업 값을 두지 않는다 — CAS 히어로가
      87/100 하드코딩이라 누가 로그인해도 같은 점수가 떴던 일을 반복하지 않는다. -->
+<main class="page company-page" id="page-company" data-screen-label="회사 검색과 자소서">
+  <nav class="cover-subnav" aria-label="자소서 소분류">
+    <button class="is-active" type="button" onclick="navigate('company')"><i class="ti ti-building-search"></i> 회사 검색</button>
+    <button type="button" onclick="navigate('jd')"><i class="ti ti-pencil"></i> 자소서 코치</button>
+  </nav>
+  <div class="company-layout">
+    <aside class="company-sidebar">
+      <div class="company-sidebar-title"><i class="ti ti-building-search"></i> 회사 찾기</div>
+      <label class="company-search-box">
+        <i class="ti ti-search"></i>
+        <input id="company-cover-search" type="search" placeholder="회사명 검색" autocomplete="off" />
+      </label>
+      <div class="company-sidebar-label">관심 회사</div>
+      <div class="company-subscriptions" id="company-cover-list"></div>
+    </aside>
+    <section class="company-content">
+      <div class="company-content-head">
+        <div class="page-eyebrow">Company & Cover Letter</div>
+        <h1 class="page-title">회사부터 찾고, 지원동기 근거를 준비하세요</h1>
+        <p class="page-desc">회사를 선택하면 지원동기에 넣을 관점과 작성 순서를 먼저 정리합니다.
+          채용공고 분석과 문항 작성은 자소서 코치에서 이어서 진행할 수 있어요.</p>
+      </div>
+      <div id="company-cover-result"></div>
+    </section>
+  </div>
+</main>
+
 <main class="page page--doc" id="page-jd" data-screen-label="자소서 코치">
+  <nav class="cover-subnav" aria-label="자소서 소분류">
+    <button type="button" onclick="navigate('company')"><i class="ti ti-building-search"></i> 회사 검색</button>
+    <button class="is-active" type="button" onclick="navigate('jd')"><i class="ti ti-pencil"></i> 자소서 코치</button>
+  </nav>
   <div class="wrap">
     <div class="page-head">
       <div class="page-eyebrow">Cover Letter Coach</div>
@@ -864,28 +901,42 @@
          공고·직무기술서·회사·자소서 문항은 근거가 서로 다르다. 한 칸에 몰아 받으면
          무엇이 어느 문항의 근거인지 섞여서, 분석 결과도 "그래서 어디에 쓰라는 것"인지
          알 수 없게 된다. 넣는 자리부터 나눠 받는다. -->
-    <div class="card jd-input-card">
+    <div class="jd-workspace">
+      <aside class="jd-quick-nav" aria-label="자소서 입력 항목 바로가기">
+        <div class="jd-quick-title"><i class="ti ti-list"></i> 바로가기</div>
+        <button type="button" onclick="document.getElementById('jd-step-company').scrollIntoView({behavior:'smooth', block:'start'})"><span>1</span> 지원 회사</button>
+        <button type="button" onclick="document.getElementById('jd-step-posting').scrollIntoView({behavior:'smooth', block:'start'})"><span>2</span> 채용공고</button>
+        <button type="button" onclick="document.getElementById('jd-step-description').scrollIntoView({behavior:'smooth', block:'start'})"><span>3</span> 직무기술서</button>
+        <button type="button" onclick="document.getElementById('jd-step-questions').scrollIntoView({behavior:'smooth', block:'start'})"><span>4</span> 자소서 문항</button>
+      </aside>
+      <div class="card jd-input-card">
       <div class="jd-steps">
-        <div class="jd-step">
+        <div class="jd-step" id="jd-step-company">
           <label class="jd-label" for="jd-company">
             <span class="jd-step-n">1</span> 지원 회사
-            <span class="jd-opt">지원동기 문항의 근거가 됩니다</span>
+            <span class="jd-opt">선택 · 작성 방향을 맞추는 용도</span>
           </label>
-          <input type="text" id="jd-company" class="jd-company-input" list="jd-company-options"
-                 placeholder="회사명 (예: 삼성전자)" autocomplete="off" />
-          <datalist id="jd-company-options"></datalist>
+          <div class="jd-company-compact">
+            <input type="text" id="jd-company" class="jd-company-input"
+                   placeholder="회사명 (예: 삼성전자)" autocomplete="off" />
+            <button type="button" class="jd-company-find" onclick="navigate('company')">
+              <i class="ti ti-search"></i> 회사 먼저 찾아보기
+            </button>
+          </div>
+          <div class="jd-hint">회사명은 지원동기를 어떤 관점으로 쓸지 안내하는 데만 사용합니다.</div>
         </div>
 
-        <div class="jd-step">
+        <div class="jd-step" id="jd-step-posting">
           <label class="jd-label" for="jd-text">
             <span class="jd-step-n">2</span> 채용공고
             <span class="jd-opt">필수</span>
           </label>
           <textarea id="jd-text" class="jd-text" rows="8"
             placeholder="공고 본문을 그대로 붙여넣어 주세요. 모집분야·근무조건·전형절차가 섞여 있어도 됩니다."></textarea>
+          <div id="jd-result" class="jd-inline-result" hidden></div>
         </div>
 
-        <div class="jd-step">
+        <div class="jd-step" id="jd-step-description">
           <label class="jd-label" for="jd-jd">
             <span class="jd-step-n">3</span> 직무기술서 (JD)
             <span class="jd-opt">선택 · 따로 있으면 여기에</span>
@@ -894,7 +945,7 @@
             placeholder="[주요업무] · [자격요건] · [우대사항] 처럼 직무 자체를 설명하는 문서가 따로 있으면 붙여넣어 주세요.&#10;공고와 함께 읽고 역량을 뽑습니다."></textarea>
         </div>
 
-        <div class="jd-step">
+        <div class="jd-step" id="jd-step-questions">
           <label class="jd-label" for="jd-questions">
             <span class="jd-step-n">4</span> 자소서 문항
             <span class="jd-opt">선택 · 한 줄에 하나씩</span>
@@ -902,6 +953,7 @@
           <textarea id="jd-questions" class="jd-text" rows="6"
             placeholder="1. 지원 동기와 입사 후 포부를 기술해 주십시오.&#10;2. 직무 수행에 필요한 역량을 갖추기 위해 노력한 경험을 서술해 주십시오.&#10;3. 협업 과정에서 갈등을 해결한 경험을 기술해 주십시오."></textarea>
           <div class="jd-hint">문항을 넣으면 <b>문항마다</b> 어떤 역량·소재를 쓸지 따로 정리해 드려요.</div>
+          <div id="jd-questions-result" class="jd-inline-result" hidden></div>
         </div>
       </div>
 
@@ -913,23 +965,9 @@
         </label>
         <span class="jd-status" id="jd-status"></span>
       </div>
-      <div class="jd-actions jd-actions--news">
-        <span class="jd-news-inline"><i class="ti ti-news"></i> 회사 소식은 분석과 함께 찾습니다</span>
-        <button type="button" class="jd-btn-ghost" id="jd-news-run"><i class="ti ti-search"></i> 소식만 다시 찾기</button>
-        <span class="jd-status" id="jd-news-status"></span>
       </div>
     </div>
 
-    <div id="jd-questions-result" hidden></div>
-    <div id="jd-result" hidden></div>
-
-    <!-- 지원동기 문항의 근거 — 공고가 아니라 '회사의 최근 소식'에서 나온다. -->
-    <div class="card jd-input-card jd-news-card" id="jd-news-card" hidden>
-      <div class="jd-news-h"><i class="ti ti-news"></i> 이 회사, 지금</div>
-      <p class="jd-news-desc">최근 5주를 한 주씩 끊어 <b>그 주에 가장 크게 다뤄진 기사</b>를 한 건씩 모았어요.
-        "왜 우리 회사인가" 문항은 홈페이지 비전이 아니라 <b>지금 이 회사가 하고 있는 일</b>에서 나옵니다.</p>
-      <div id="jd-news-result" hidden></div>
-    </div>
   </div>
 </main>
 
@@ -970,6 +1008,8 @@
 <script src="js/keco.js"></script>
 <script src="js/aggregation.js"></script>
 <script src="js/cas.js"></script>
+<!-- 활동 분류·복합 어학 계산의 단일 출처. cas-radar/cas-compare 보다 앞에 와야 한다 -->
+<script src="js/cas-profile.js"></script>
 <script src="js/cas-radar.js"></script>
 <script src="js/cas-hero.js"></script>
 <script src="js/cas-compare.js"></script>
@@ -981,6 +1021,7 @@
 <script src="js/career.js"></script>
 <script src="js/mentoring.js"></script>
 <script src="js/jd-coach.js"></script>
+<script src="js/company-cover.js"></script>
 <script src="js/app.js"></script>
 
 <!-- ══ TWEAKS PANEL ══ -->

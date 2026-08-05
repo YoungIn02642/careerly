@@ -7,6 +7,7 @@
 window.Aggregator = (() => {
   const OPIC_LEVELS = ['NL','NM','NH','IL','IM1','IM2','IM3','IH','AL'];
   const TS_LEVELS   = ['NL','NM','NH','IL','IM','IH','AL'];
+  const TOPIK_LEVELS = ['1급','2급','3급','4급','5급','6급'];
 
   // 자격증/정성 스펙 카탈로그 — 화면에 정렬해 보여줄 때 사용
   const CERT_CATALOG = {
@@ -106,6 +107,11 @@ window.Aggregator = (() => {
     if (!idxs.length) return null;
     return TS_LEVELS[Math.round(avg(idxs))];
   }
+  function topikAvg(levels) {
+    const idxs = levels.filter(l => TOPIK_LEVELS.includes(l)).map(l => TOPIK_LEVELS.indexOf(l));
+    if (!idxs.length) return null;
+    return TOPIK_LEVELS[Math.round(avg(idxs))];
+  }
 
   // ── main entry ─────────────────────────────────────────────
   //   where  : 임의 조건 함수. NCS 분류처럼 dept/field/job 로 표현되지 않는
@@ -155,12 +161,14 @@ window.Aggregator = (() => {
     const toefl = specs.map(s => s.scores?.toefl).filter(n => typeof n === 'number');
     const opic  = specs.map(s => s.scores?.opic).filter(Boolean);
     const ts    = specs.map(s => s.scores?.toeicSpeaking).filter(Boolean);
+    const topik = specs.map(s => s.scores?.topik).filter(Boolean);
 
     const scores = {
       toeic:         toeic.length ? { avg: Math.round(avg(toeic)), min: Math.min(...toeic), max: Math.max(...toeic), n: toeic.length } : null,
       toefl:         toefl.length ? { avg: Math.round(avg(toefl)), min: Math.min(...toefl), max: Math.max(...toefl), n: toefl.length } : null,
       opic:          opic.length  ? { avg: opicAvg(opic), n: opic.length } : null,
       toeicSpeaking: ts.length    ? { avg: tsAvg(ts),    n: ts.length    } : null,
+      topik:         topik.length ? { avg: topikAvg(topik), n: topik.length } : null,
     };
 
     // 정성스펙 — 활동 유형별 보유율 (CAS 가중치 tier 포함)
@@ -186,7 +194,7 @@ window.Aggregator = (() => {
   }
 
   return {
-    compute, CERT_CATALOG, CORP_TYPES, OPIC_LEVELS, TS_LEVELS,
+    compute, CERT_CATALOG, CORP_TYPES, OPIC_LEVELS, TS_LEVELS, TOPIK_LEVELS,
     hasActivityType,
     // 정성 활동 유형 — CAS.ACTIVITY_TYPES 를 런타임에 노출 (단일 출처)
     get ACTIVITY_TYPES() { return activityTypes(); },

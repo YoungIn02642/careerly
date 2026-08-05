@@ -18,6 +18,8 @@
 // ════════════════════════════════════════════════════════════
 window.CASHero = (() => {
 
+  let selectedJob = null;
+
   /* 이 인원 미만이면 백분위를 숨긴다. 3명 중 2등을 '상위 33%' 라고
      보여주는 건 정보가 아니라 착시다. */
   const MIN_PEERS = 5;
@@ -91,51 +93,47 @@ window.CASHero = (() => {
   }
 
   /* 저장된 값은 'cs' · 'backend' 같은 id 라 그대로 쓰면 화면에 영문이 노출된다.
-     라벨은 스펙 입력 폼의 목록이 단일 출처다.
-
-     스펙에는 두 세대의 직무 값이 섞여 있다.
-       새 스펙 — jobMajor/jobMiddles (KECO 코드, 커리어 로드맵과 같은 분류)
-       옛 스펙 — field/job (하드코딩 id). 1,188건이 이 형태다
-     새 값을 먼저 보고, 없으면 옛 값으로 떨어진다. 둘 다 없으면 전공만 쓴다. */
+     라벨은 스펙 입력 폼의 목록이 단일 출처다. */
   function labelOf(spec) {
     const SF = window.SpecForm || {};
     const dept = (SF.DEPTS || []).find(d => d.id === spec.dept)?.label || '내 전공';
-
-    let sub = null;
-
-    /* KECO 트리는 로드맵을 열어야 받아진다(비동기). 아직 안 받았으면 ready() 가
-       false 라 여기서 조용히 옛 경로로 떨어진다 — 라벨 하나 때문에 기다리지 않는다. */
-    if (window.KECO && KECO.ready() && spec.jobMajor) {
-      const mids = Array.isArray(spec.jobMiddles) ? spec.jobMiddles : [];
-      const names = mids
-        .map(c => KECO.middleById(spec.jobMajor, c)?.name)
-        .filter(Boolean);
-      /* 여러 개 고를 수 있다. 다 붙이면 제목이 길어지므로 첫 하나 + 나머지 개수. */
-      if (names.length) sub = names.length > 1 ? `${names[0]} 외 ${names.length - 1}` : names[0];
-      else sub = KECO.byId(spec.jobMajor)?.name || null;
-    }
-
-    if (!sub) {
-      const jobPairs   = (SF.JOB_OPTIONS   || {})[spec.field] || [];
-      const fieldPairs = (SF.FIELD_OPTIONS || {})[spec.dept]  || [];
-      sub = jobPairs.find(([id]) => id === spec.job)?.[1]
-         || fieldPairs.find(([id]) => id === spec.field)?.[1]
-         || null;
-    }
+    const jobPairs   = (SF.JOB_OPTIONS   || {})[spec.field] || [];
+    const fieldPairs = (SF.FIELD_OPTIONS || {})[spec.dept]  || [];
+    const job   = jobPairs.find(([id]) => id === spec.job)?.[1];
+    const field = fieldPairs.find(([id]) => id === spec.field)?.[1];
+    const sub = job || field;
     return sub ? `${dept} · ${sub} 기준` : `${dept} 기준`;
+  }
+
+  function paintJobSelect(spec) {
+    const select = $('cas-job-select');
+    if (!select) return;
+    const jobs = (window.SpecForm?.JOB_OPTIONS || {})[spec.field] || [];
+    if (!jobs.length) {
+      select.innerHTML = `<option value="${spec.job || ''}">${labelOf(spec).replace(' 기준', '')}</option>`;
+      select.disabled = true;
+      return;
+    }
+    select.disabled = false;
+    if (!selectedJob || !jobs.some(([id]) => id === selectedJob)) selectedJob = spec.job || jobs[0][0];
+    select.innerHTML = jobs.map(([id, label]) =>
+      `<option value="${id}" ${id === selectedJob ? 'selected' : ''}>${label}</option>`).join('');
   }
 
   // ── 진입점 ──────────────────────────────────────────────────
   function render() {
     if (!$('cas-hero')) return;
+    window.CASDashboardContext = null;
 
     const user = DB.currentUser();
     if (!user) return showEmpty('로그인하면 내 CAS 점수를 볼 수 있어요.',
       '로그인 후 스펙을 입력하면 선배 데이터와 비교해 점수를 계산해 드려요.');
 
-    const spec = DB.getSpec(user.username);
-    if (!spec || !spec.dept) return showEmpty('아직 스펙을 입력하지 않았어요.',
+    const savedSpec = DB.getSpec(user.username);
+    if (!savedSpec || !savedSpec.dept) return showEmpty('아직 스펙을 입력하지 않았어요.',
       '마이페이지에서 학점·어학·경험을 입력하면 점수가 계산됩니다.');
+    paintJobSelect(savedSpec);
+    const spec = { ...savedSpec, job: selectedJob || savedSpec.job };
 
     /* 벤치마크는 좁은 조건부터(직무 → 분야 → 학과) 넓혀 간다.
        레이더는 '비어 있을 때만' 넓히지만 여기서는 MIN_PEERS 를 채울 때까지 넓힌다 —
@@ -150,7 +148,10 @@ window.CASHero = (() => {
     const aggs = steps.map(q => Aggregator.compute(q)).filter(a => !a.empty);
     if (!aggs.length) return showEmpty('비교할 선배 데이터가 아직 없어요.',
       '같은 학과·직무 선배 데이터가 쌓이면 점수와 백분위가 표시됩니다.');
-    const agg = aggs.find(a => a.count >= MIN_PEERS) || aggs[aggs.length - 1];
+    /* 선택한 직무 데이터가 한 명이라도 있으면 그 직무를 그대로 쓴다.
+       예전처럼 5명을 채우려고 분야·학과로 넓히면 직무를 바꿔도 점수가 같아진다. */
+    const agg = aggs[0];
+    window.CASDashboardContext = { spec, agg };
 
     const catalogIds = (Aggregator.CERT_CATALOG[spec.dept] || []).map(c => c.id);
     const mine = scoreOf(spec, agg, catalogIds);
@@ -158,6 +159,7 @@ window.CASHero = (() => {
     /* 아래 비교 카드도 같은 벤치마크로 그린다 — 모집단이 다르면
        "상위 30% 인데 전 항목이 평균 이하" 같은 모순이 생긴다. */
     if (window.CASCompare) CASCompare.render(spec, agg);
+    if (typeof window.renderGap === 'function') window.renderGap(window.currentGapType || 'cert');
 
     // 점수 + 구성
     $('cas-score-num').textContent = mine.total;
@@ -171,11 +173,10 @@ window.CASHero = (() => {
     $('cas-dist-label').textContent = labelOf(spec) + ' 백분위 분포';
 
     if (peerTotals.length < MIN_PEERS) {
-      $('cas-rank').innerHTML =
-        `<i class="ti ti-trophy"></i>비교할 선배가 ${peerTotals.length}명뿐이라 순위는 아직 계산하지 않아요`;
+      $('cas-rank').innerHTML = '';
       $('cas-grade').textContent = '—';
-      $('cas-dist-help').textContent =
-        `백분위는 선배 ${MIN_PEERS}명 이상부터 표시돼요. 지금은 점수만 참고해 주세요.`;
+      $('cas-dist-label').textContent = labelOf(spec) + ' CAS 점수';
+      $('cas-dist-help').textContent = '';
       document.querySelector('.cas-bar-fill').style.width = '0%';
       document.querySelector('.cas-bar-marker').style.left = '0%';
       return;
@@ -194,5 +195,12 @@ window.CASHero = (() => {
     }, 80));
   }
 
-  return { render, scoreOf, percentileOf };
+  function selectJob(job) {
+    selectedJob = job || null;
+    render();
+    if (window.CASRadar) CASRadar.render();
+    if (typeof window.animateDashboard === 'function') window.animateDashboard();
+  }
+
+  return { render, selectJob, scoreOf, percentileOf };
 })();

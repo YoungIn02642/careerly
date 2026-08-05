@@ -137,6 +137,18 @@ html { scroll-behavior: smooth; }
 
 /* ── CAS 직무역량 레이더 ─────────────────────────────────── */
 .radar-card { padding: 22px 24px 20px; }
+.cas-title-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; }
+.cas-job-picker { display: flex; align-items: center; gap: 9px; color: var(--color-text-secondary); font-size: 12px; font-weight: 600; }
+.cas-job-picker select {
+  min-width: 180px; padding: 9px 32px 9px 11px; border: 1px solid var(--c-border);
+  border-radius: 7px; background: var(--c-surface); color: var(--c-ink); font: inherit;
+}
+.cas-job-picker select:focus { outline: 2px solid var(--brand-soft); border-color: var(--brand); }
+@media (max-width: 620px) {
+  .cas-title-row { align-items: stretch; flex-direction: column; gap: 12px; }
+  .cas-job-picker { justify-content: space-between; }
+  .cas-job-picker select { min-width: 0; flex: 1; }
+}
 .radar-head {
   display: flex; align-items: center; gap: 8px;
   font-size: 14px; font-weight: 700; color: var(--color-text-primary);

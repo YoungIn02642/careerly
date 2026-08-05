@@ -46,6 +46,7 @@
   const TOEFL_CURVE = [[40, 30], [60, 55], [80, 75], [100, 88], [120, 100]];
   const OPIC_INDEX  = { NL: 20, NM: 30, NH: 40, IL: 50, IM1: 58, IM2: 64, IM3: 70, IH: 80, AL: 92 };
   const TS_INDEX    = { NL: 20, NM: 30, NH: 42, IL: 55, IM: 72, IH: 85, AL: 95 };
+  const TOPIK_INDEX = { '1급': 25, '2급': 40, '3급': 55, '4급': 70, '5급': 85, '6급': 100 };
   /* TEPS 는 2018 개편 후 600점 만점. 공식 대응표가 없어 TEPS 관리위원회가 공개한
      등급 구간(1+급 ≈ 상위권)을 기준점 삼아 TOEIC 곡선과 같은 자리에 맞췄다.
      G-TELP 는 채용에서 사실상 Level 2 만 쓰이므로 100점 만점 기준 하나만 둔다. */
@@ -74,6 +75,7 @@
     if (typeof scores.gtelp === 'number') vals.push(interpolate(GTELP_CURVE, scores.gtelp));
     if (scores.opic          && OPIC_INDEX[scores.opic]          != null) vals.push(OPIC_INDEX[scores.opic]);
     if (scores.toeicSpeaking && TS_INDEX[scores.toeicSpeaking]   != null) vals.push(TS_INDEX[scores.toeicSpeaking]);
+    if (scores.topik         && TOPIK_INDEX[scores.topik]         != null) vals.push(TOPIK_INDEX[scores.topik]);
     return vals.length ? Math.max(...vals) : null;
   }
 
@@ -88,6 +90,7 @@
     { id: 'toefl',         label: 'TOEFL (iBT)',      kind: 'score', max: 120, placeholder: '예: 105' },
     { id: 'teps',          label: 'TEPS',             kind: 'score', max: 600, placeholder: '예: 387' },
     { id: 'gtelp',         label: 'G-TELP (Level 2)', kind: 'score', max: 100, placeholder: '예: 77' },
+    { id: 'topik',         label: 'TOPIK (한국어능력시험)', kind: 'level', levels: Object.keys(TOPIK_INDEX) },
   ];
 
   /* 제2외국어 — 점수가 아니라 등급으로만 받는다.
@@ -230,6 +233,7 @@
       toefl: s.toefl?.avg ?? undefined,
       opic: s.opic?.avg ?? undefined,
       toeicSpeaking: s.toeicSpeaking?.avg ?? undefined,
+      topik: s.topik?.avg ?? undefined,
     };
   }
 

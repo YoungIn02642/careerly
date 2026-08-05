@@ -5,6 +5,7 @@ const PAGES = [
   'main', 'login', 'signup', 'onboarding', 'mypage', 'career', 'backoffice',
   'dashboard', 'search', 'profile', 'mentoring',   // ← 구 mentoring.html
   'jd',                                            // 자소서 코치 (js/jd-coach.js)
+  'company',                                       // 회사 검색 (js/company-cover.js) — 자소서 코치의 앞 단계
   'mentor-profile',                                // 멘토 소개 입력 (js/mentor-profile.js)
 ];
 
@@ -27,8 +28,8 @@ function showPage(page) {
     }
   });
   document.getElementById('global-navbar').style.display = 'flex';
-  // 멘토 프로필은 "멘토 찾기"의 하위 화면이므로 같은 메뉴를 강조한다.
-  const navKey = page === 'profile' ? 'search' : page;
+  // 멘토 프로필은 "멘토 찾기"의, 회사 검색은 "자소서 코치"의 하위 화면이므로 같은 메뉴를 강조한다.
+  const navKey = page === 'profile' ? 'search' : page === 'company' ? 'jd' : page;
   updateNavActive(NAV_HIGHLIGHT.includes(navKey) ? navKey : '');
 
   if (page === 'mypage')     initMypage();
@@ -47,6 +48,7 @@ function showPage(page) {
   if (page === 'main')       { if (window.renderHome) renderHome(); }
   else if (window.leaveHome) leaveHome();   // 홈을 떠났으니 다음 진입 때 등장 효과를 다시 재생
   if (page === 'jd')         JdCoach.onEnter();
+  if (page === 'company')    CompanyCover.onEnter();
   if (MENTORING_PAGES.includes(page)) Mentoring.onEnter(page);
 
   if (page !== 'main') window.scrollTo({ top: 0 });

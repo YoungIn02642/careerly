@@ -71,10 +71,7 @@
     const runBtn = $('#jd-run');
     if (runBtn) runBtn.addEventListener('click', run);
 
-    const newsBtn = $('#jd-news-run');
-    if (newsBtn) newsBtn.addEventListener('click', runNews);
     const companyEl = $('#jd-company');
-    if (companyEl) companyEl.addEventListener('keydown', e => { if (e.key === 'Enter') runNews(); });
 
     const sampleBtn = $('#jd-sample');
     if (sampleBtn) sampleBtn.addEventListener('click', () => {
@@ -83,14 +80,6 @@
       $('#jd-text').focus();
     });
 
-    // 회사명 자동완성 — 스펙 입력 화면과 같은 캐시를 쓴다
-    if (companyEl) {
-      let t = null;
-      companyEl.addEventListener('input', () => {
-        clearTimeout(t);
-        t = setTimeout(() => fillCompanyOptions(companyEl.value), 400);
-      });
-    }
   }
 
   async function fillCompanyOptions(q) {
@@ -114,6 +103,11 @@
     if (newsStatus) newsStatus.textContent = '';
     const status = $('#jd-status');
     if (status) status.textContent = '';
+    const pickedCompany = localStorage.getItem('careerly_selected_company');
+    if (pickedCompany && $('#jd-company')) {
+      $('#jd-company').value = pickedCompany;
+      localStorage.removeItem('careerly_selected_company');
+    }
 
     /* 예전에는 여기서 "내 활동 N건을 불러왔어요" 안내를 띄웠다. 아무것도 안 한 상태에서
        먼저 말을 거는 배너라 페이지를 열자마자 눈에 걸렸고, 정작 필요한 시점(역량 카드에
@@ -160,11 +154,6 @@
       : '공고를 읽고 있어요…';
     resultEl.hidden = true;
     $('#jd-questions-result').hidden = true;
-
-    /* 회사 소식은 역량 분석과 **독립적으로** 흘려보낸다. 뉴스가 늦거나 실패해도
-       역량 카드는 그대로 나와야 하고, 반대도 마찬가지다(예전 구조의 원칙 유지). */
-    const company = ($('#jd-company')?.value || '').trim();
-    if (company.length >= 2) runNews();
 
     try {
       _last = await DB.coachJd(text, { useAi });
@@ -272,8 +261,8 @@
       ? `<div class="jd-block jd-block--mine">
            <div class="jd-block-h"><i class="ti ti-news"></i> 이 문항의 근거</div>
            <p class="jd-frame">${company
-             ? `아래 <b>“이 회사, 지금”</b>의 주간 기사 중 <b>한 건만</b> 고르세요. 공고 내용으로는 이 문항을 채울 수 없습니다.`
-             : `회사명을 입력하고 다시 분석하면 최근 5주 기사를 모아드려요. 지원동기는 공고가 아니라 회사의 최근 활동에서 나옵니다.`}</p>
+             ? `<b>회사 검색과 자소서</b> 페이지에서 정한 관점 하나를 사용하세요. 회사명은 이 문항의 작성 방향을 맞추는 보조 정보입니다.`
+             : `<b>회사 검색과 자소서</b> 페이지에서 회사를 먼저 선택하면 지원동기 작성 순서를 준비할 수 있어요.`}</p>
          </div>`
       : comps.length
         ? `<div class="jd-block jd-block--mine">
