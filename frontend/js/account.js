@@ -120,9 +120,12 @@ window.Account = (() => {
 
       <button class="btn-save"   id="ac-save">저장하기</button>
       <button class="btn-cancel" id="ac-cancel">취소</button>
+
+      ${passwordSection(user)}
     `;
 
     bind(user);
+    bindPassword(user);
   }
 
   /* 사진이 없으면 이름 첫 글자를 원 안에 띄운다 — 빈 회색 동그라미보다 낫다. */
@@ -244,6 +247,104 @@ window.Account = (() => {
     } finally {
       btn.disabled = false;
     }
+  }
+
+  // ── 비밀번호 변경 ───────────────────────────────────────────
+  /* 위의 '저장하기' 와 **따로** 저장한다. 프로필 저장에 묶으면 이름만 고치려다
+     비밀번호까지 건드리게 되고, 실패했을 때 무엇이 저장되고 무엇이 안 됐는지
+     알 수 없다. 서버도 /api/auth/password 로 따로 받는다.
+
+     규칙(8~20자·영문+숫자)은 서버 isValidPassword 와 같아야 한다 —
+     어긋나면 화면에서 통과시켜 놓고 400 이 난다. */
+  const PW_RE = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?]{8,20}$/;
+
+  function passwordSection(user) {
+    /* 소셜 가입자는 비밀번호 자체가 없다. 빈 입력칸을 보여주면 뭘 적어야 하는지
+       알 수 없으므로 아예 폼을 걷어내고 어디서 바꾸는지만 알려준다. */
+    if (user.provider) {
+      return `
+        <div class="sf-section">
+          <div class="sf-section-title"><i class="ti ti-lock"></i>비밀번호</div>
+          <p class="sf-sub">${esc(user.provider)} 로 가입한 계정이라 비밀번호가 없어요.
+             비밀번호는 ${esc(user.provider)} 에서 관리해 주세요.</p>
+        </div>`;
+    }
+
+    return `
+      <div class="sf-section">
+        <div class="sf-section-title"><i class="ti ti-lock"></i>비밀번호 변경</div>
+
+        <div class="success-box" id="pw-success">비밀번호를 변경했어요.</div>
+        <div class="error-box"   id="pw-error"></div>
+
+        <div class="form-group">
+          <label>현재 비밀번호</label>
+          <input type="password" id="pw-current" autocomplete="current-password"
+                 placeholder="지금 쓰는 비밀번호" />
+          <span class="field-hint">본인 확인을 위해 필요해요.</span>
+        </div>
+
+        <div class="sf-row-2">
+          <div class="form-group">
+            <label>새 비밀번호</label>
+            <input type="password" id="pw-new" autocomplete="new-password"
+                   placeholder="8~20자, 영문과 숫자 포함" />
+          </div>
+          <div class="form-group">
+            <label>새 비밀번호 확인</label>
+            <input type="password" id="pw-new2" autocomplete="new-password"
+                   placeholder="한 번 더 입력" />
+          </div>
+        </div>
+
+        <button class="btn-inline" id="pw-submit" disabled>비밀번호 변경</button>
+      </div>`;
+  }
+
+  function bindPassword(user) {
+    if (user.provider) return;
+
+    const cur = document.getElementById('pw-current');
+    const nw = document.getElementById('pw-new');
+    const nw2 = document.getElementById('pw-new2');
+    const btn = document.getElementById('pw-submit');
+    const err = document.getElementById('pw-error');
+    const ok = document.getElementById('pw-success');
+
+    /* 세 칸이 다 차기 전에는 잠가 둔다. 확인란까지 채우기 전에 눌러
+       '안 맞는다' 는 오류를 보는 것보다, 못 누르는 편이 덜 성가시다. */
+    const sync = () => { btn.disabled = !cur.value || !nw.value || !nw2.value; };
+    [cur, nw, nw2].forEach(el => el.addEventListener('input', sync));
+
+    const fail = msg => {
+      err.textContent = msg;
+      err.style.display = 'block';
+      ok.style.display = 'none';
+    };
+
+    btn.addEventListener('click', async () => {
+      err.style.display = 'none';
+      ok.style.display = 'none';
+
+      /* 두 번 입력받는 것은 오타로 자기 계정에서 잠기는 일을 막기 위해서다.
+         이건 서버가 알 수 없는 검사라 여기서만 한다. */
+      if (nw.value !== nw2.value) return fail('새 비밀번호가 서로 달라요.');
+      if (!PW_RE.test(nw.value)) return fail('비밀번호는 8~20자이며 영문과 숫자를 모두 포함해야 해요.');
+      if (nw.value === cur.value) return fail('지금 쓰는 비밀번호와 다른 것으로 정해 주세요.');
+
+      btn.disabled = true;
+      try {
+        await DB.changePassword({ currentPassword: cur.value, newPassword: nw.value });
+        /* 성공하면 세 칸을 비운다. 남겨 두면 화면에 비밀번호가 계속 떠 있고,
+           '변경됐다' 는 안내와 채워진 칸이 같이 보여 또 눌러야 하나 싶어진다. */
+        cur.value = nw.value = nw2.value = '';
+        ok.style.display = 'block';
+      } catch (e) {
+        fail(e.message);
+      } finally {
+        sync();
+      }
+    });
   }
 
   // ── 탈퇴 ────────────────────────────────────────────────────

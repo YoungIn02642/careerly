@@ -38,6 +38,10 @@ const toUser = r => r && ({
   /* MySQL 은 BOOLEAN 을 TINYINT 로 준다(0/1). 그대로 흘리면 화면에서
      `user.isAdmin === true` 가 false 가 되어 조용히 권한이 없는 것처럼 보인다. */
   isAdmin: !!r.is_admin,
+  /* 멘토⇄멘티 전환 신청 — 셋 다 있거나 셋 다 NULL 이다(requestRoleChange 주석). */
+  pendingRole: r.pending_role ?? null,
+  roleChangeRequestedAt: r.role_change_requested_at ?? null,
+  roleChangeEffectiveAt: r.role_change_effective_at ?? null,
 });
 
 /* JSON 컬럼은 드라이버가 파싱해 주지만, 옛 데이터나 수동 입력으로 문자열이 올 수 있다. */
@@ -135,6 +139,14 @@ const users = {
     return users.byId(id);
   },
 
+  /* 비밀번호만 따로 바꾼다. update() 의 허용 목록에 password_hash 를 넣지 않은 것은
+     일부러다 — 화면에서 오는 patch 가 그대로 흘러드는 경로라, 해시가 아닌 값이
+     들어가면 그 계정으로 다시는 로그인할 수 없다. 여기는 이미 해시된 값만 받는다. */
+  async updatePassword(id, passwordHash) {
+    await query('UPDATE users SET password_hash=? WHERE id=?', [passwordHash, id]);
+    return users.byId(id);
+  },
+
   /* ADMIN_USERNAMES 에 적힌 아이디를 관리자로 올린다. 부팅 때 한 번 돈다.
      '첫 관리자를 누가 만드나' 문제를 푸는 유일한 경로다 — 이게 없으면 백오피스에
      들어갈 수 있는 사람이 아무도 없어서 다른 관리자도 지정할 수 없다.
@@ -149,6 +161,30 @@ const users = {
       `SELECT username FROM users WHERE is_admin=TRUE AND username IN (${list.map(() => '?').join(',')})`,
       list);
     return rows.map(r => r.username);
+  },
+
+  /* ── 멘토⇄멘티 전환 신청 ────────────────────────────────────
+     가입 10일 후부터 신청할 수 있고, 신청한 날로부터 7일 뒤 실제로 role 이 바뀐다
+     (조건 판단은 server.js 라우트가 한다 — 여기는 값만 넣고 뺀다). */
+  async requestRoleChange(id, nextRole, effectiveAt) {
+    await query(
+      `UPDATE users SET pending_role=?, role_change_requested_at=NOW(), role_change_effective_at=?
+       WHERE id=?`, [nextRole, effectiveAt, id]);
+    return users.byId(id);
+  },
+
+  /* 예정일이 지난 신청을 실제로 반영한다. **매 요청마다 로그인한 사용자 걸 확인한다**
+     (server.js getCurrentUser) — 스케줄러가 없어도 다음에 그 사람이 뭔가를 요청하는
+     순간 자연히 적용된다. 관리자의 ADMIN_USERNAMES 부팅 반영과 같은 '나중에 읽을 때
+     적용' 방식이다. */
+  async finalizeRoleChangeIfDue(user) {
+    if (!user?.pendingRole || !user.roleChangeEffectiveAt) return user;
+    if (new Date(user.roleChangeEffectiveAt).getTime() > Date.now()) return user;
+    await query(
+      `UPDATE users SET role=pending_role, pending_role=NULL,
+                        role_change_requested_at=NULL, role_change_effective_at=NULL
+       WHERE id=?`, [user.id]);
+    return users.byId(user.id);
   },
 
   async countByRole() {

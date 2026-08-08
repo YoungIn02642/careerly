@@ -227,6 +227,18 @@ window.SpecForm = (() => {
           <div class="sf-hint-inline">가고 싶은 기업을 담아두면, 그 기업에 간 선배들의 스펙을 모아서 보여드릴 예정이에요</div>
         </div>
         `}
+
+        ${!isMentor ? `
+        <!-- 멘티→멘토 전환 신청. 멘토→멘티는 없다(뒤로 돌아가는 방향은 만들지 않기로 했다).
+             가입 10일 후부터 신청 가능하고, 신청 뒤 7일 후 실제로 바뀐다
+             (server.js requestRoleChange 주석). 상태 문구는 initRoleChange() 가 채운다. -->
+        <div class="sf-role-change">
+          <div><b>회원 유형</b><p>현재 <strong>멘티</strong>로 이용 중입니다.</p></div>
+          <button type="button" id="sf-role-change-btn">멘토로 변경 신청</button>
+          <small>가입일로부터 10일이 지나야 신청할 수 있으며, 신청한 날로부터 7일 후 변경됩니다.</small>
+          <div class="sf-role-status" id="sf-role-status"></div>
+        </div>
+        ` : ''}
       </div>
 
       ${isMentor ? `
@@ -354,6 +366,39 @@ window.SpecForm = (() => {
     initMajorSearch();
     initUniversitySearch();
     initCompanyAutoClassify();
+    initRoleChange(user);
+  }
+
+  /* ── 멘티→멘토 전환 신청 ────────────────────────────────────
+     멘토→멘티는 없다 — 이 블록은 render() 가 멘티에게만 그린다.
+     서버가 조건(가입 10일 경과·중복 신청 여부)을 판단해 에러 메시지로 돌려준다 —
+     여기서는 그 메시지를 그대로 보여줄 뿐, 날짜 계산을 다시 하지 않는다.
+     이미 신청이 진행 중이면(user.pendingRole) 버튼을 막고 예정일만 보여준다. */
+  function initRoleChange(user) {
+    const btn = document.getElementById('sf-role-change-btn');
+    const status = document.getElementById('sf-role-status');
+    if (!btn || !status) return;
+
+    if (user.pendingRole) {
+      status.textContent = `멘토 변경 예정일: ${new Date(user.roleChangeEffectiveAt).toLocaleDateString('ko-KR')}`;
+      btn.disabled = true;
+      return;
+    }
+    if (user.roleChangeAvailableAt && Date.now() < new Date(user.roleChangeAvailableAt).getTime()) {
+      btn.disabled = true;
+      status.textContent = `변경 신청 가능일: ${new Date(user.roleChangeAvailableAt).toLocaleDateString('ko-KR')}`;
+      return;
+    }
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try {
+        const updated = await DB.requestRoleChange();
+        status.textContent = `멘토 변경 예정일: ${new Date(updated.roleChangeEffectiveAt).toLocaleDateString('ko-KR')}`;
+      } catch (e) {
+        btn.disabled = false;
+        status.textContent = e.message;
+      }
+    });
   }
 
   /* ── 학교 검색 ──────────────────────────────────────────────

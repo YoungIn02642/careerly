@@ -40,6 +40,12 @@ CREATE TABLE IF NOT EXISTS users (
   -- 최초 관리자는 ADMIN_USERNAMES 환경변수로 지정한다(server.js 부팅 시 반영).
   is_admin       BOOLEAN      NOT NULL DEFAULT FALSE,
   created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  -- 멘토⇄멘티 전환 신청. 가입 10일 후부터 신청할 수 있고, 신청 후 7일 뒤 실제로 바뀐다
+  -- (server.js requestRoleChange 주석). 세 값은 항상 같이 채워지고 같이 비워진다 —
+  -- 신청이 없으면 셋 다 NULL 이다.
+  pending_role             ENUM('mentor','mentee') NULL,
+  role_change_requested_at DATETIME NULL,
+  role_change_effective_at DATETIME NULL,
   -- 소셜 로그인은 (제공자, 제공자 계정) 으로 회원을 찾는다. 매 로그인마다 조회된다.
   UNIQUE KEY uk_provider (provider, provider_id),
   -- 기존 회원 1,508명은 ci 가 NULL 이다. MySQL 은 NULL 을 중복으로 보지 않아
@@ -257,4 +263,37 @@ CREATE TABLE IF NOT EXISTS jobs (
   CONSTRAINT fk_jobs_middle FOREIGN KEY (middle_code) REFERENCES job_middles(code) ON DELETE CASCADE,
   KEY idx_jobs_middle (middle_code),
   KEY idx_jobs_wage (avg_wage)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ════════════════════════════════════════════════════════════
+--  커리어 인사이트 — 정보를 주고받는 커뮤니티 게시판
+-- ════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS insight_posts (
+  id          VARCHAR(32)  PRIMARY KEY,
+  user_id     VARCHAR(32)  NOT NULL,
+  -- 카테고리는 코드에 고정 목록으로 둔다(frontend/js/insight.js CATEGORIES 가 단일 출처).
+  -- ENUM 으로 박아 두면 카테고리 하나 늘릴 때마다 ALTER 가 필요해 VARCHAR 로 둔다.
+  category    VARCHAR(16)  NOT NULL,
+  title       VARCHAR(200) NOT NULL,
+  body        TEXT         NOT NULL,
+  view_count  INT          NOT NULL DEFAULT 0,
+  created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  -- 글쓴이가 탈퇴하면 글도 같이 지운다. 남의 글만 남고 작성자가 사라지면
+  -- '탈퇴한 회원' 처리를 화면마다 따로 해야 한다 — 다른 사용자 소유 데이터
+  -- (스펙·멘토링 신청)와 같은 원칙이다.
+  CONSTRAINT fk_ipost_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  KEY idx_ipost_category (category, created_at),
+  KEY idx_ipost_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS insight_comments (
+  id          VARCHAR(32)  PRIMARY KEY,
+  post_id     VARCHAR(32)  NOT NULL,
+  user_id     VARCHAR(32)  NOT NULL,
+  body        VARCHAR(1000) NOT NULL,
+  created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_icmt_post FOREIGN KEY (post_id) REFERENCES insight_posts(id) ON DELETE CASCADE,
+  CONSTRAINT fk_icmt_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  KEY idx_icmt_post (post_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
