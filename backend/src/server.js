@@ -523,6 +523,38 @@ app.post('/api/auth/withdraw', requireAuth, ah(async (req, res) => {
   res.json({ message: '탈퇴가 완료되었습니다.' });
 }));
 
+/* 비밀번호 변경 — 로그인한 본인이 스스로 바꾼다.
+   현재 비밀번호를 다시 받는 이유는 자리를 비운 사이(로그인된 채로 남은 화면)
+   남이 비밀번호를 바꿔 계정을 통째로 가져가는 것을 막기 위해서다.
+   세션은 유지한다 — 방금 본인 확인을 마친 사람이라 다시 로그인시킬 이유가 없고,
+   sessions.create 가 한 계정당 세션을 하나만 두므로 남은 다른 기기도 없다. */
+app.post('/api/auth/password', requireAuth, ah(async (req, res) => {
+  const { currentPassword, newPassword } = req.body || {};
+
+  /* 소셜 가입자는 passwordHash 가 없다. 여기서 비밀번호를 새로 만들어 주면
+     소셜 로그인과 아이디 로그인이 뒤섞여 '어느 쪽으로 들어왔는지' 를 알 수 없게 된다. */
+  if (!req.user.passwordHash) {
+    return res.status(400).json({
+      error: '소셜 계정은 비밀번호가 없어요. 가입할 때 쓴 소셜 서비스에서 관리해 주세요.',
+    });
+  }
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: '현재 비밀번호와 새 비밀번호를 모두 입력해 주세요.' });
+  }
+  if (!await bcrypt.compare(currentPassword, req.user.passwordHash)) {
+    return res.status(401).json({ error: '현재 비밀번호가 일치하지 않습니다.' });
+  }
+  if (!isValidPassword(newPassword)) {
+    return res.status(400).json({ error: '비밀번호는 8~20자이며 영문과 숫자를 모두 포함해야 합니다.' });
+  }
+  if (currentPassword === newPassword) {
+    return res.status(400).json({ error: '지금 쓰는 비밀번호와 다른 것으로 정해 주세요.' });
+  }
+
+  await repo.users.updatePassword(req.user.id, await bcrypt.hash(newPassword, 10));
+  res.json({ message: '비밀번호가 변경되었습니다.' });
+}));
+
 app.post('/api/auth/logout', ah(async (req, res) => {
   await repo.sessions.deleteByToken(req.cookies[SESSION_COOKIE]);
   res.clearCookie(SESSION_COOKIE);
