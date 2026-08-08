@@ -264,6 +264,12 @@ window.DB = (() => {
     _mySpec = null;
   }
 
+  /* 비밀번호 변경. 캐시(_me)에는 비밀번호가 없으므로 비울 것이 없고,
+     서버가 세션을 유지하므로 로그인 상태도 그대로다. */
+  async function changePassword({ currentPassword, newPassword }) {
+    await api('POST', '/api/auth/password', { currentPassword, newPassword });
+  }
+
   async function logout() {
     await api('POST', '/api/auth/logout');
     _me = null;
@@ -318,7 +324,7 @@ window.DB = (() => {
     hydrate, refreshSpecs, refreshUsers,
     currentUser, getAllSpecs, getSpec, getUsers, countByRole, stats,
     checkUsername, verifyStatus, verifyRequest,
-    createUser, login, logout, withdraw, completeOnboarding, confirmPayment, updateUser, requestRoleChange, upsertSpec, getProfile, updateProfile,
+    createUser, login, logout, withdraw, changePassword, completeOnboarding, confirmPayment, updateUser, requestRoleChange, upsertSpec, getProfile, updateProfile,
     classifyCompany, suggestCompanies, suggestCerts, suggestMajors, suggestUniversities, classifyMajor, jobCatalog,
     analyzeCas, coachJd,
     insightCategories, listInsights, getInsight, createInsight, updateInsight, deleteInsight,

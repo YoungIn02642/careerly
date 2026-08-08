@@ -139,6 +139,14 @@ const users = {
     return users.byId(id);
   },
 
+  /* 비밀번호만 따로 바꾼다. update() 의 허용 목록에 password_hash 를 넣지 않은 것은
+     일부러다 — 화면에서 오는 patch 가 그대로 흘러드는 경로라, 해시가 아닌 값이
+     들어가면 그 계정으로 다시는 로그인할 수 없다. 여기는 이미 해시된 값만 받는다. */
+  async updatePassword(id, passwordHash) {
+    await query('UPDATE users SET password_hash=? WHERE id=?', [passwordHash, id]);
+    return users.byId(id);
+  },
+
   /* ADMIN_USERNAMES 에 적힌 아이디를 관리자로 올린다. 부팅 때 한 번 돈다.
      '첫 관리자를 누가 만드나' 문제를 푸는 유일한 경로다 — 이게 없으면 백오피스에
      들어갈 수 있는 사람이 아무도 없어서 다른 관리자도 지정할 수 없다.
