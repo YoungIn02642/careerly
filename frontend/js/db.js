@@ -200,19 +200,23 @@ window.DB = (() => {
   async function insightCategories() {
     return api('GET', '/api/insights/categories');
   }
-  async function listInsights({ category = '', page = 1, limit = 20 } = {}) {
+  /* q(검색어) · scope('title' | 'all') 은 없으면 안 보낸다 — 서버 기본값이 있고,
+     빈 값을 실어 보내면 주소가 지저분해져 어디까지가 실제 조건인지 안 보인다. */
+  async function listInsights({ category = '', page = 1, limit = 20, q = '', scope = 'title' } = {}) {
     const qs = new URLSearchParams({ page, limit });
     if (category) qs.set('category', category);
+    if (q) { qs.set('q', q); qs.set('scope', scope); }
     return api('GET', '/api/insights?' + qs.toString());
   }
   async function getInsight(id) {
     return api('GET', '/api/insights/' + encodeURIComponent(id));
   }
-  async function createInsight({ category, title, body }) {
-    return api('POST', '/api/insights', { category, title, body });
+  /* isNotice 는 관리자만 의미가 있다 — 서버가 권한을 확인하고, 아니면 조용히 무시한다. */
+  async function createInsight({ category, title, body, isNotice = false }) {
+    return api('POST', '/api/insights', { category, title, body, isNotice });
   }
-  async function updateInsight(id, { title, body }) {
-    return api('PUT', '/api/insights/' + encodeURIComponent(id), { title, body });
+  async function updateInsight(id, { title, body, isNotice }) {
+    return api('PUT', '/api/insights/' + encodeURIComponent(id), { title, body, isNotice });
   }
   async function deleteInsight(id) {
     return api('DELETE', '/api/insights/' + encodeURIComponent(id));

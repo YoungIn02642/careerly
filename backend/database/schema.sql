@@ -277,6 +277,9 @@ CREATE TABLE IF NOT EXISTS insight_posts (
   title       VARCHAR(200) NOT NULL,
   body        TEXT         NOT NULL,
   view_count  INT          NOT NULL DEFAULT 0,
+  -- 공지글. 관리자만 올릴 수 있고 목록 맨 위에 고정된다.
+  -- 카테고리와 별개다 — 운영방침은 '자유'에서도 '질문'에서도 보여야 한다.
+  is_notice   BOOLEAN      NOT NULL DEFAULT FALSE,
   created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   -- 글쓴이가 탈퇴하면 글도 같이 지운다. 남의 글만 남고 작성자가 사라지면
@@ -284,7 +287,9 @@ CREATE TABLE IF NOT EXISTS insight_posts (
   -- (스펙·멘토링 신청)와 같은 원칙이다.
   CONSTRAINT fk_ipost_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   KEY idx_ipost_category (category, created_at),
-  KEY idx_ipost_user (user_id)
+  KEY idx_ipost_user (user_id),
+  -- 목록은 항상 '공지 먼저, 최신순'으로 읽는다
+  KEY idx_ipost_notice (is_notice, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS insight_comments (
