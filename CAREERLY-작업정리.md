@@ -22,7 +22,7 @@
 | 백엔드 | Node.js + Express (`backend/src/server.js`) |
 | 저장소 | JSON 파일 DB (`backend/data/db.json`) — `store.js` 가 접근 레이어 |
 | 인증 | bcryptjs + cookie-parser 세션 쿠키 |
-| AI | **Groq**(`llama-3.3-70b-versatile`) 기본 / 로컬 **Ollama** 는 오프라인 대안 (2026-07-28 전환, 2-3-1) |
+| AI | **Groq**(`llama-3.3-70b-versatile`) **전용** — Ollama 경로는 2026-08 제거 (2-3-1) |
 
 ### 실행
 
@@ -69,7 +69,7 @@ careerly
 │  │  ├─ jd-competency.js      # ★ 역량 원형 14종 + 가이드 조립 (자소서 코치)
 │  │  ├─ job-trends.js         # ★ 채용공고 → 직무별 역량 요구 빈도 집계·조회
 │  │  ├─ news.js               # ★ 회사 뉴스 → 지원동기 소재 + 키워드 추출
-│  │  ├─ ai-provider.js        # LLM 호출 한 겹 (Ollama/Groq) — 두 라우트가 공유
+│  │  ├─ ai-provider.js        # LLM 호출 한 겹 (Groq 전용) — 세 라우트가 공유
 │  │  ├─ spec-parse.js
 │  │  ├─ demo-seed.js
 │  │  └─ routes/  careerData.js · recommendations.js · casAnalyze.js · jdCoach.js
@@ -308,11 +308,11 @@ https://www.work24.go.kr/cm/openApi/call/wk/callOpenApiSvcInfo210L31.do
 | `CAREERNET_API_KEY` | 커리어넷 자체 키(data.go.kr 키와 다르다). 대학 목록 수집 → 스펙 입력의 '학교' 자동완성. **비워두면 자동완성만 빠지고 직접 입력은 그대로 된다.** 점검: `node scripts/check-careernet-api.js` |
 | `ADMIN_USERNAMES` | 백오피스에 들어갈 수 있는 아이디(쉼표 구분). 서버 부팅 때 `users.is_admin` 을 켠다. **첫 관리자를 만드는 유일한 방법** — 비어 있으면 아무도 백오피스에 못 들어간다. 이름을 빼도 권한이 해제되지는 않는다(설정 실수로 전원이 잠기지 않게). |
 | `NICE_SITE_CODE` / `NICE_SITE_PASSWORD` / `NICE_RETURN_URL` | 본인확인(CI) — '한 사람 = 한 계정'. **비워두면 개발 모드**(휴대폰 번호 해시로 모의 CI)로 돌아 중복 차단까지 그대로 확인된다. 단 `NODE_ENV=production` 에서는 개발 모드가 503 으로 막히므로 **배포 전 실제 키 필수**. 자세한 것은 `src/nice-auth.js` |
-| `CAS_AI_PROVIDER` | **`groq`(기본)** \| `ollama` |
+| ~~`CAS_AI_PROVIDER`~~ | 폐지 (2026-08, Groq 전용) |
 | `GROQ_API_KEY` | **필수** (미설정 시 AI 기능만 503). 무료 발급: https://console.groq.com/keys |
 | `GROQ_MODEL` | 기본 `llama-3.3-70b-versatile`. **모델 폐기 공지가 뜨면 여기만 바꾼다** |
-| `OLLAMA_HOST` | `http://127.0.0.1:11434` (ollama 를 쓸 때만) |
-| `OLLAMA_MODEL` | `qwen3:8b` (ollama 를 쓸 때만) |
+| ~~`OLLAMA_HOST`~~ | 폐지 |
+| ~~`OLLAMA_MODEL`~~ | 폐지 |
 | `CAS_AI_TIMEOUT_MS` | `240000` |
 | `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET` | **뉴스 검색**. NCP NAVER API Hub 의 Application 키 — 13-4 의 표를 먼저 볼 것 |
 
