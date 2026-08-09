@@ -7,13 +7,12 @@
    프로바이더·모델·응답을 눈으로 확인하는 용도다. */
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
-const { callModel, modelLabel, PROVIDER, GROQ_MODEL, OLLAMA_HOST, OLLAMA_MODEL } =
-  require('../src/ai-provider');
+const { callModel, modelLabel, PROVIDER, GROQ_MODEL } = require('../src/ai-provider');
 
 (async () => {
-  console.log(`CAS_AI_PROVIDER = ${PROVIDER}`);
-  if (PROVIDER === 'groq') {
+  {
     const key = (process.env.GROQ_API_KEY || '').trim();
+    console.log(`프로바이더      = ${PROVIDER}`);
     console.log(`GROQ_MODEL      = ${GROQ_MODEL}`);
     console.log(`GROQ_API_KEY    = ${key ? `${key.slice(0, 4)}… (${key.length}자)` : '(비어 있음)'}`);
     if (!key) {
@@ -21,9 +20,6 @@ const { callModel, modelLabel, PROVIDER, GROQ_MODEL, OLLAMA_HOST, OLLAMA_MODEL }
       console.log('  backend/.env 의 GROQ_API_KEY= 뒤에 붙여넣고 다시 실행하세요.');
       return;
     }
-  } else {
-    console.log(`OLLAMA_HOST     = ${OLLAMA_HOST}`);
-    console.log(`OLLAMA_MODEL    = ${OLLAMA_MODEL}`);
   }
   console.log();
 
@@ -56,8 +52,8 @@ const { callModel, modelLabel, PROVIDER, GROQ_MODEL, OLLAMA_HOST, OLLAMA_MODEL }
   }
 
   console.log();
-  console.log('이제 스펙 입력의 "AI로 한 번에 입력" 과 자소서 코치 AI 보강이 동작합니다.');
-  if (PROVIDER === 'groq' && secs > 10) {
+  console.log('이제 스펙 입력의 "AI로 한 번에 입력", 자소서 코치 AI 보강·AI 초안이 동작합니다.');
+  if (secs > 10) {
     console.log('(Groq 치고 느립니다 — 네트워크나 쿼터 대기를 의심해 보세요.)');
   }
 })();
