@@ -106,5 +106,90 @@ const onlyLoose = NEWS.weeklyPicks(NEWS.cluster([loose[0]]), NOW, '아주산업'
 ok('제목 후보가 하나도 없으면 그때만 본문 언급을 쓰고 경고를 남긴다',
    onlyLoose && onlyLoose.looseMatch === true, `→ ${onlyLoose?.title}`);
 
+/* ── 목록용 중복 제거 (dedupeStories) ─────────────────────────
+   회사 리포트의 '최근 기사 5건'이 실제로 서로 다른 사건 5개여야 한다.
+   아래 제목들은 2026-08-09 삼성전자 실제 응답에서 그대로 가져온 것이다 —
+   5건이 뜨는데 사건은 '히트펌프'와 '테일러팹 인턴' 둘뿐이었다. */
+const story = (title, i) => ({ title, summary: '', url: `s${i}`, date: '2026-08-09' });
+const realFive = [
+  '삼성전자, 美 국립연구소와 영하 30도 극저온 차세대 히트펌프 기술 개발',
+  '영하 30도에서 온수 콸콸…삼성전자, 美연구소와 기술 개발',
+  '삼성전자, 영하 30도 견디는 난방기술 개발한다…알래스카서 실증',
+  '삼성전자, 美 테일러팹 첫 인턴 뽑는다…가동 앞두고 인재 확보 속도',
+  '삼성전자, 美 테일러팹 인턴 선발…대만 TSMC와 인재 쟁탈전',
+].map(story);
+
+const distinct = NEWS.dedupeStories(realFive, '삼성전자');
+ok('같은 사건을 다룬 기사는 한 건으로 줄인다 (실측 5건 → 2건)',
+   distinct.length === 2, `→ ${distinct.length}건`);
+ok('대표는 먼저 온 기사다 (관련도 순서를 유지한다)',
+   distinct[0].title.includes('국립연구소') && distinct[1].title.includes('첫 인턴'),
+   `→ ${distinct.map(d => d.title.slice(0, 14)).join(' / ')}`);
+
+/* 문턱을 낮추면 흔한 단어 두어 개만 겹쳐도 남남이 묶인다. 서로 다른 사건은
+   반드시 남아 있어야 한다 — 소재를 하나 지우는 쪽이 중복보다 나쁘다. */
+const differentEvents = [
+  '삼성전자, HBM4 양산 라인 증설 검토',
+  '삼성전자, 파운드리 2나노 수주 확대',
+  '삼성전자, 인도 공장 가동률 상향',
+].map(story);
+ok('서로 다른 사건은 하나도 지우지 않는다',
+   NEWS.dedupeStories(differentEvents, '삼성전자').length === 3);
+
+/* 회사명을 빼고 세지 않으면, 모든 기사가 회사명 하나로 겹쳐 보인다. */
+const twoWordTitles = [
+  '삼성전자 실적 발표', '삼성전자 신규 채용',
+].map(story);
+ok('회사명만 겹치는 짧은 제목은 같은 사건으로 보지 않는다',
+   NEWS.dedupeStories(twoWordTitles, '삼성전자').length === 2);
+
+ok('제목이 비어 토큰이 없으면 목록에서 뺀다',
+   NEWS.dedupeStories([story('', 0), ...differentEvents], '삼성전자').length === 3);
+
+/* ── 회사 이야기가 아닌 기사 걸러내기 (onTopic) ─────────────
+   실측(2026-08 'KT'): 5건 중 3건이 프로야구 KT위즈 기사였다. 구단 이름이 회사명과
+   같은 회사가 많아서, 이 걸러내기가 없으면 '최근 이슈'가 야구 순위표가 된다. */
+const art = (title, summary = '') => ({ title, summary, url: 'u', date: '2026-08-09' });
+
+const sports = [
+  art('선두 KT, ‘폭염 방학’도 바쁘다…후반기 선두 수성 준비',
+      '최근 6연승을 달리며 선두로 치고 올라온 KT는 순위 경쟁에서… 새 외국인 투수 다니엘'),
+  art('KT 타선 이끄는 98억 FA 듀오', '타선의 중심에 선 두 선수'),
+  art('‘케이티♥’ 송중기, 어딜 봐서 40살?…로맨스 찍을 만하네', '배우 송중기의 근황 화보'),
+];
+ok('야구 기사는 뺀다 (사업 단어가 우연히 하나 있어도)',
+   NEWS.onTopic([sports[0]]).length === 0);
+ok('선수 관련 기사도 뺀다', NEWS.onTopic([sports[1]]).length === 0);
+ok('연예 기사도 뺀다', NEWS.onTopic([sports[2]]).length === 0);
+
+const corporate = [
+  art('KT, 전국 매장 410곳 무더위 쉼터로 개방', 'KT가 전국 매장을 개방한다'),
+  art('클라이온, KT클라우드 출신 김주성 신임 대표 선임…AX 확장 속도', '대표 선임 소식'),
+  art('삼성전자, 美 테일러팹 첫 인턴 뽑는다', '인재 확보에 속도를 낸다'),
+];
+ok('회사 기사는 그대로 남긴다', NEWS.onTopic(corporate).length === 3);
+
+/* 스포츠 단어가 하나만 있고 사업 내용이 같이 있으면 남긴다 — 기업 마케팅 기사가
+   'KT스포츠 팝업' 처럼 스포츠를 소재로 쓰는 일이 있다. */
+ok('스포츠 단어 1종 + 사업 내용이면 남긴다',
+   NEWS.onTopic([art('KT, 프로야구 팬 대상 요금제 출시', '신규 요금제를 출시한다')]).length === 1);
+
+/* ── 같은 사건 묶기 · 고유명사 신호 ────────────────────────── */
+const sameEvent = [
+  art('박윤영 KT 대표 "AIDC가 AX 핵심"…현장 경영 나서'),
+  art('KT 박윤영 대표, 목동 데이터센터 방문…AI 인프라 운영 점검'),
+].map((a, i) => ({ ...a, url: `same${i}` }));
+ok('같은 사람이 주인공인 같은 일정은 한 건으로 줄인다',
+   NEWS.dedupeStories(sameEvent, 'KT').length === 1,
+   `→ ${NEWS.dedupeStories(sameEvent, 'KT').length}건`);
+
+/* 특징어가 없으면 겹침이 비슷해도 묶지 않는다 — 실측에서 이 둘이 갈리는 지점이었다. */
+const differentEvent = [
+  art('KT, 전국 매장 410곳 무더위 쉼터로 개방'),
+  art('박윤영 KT 대표 "AIDC가 AX 핵심"…현장 경영 나서'),
+].map((a, i) => ({ ...a, url: `diff${i}` }));
+ok('공통 고유명사가 없으면 다른 사건으로 둔다',
+   NEWS.dedupeStories(differentEvent, 'KT').length === 2);
+
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
 process.exit(fail ? 1 : 0);

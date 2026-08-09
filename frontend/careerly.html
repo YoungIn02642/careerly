@@ -47,7 +47,9 @@
   <nav class="nav-links">
     <span class="nav-link" data-nav="career" onclick="navigate('career')">커리어 로드맵</span>
     <span class="nav-link" data-nav="dashboard" onclick="navigate('dashboard')">CAS</span>
-    <span class="nav-link" data-nav="jd" onclick="navigate('jd')">자소서 코치</span>
+    <!-- 이 구획은 '회사 검색 → 자소서 코치' 순서다. 먼저 회사를 정해야 지원동기
+         근거가 생기므로 진입은 항상 회사 검색(#company)으로 보낸다. -->
+    <span class="nav-link" data-nav="jd" onclick="navigate('company')">회사·자소서</span>
     <span class="nav-link" data-nav="search" onclick="navigate('search')">멘토 찾기</span>
     <span class="nav-link" data-nav="mentoring" onclick="navigate('mentoring')">내 멘토링</span>
     <span class="nav-link" data-nav="insight" onclick="navigate('insight')">커리어 인사이트</span>
@@ -105,7 +107,7 @@
     <nav class="nav-drawer-links">
       <span class="nav-link" data-nav="career"    onclick="navigate('career')">커리어 로드맵</span>
       <span class="nav-link" data-nav="dashboard" onclick="navigate('dashboard')">CAS</span>
-      <span class="nav-link" data-nav="jd"        onclick="navigate('jd')">자소서 코치</span>
+      <span class="nav-link" data-nav="jd"        onclick="navigate('company')">회사·자소서</span>
       <span class="nav-link" data-nav="search"    onclick="navigate('search')">멘토 찾기</span>
       <span class="nav-link" data-nav="mentoring" onclick="navigate('mentoring')">내 멘토링</span>
       <span class="nav-link" data-nav="insight"   onclick="navigate('insight')">커리어 인사이트</span>
@@ -189,7 +191,7 @@
            acc-a / acc-b 는 색을 번갈아 주는 클래스라 순서를 바꾸면 같이 다시 매겨야 한다. -->
       <div class="ql acc-a" onclick="navigate('career')"><div class="ql-ic"><i class="ti ti-map-2"></i></div><div class="ql-label">커리어 로드맵</div></div>
       <div class="ql acc-b" onclick="navigate('dashboard')"><div class="ql-ic"><i class="ti ti-target-arrow"></i></div><div class="ql-label">CAS 점수</div></div>
-      <div class="ql acc-a" onclick="navigate('jd')"><div class="ql-ic"><i class="ti ti-file-text"></i></div><div class="ql-label">자소서 코치</div></div>
+      <div class="ql acc-a" onclick="navigate('company')"><div class="ql-ic"><i class="ti ti-file-text"></i></div><div class="ql-label">회사·자소서</div></div>
       <div class="ql acc-b" onclick="navigate('search')"><div class="ql-ic"><i class="ti ti-users-group"></i></div><div class="ql-label">멘토 찾기</div></div>
       <div class="ql acc-a" onclick="navigate('mentoring')"><div class="ql-ic"><i class="ti ti-messages"></i></div><div class="ql-label">내 멘토링</div></div>
       <div class="ql acc-b" onclick="navigate('mypage')"><div class="ql-ic"><i class="ti ti-file-pencil"></i></div><div class="ql-label">스펙 입력</div></div>
@@ -866,116 +868,183 @@
 <!-- ══ 자소서 코치 (직무기술서 → 요구역량 → 작성 가이드) ══
      결과 영역은 js/jd-coach.js 가 채운다. 목업 값을 두지 않는다 — CAS 히어로가
      87/100 하드코딩이라 누가 로그인해도 같은 점수가 떴던 일을 반복하지 않는다. -->
+<!-- 회사 찾기 — 화면 전체를 js/company-cover.js 가 그린다.
+     상태가 둘이고(검색 전 = 가운데 검색 / 회사 선택 후 = 목록 + 기업 리포트) 레이아웃
+     자체가 달라서, 빈 껍데기를 두고 JS 가 통째로 만드는 편이 정직하다. -->
 <main class="page company-page" id="page-company" data-screen-label="회사 검색과 자소서">
   <nav class="cover-subnav" aria-label="자소서 소분류">
-    <button class="is-active" type="button" onclick="navigate('company')"><i class="ti ti-building-search"></i> 회사 검색</button>
-    <button type="button" onclick="navigate('jd')"><i class="ti ti-pencil"></i> 자소서 코치</button>
+    <button class="is-active" type="button" onclick="navigate('company')">회사 검색</button>
+    <button type="button" onclick="navigate('jd')">자소서 코치</button>
   </nav>
-  <div class="company-layout">
-    <aside class="company-sidebar">
-      <div class="company-sidebar-title"><i class="ti ti-building-search"></i> 회사 찾기</div>
-      <label class="company-search-box">
-        <i class="ti ti-search"></i>
-        <input id="company-cover-search" type="search" placeholder="회사명 검색" autocomplete="off" />
-      </label>
-      <div class="company-sidebar-label">관심 회사</div>
-      <div class="company-subscriptions" id="company-cover-list"></div>
-    </aside>
-    <section class="company-content">
-      <div class="company-content-head">
-        <div class="page-eyebrow">Company & Cover Letter</div>
-        <h1 class="page-title">회사부터 찾고, 지원동기 근거를 준비하세요</h1>
-        <p class="page-desc">회사를 선택하면 지원동기에 넣을 관점과 작성 순서를 먼저 정리합니다.
-          채용공고 분석과 문항 작성은 자소서 코치에서 이어서 진행할 수 있어요.</p>
-      </div>
-      <div id="company-cover-result"></div>
-    </section>
-  </div>
+  <div id="company-root"></div>
 </main>
 
 <main class="page page--doc" id="page-jd" data-screen-label="자소서 코치">
   <nav class="cover-subnav" aria-label="자소서 소분류">
-    <button type="button" onclick="navigate('company')"><i class="ti ti-building-search"></i> 회사 검색</button>
-    <button class="is-active" type="button" onclick="navigate('jd')"><i class="ti ti-pencil"></i> 자소서 코치</button>
+    <button type="button" onclick="navigate('company')">회사 검색</button>
+    <button class="is-active" type="button" onclick="navigate('jd')">자소서 코치</button>
   </nav>
-  <div class="wrap">
-    <div class="page-head">
-      <div class="page-eyebrow">Cover Letter Coach</div>
-      <h1 class="page-title">직무 역량, 자소서에 이렇게 녹이세요</h1>
-      <p class="page-desc">채용공고(직무기술서)를 붙여넣으면 <b>기업이 요구하는 역량</b>을 뽑아내고,
-        그 역량을 자소서에 <b>어떤 순서로 어떻게 쓸지</b> 알려드려요.
-        내 활동이 입력돼 있으면 어떤 경험을 소재로 쓸지까지 짚어드립니다.</p>
+  <div class="jd-shell">
+    <div class="jd-head">
+      <div class="wf-eyebrow wf-eyebrow--lg">Cover letter coach</div>
+      <h1>직무 역량, 자소서에 이렇게 녹이세요</h1>
+      <p>채용공고를 붙여넣으면 기업이 요구하는 역량을 뽑아내고, 그 역량을 자소서에
+        어떤 순서로 어떻게 쓸지 알려드려요. 내 활동이 입력돼 있으면 어떤 경험을
+        소재로 쓸지까지 짚어드립니다.</p>
     </div>
 
-    <!-- ── 입력 4분할 ─────────────────────────────────────────
+    <!-- ── 입력 작업대 ────────────────────────────────────────
+         왼쪽 사이드바가 '입력 항목'을 들고, 오른쪽이 실제 입력칸이다.
+         진행도는 게이지 바가 아니라 **체크 표시**다 — 채웠나/안 채웠나 두 상태뿐인
+         일에 퍼센트를 그리면 55% 같은 값이 무슨 뜻인지 설명할 수 없다.
+         칸은 js/jd-coach.js 의 paintProgress() 가 그린다. -->
+    <div class="jd-layout">
+      <aside class="jd-side" aria-label="입력 항목">
+        <div class="wf-eyebrow">입력 항목</div>
+        <div class="jd-side-list" id="jd-progress-steps"></div>
+        <div class="jd-side-foot">
+          <div class="wf-eyebrow">분석 준비</div>
+          <div class="jd-ready-bar"><i id="jd-ready-fill"></i></div>
+          <p class="jd-side-ready" id="jd-ready"></p>
+          <button type="button" class="wf-btn wf-btn--sm wf-btn--primary wf-btn--block" id="jd-run">역량 분석하기</button>
+          <button type="button" class="wf-btn wf-btn--sm wf-btn--block" id="jd-sample">예시 넣기</button>
+          <span class="jd-status" id="jd-status"></span>
+        </div>
+      </aside>
+      <div class="jd-main">
+
+    <!-- ── 입력 4칸 (문서형) ──────────────────────────────────
          공고·직무기술서·회사·자소서 문항은 근거가 서로 다르다. 한 칸에 몰아 받으면
          무엇이 어느 문항의 근거인지 섞여서, 분석 결과도 "그래서 어디에 쓰라는 것"인지
-         알 수 없게 된다. 넣는 자리부터 나눠 받는다. -->
-    <div class="jd-workspace">
-      <aside class="jd-quick-nav" aria-label="자소서 입력 항목 바로가기">
-        <div class="jd-quick-title"><i class="ti ti-list"></i> 바로가기</div>
-        <button type="button" onclick="document.getElementById('jd-step-company').scrollIntoView({behavior:'smooth', block:'start'})"><span>1</span> 지원 회사</button>
-        <button type="button" onclick="document.getElementById('jd-step-posting').scrollIntoView({behavior:'smooth', block:'start'})"><span>2</span> 채용공고</button>
-        <button type="button" onclick="document.getElementById('jd-step-description').scrollIntoView({behavior:'smooth', block:'start'})"><span>3</span> 직무기술서</button>
-        <button type="button" onclick="document.getElementById('jd-step-questions').scrollIntoView({behavior:'smooth', block:'start'})"><span>4</span> 자소서 문항</button>
-      </aside>
-      <div class="card jd-input-card">
-      <div class="jd-steps">
-        <div class="jd-step" id="jd-step-company">
-          <label class="jd-label" for="jd-company">
-            <span class="jd-step-n">1</span> 지원 회사
-            <span class="jd-opt">선택 · 작성 방향을 맞추는 용도</span>
-          </label>
-          <div class="jd-company-compact">
-            <input type="text" id="jd-company" class="jd-company-input"
+         알 수 없게 된다. 넣는 자리부터 나눠 받는다.
+
+         rows 를 고정하지 않는다 — 내용만큼 자라고(autoGrow), 다 쓴 칸은 접힌다.
+         접힌 칸도 첫 두 줄(.jd-block-peek)과 글자수를 남겨서 "내가 뭘 넣었는지"를
+         펼치지 않고도 확인할 수 있게 한다. -->
+    <div class="jd-doc" id="jd-doc">
+      <section class="jd-block is-open" id="jd-step-company" data-step="0">
+        <div class="jd-block-h">
+          <button type="button" class="jd-block-main" data-toggle>
+            <span class="jd-block-n">1</span>
+            <b>지원 회사</b>
+            <span class="wf-badge wf-badge--mute" data-badge>선택</span>
+          </button>
+          <span class="jd-block-tools">
+            <button type="button" class="jd-block-toggle" data-toggle>
+              <span data-toggle-label></span>
+              <i class="ti ti-chevron-down jd-block-chev"></i>
+            </button>
+          </span>
+        </div>
+        <div class="jd-block-peek" data-peek></div>
+        <div class="jd-block-body">
+          <div class="jd-company-row">
+            <input type="text" id="jd-company" class="wf-input" list="jd-company-options"
                    placeholder="회사명 (예: 삼성전자)" autocomplete="off" />
-            <button type="button" class="jd-company-find" onclick="navigate('company')">
-              <i class="ti ti-search"></i> 회사 먼저 찾아보기
+            <datalist id="jd-company-options"></datalist>
+            <button type="button" class="wf-btn wf-btn--sm" onclick="navigate('company')">
+              회사 리포트에서 근거 담기
             </button>
           </div>
-          <div class="jd-hint">회사명은 지원동기를 어떤 관점으로 쓸지 안내하는 데만 사용합니다.</div>
+          <!-- 회사 리포트(회사 검색 화면)에서 담은 기사·수치가 여기에 들어온다.
+               지원동기 문항은 공고가 아니라 이 근거들로 쓴다. -->
+          <div id="jd-evidence"></div>
         </div>
+      </section>
 
-        <div class="jd-step" id="jd-step-posting">
-          <label class="jd-label" for="jd-text">
-            <span class="jd-step-n">2</span> 채용공고
-            <span class="jd-opt">필수</span>
-          </label>
-          <textarea id="jd-text" class="jd-text" rows="8"
+      <section class="jd-block is-open" id="jd-step-posting" data-step="1">
+        <div class="jd-block-h">
+          <button type="button" class="jd-block-main" data-toggle>
+            <span class="jd-block-n">2</span>
+            <b>채용공고</b>
+            <span class="wf-badge wf-badge--soft">필수</span>
+          </button>
+          <span class="jd-block-tools">
+            <span class="jd-block-count" data-count></span>
+            <button type="button" class="wf-btn wf-btn--xs" data-full>전체화면</button>
+            <button type="button" class="jd-block-toggle" data-toggle>
+              <span data-toggle-label></span>
+              <i class="ti ti-chevron-down jd-block-chev"></i>
+            </button>
+          </span>
+        </div>
+        <div class="jd-block-peek" data-peek></div>
+        <div class="jd-block-body">
+          <textarea id="jd-text" class="jd-text" data-grow
             placeholder="공고 본문을 그대로 붙여넣어 주세요. 모집분야·근무조건·전형절차가 섞여 있어도 됩니다."></textarea>
-          <div id="jd-result" class="jd-inline-result" hidden></div>
+          <div class="jd-block-foot">
+            <span data-stat></span>
+            <span class="jd-foot-end">Ctrl+Enter 로 바로 분석</span>
+          </div>
         </div>
+      </section>
 
-        <div class="jd-step" id="jd-step-description">
-          <label class="jd-label" for="jd-jd">
-            <span class="jd-step-n">3</span> 직무기술서 (JD)
-            <span class="jd-opt">선택 · 따로 있으면 여기에</span>
-          </label>
-          <textarea id="jd-jd" class="jd-text" rows="8"
+      <section class="jd-block" id="jd-step-description" data-step="2">
+        <div class="jd-block-h">
+          <button type="button" class="jd-block-main" data-toggle>
+            <span class="jd-block-n">3</span>
+            <b>직무기술서 (JD)</b>
+            <span class="wf-badge wf-badge--mute">선택</span>
+          </button>
+          <span class="jd-block-tools">
+            <span class="jd-block-count" data-count></span>
+            <button type="button" class="wf-btn wf-btn--xs" data-full>전체화면</button>
+            <button type="button" class="jd-block-toggle" data-toggle>
+              <span data-toggle-label></span>
+              <i class="ti ti-chevron-down jd-block-chev"></i>
+            </button>
+          </span>
+        </div>
+        <div class="jd-block-peek" data-peek></div>
+        <div class="jd-block-body">
+          <textarea id="jd-jd" class="jd-text" data-grow
             placeholder="[주요업무] · [자격요건] · [우대사항] 처럼 직무 자체를 설명하는 문서가 따로 있으면 붙여넣어 주세요.&#10;공고와 함께 읽고 역량을 뽑습니다."></textarea>
+          <div class="jd-block-foot">
+            <span data-stat></span>
+            <span class="jd-foot-end">Ctrl+Enter 로 바로 분석</span>
+          </div>
         </div>
+      </section>
 
-        <div class="jd-step" id="jd-step-questions">
-          <label class="jd-label" for="jd-questions">
-            <span class="jd-step-n">4</span> 자소서 문항
-            <span class="jd-opt">선택 · 한 줄에 하나씩</span>
-          </label>
-          <textarea id="jd-questions" class="jd-text" rows="6"
+      <section class="jd-block" id="jd-step-questions" data-step="3">
+        <div class="jd-block-h">
+          <button type="button" class="jd-block-main" data-toggle>
+            <span class="jd-block-n">4</span>
+            <b>자소서 문항</b>
+            <span class="wf-badge wf-badge--mute">선택 · 한 줄에 하나씩</span>
+          </button>
+          <span class="jd-block-tools">
+            <span class="jd-block-count" data-count></span>
+            <button type="button" class="jd-block-toggle" data-toggle>
+              <span data-toggle-label></span>
+              <i class="ti ti-chevron-down jd-block-chev"></i>
+            </button>
+          </span>
+        </div>
+        <div class="jd-block-peek" data-peek></div>
+        <div class="jd-block-body">
+          <textarea id="jd-questions" class="jd-text jd-text--sm" data-grow
             placeholder="1. 지원 동기와 입사 후 포부를 기술해 주십시오.&#10;2. 직무 수행에 필요한 역량을 갖추기 위해 노력한 경험을 서술해 주십시오.&#10;3. 협업 과정에서 갈등을 해결한 경험을 기술해 주십시오."></textarea>
-          <div class="jd-hint">문항을 넣으면 <b>문항마다</b> 어떤 역량·소재를 쓸지 따로 정리해 드려요.</div>
-          <div id="jd-questions-result" class="jd-inline-result" hidden></div>
+          <div class="jd-block-foot">
+            <span data-stat></span>
+            <span class="jd-foot-end">문항을 넣으면 문항마다 어떤 역량·소재를 쓸지 배분해 드려요</span>
+          </div>
         </div>
-      </div>
+      </section>
+    </div>
 
-      <div class="jd-actions">
-        <button type="button" class="jd-btn" id="jd-run"><i class="ti ti-wand"></i> 한 번에 분석하기</button>
-        <button type="button" class="jd-btn-ghost" id="jd-sample"><i class="ti ti-file-text"></i> 예시 넣어보기</button>
-        <span class="jd-status" id="jd-status"></span>
-      </div>
+        <!-- 보관함 — 예전에 쓴 초안을 분석을 다시 돌리지 않고도 꺼내 본다.
+             js/jd-coach.js 의 paintLibrary() 가 채운다. -->
+        <div class="co-sec" id="jd-library" hidden></div>
       </div>
     </div>
 
+    <!-- 분석 결과 — 역량 목록과 초안 에디터를 좌우로 나눈 작업 화면 -->
+    <div id="jd-result" hidden></div>
+
   </div>
+  <!-- 입력칸 '넓게 보기' 뒤에 깔리는 막. 눌러서 닫는다. -->
+  <button type="button" class="jd-scrim" id="jd-scrim" hidden aria-label="넓게 보기 닫기"></button>
 </main>
 
 <!-- ══ CAREER ROADMAP ══ -->

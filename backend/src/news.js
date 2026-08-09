@@ -275,11 +275,178 @@ function cluster(items) {
   return groups.map(g => g.item);
 }
 
+/* ── 목록용 중복 제거 ───────────────────────────────────────
+   cluster() 와 목적이 다르다. cluster() 는 **세는** 쪽이라 "확실히 같은 기사"만 묶어야
+   해서 문턱이 높다(0.6). 목록은 **보여주는** 쪽이라, 같은 사건이 두 번 뜨면 학생이
+   쓸 소재가 5개인 줄 알고 열어봤다가 2개인 걸 알게 된다.
+
+   ── 단어가 아니라 글자 2-gram 으로 잰다 ──
+   단어 단위로는 한국어 복합어가 갈라져서 못 잡는다. 실측(삼성전자, 2026-08-09):
+     '美 테일러팹 첫 인턴 뽑는다…가동 앞두고 인재 확보'
+     '미국 테일러 파운드리 팹 첫 인턴십 모집'
+   같은 사건인데 '테일러팹'≠'테일러'+'팹', '인턴'≠'인턴십' 이라 공통 단어가 **하나도**
+   없다(자카드·포함률 모두 0). 띄어쓰기와 접미사가 매체마다 달라서 생기는 일이라
+   단어를 아무리 정규화해도 남는다. 글자 2-gram 으로 재면 '테일', '일러', '인턴' 이
+   겹쳐서 잡힌다.
+
+   ── 신호를 둘 쓴다 (하나로는 안 갈린다) ──
+   실측값을 실제 동작(먼저 남긴 대표와만 비교) 기준으로 재 보면 어느 한 지표로도
+   같은 사건과 다른 사건이 안 갈린다:
+     2-gram 자카드 → 같은 사건 최소 0.147 / 다른 사건 최대 0.136  (거의 붙어 있다)
+     단어 포함률   → 같은 사건 최소 0.43  / 다른 사건 최대 0.33
+   대신 **서로 다른 쌍에서 실패한다**. 2-gram 이 놓치는 '테일러팹 인턴'↔'테일러팹 인턴
+   선발' 은 공통 단어가 3개(테일러팹·인턴·인재)라 단어 쪽이 잡고, 단어가 0인
+   '테일러팹'↔'테일러 파운드리 팹' 은 2-gram 이 잡는다. 그래서 둘 중 하나만 넘으면
+   같은 사건으로 본다. 각 문턱은 자기 지표의 실측 간격 사이에 둔다.
+
+   포함률(교집합/작은 쪽)은 짧은 제목에서 값이 부풀지만, 2-gram 쪽이 함께 낮으면
+   묶이지 않으므로 여기서는 안전하다.
+
+   ── 회사명은 빼고 센다 ──
+   relevant() 를 지난 기사는 전부 회사명을 갖고 있다. 그대로 두면 아무 관계 없는 두
+   기사도 회사명 하나로 겹쳐 보인다.
+
+   ── 어느 쪽으로 틀릴 것인가 ──
+   덜 묶는 쪽으로 튼다. 잘못 묶으면 소재 하나가 화면에서 **사라지는데**, 학생은 그런
+   기사가 있었다는 것조차 모른다. 중복이 한 건 남는 쪽이 낫고, 그건 '더 보기'가 받는다.
+
+   ── 여기가 규칙의 한계다 (실측) ──
+   제목만 보고 같은 사건인지 맞히는 데는 천장이 있다. 안 잡히는 두 부류를 확인했다:
+     · 매체가 제목을 잘라 보내는 경우 — '…히트펌프 기술 ...' 처럼 뒷말이 날아가면
+       2-gram 이 0.128 까지 떨어진다. 서로 다른 사건의 최대치(0.136)보다 낮아서,
+       이걸 잡으려고 문턱을 내리면 남남을 묶기 시작한다.
+     · 같은 사건을 전혀 다른 말로 쓰는 경우 — 카카오 임금협약(2026-08): '임금협약 최종
+       타결'/'노사갈등 봉합'/'임금협상 타결' 은 2-gram 0.083~0.111, 단어 0.20~0.25 다.
+   이 둘까지 잡으려면 제목이 아니라 본문을 봐야 하는데, 그건 기사 원문 수집이 필요하고
+   지금 API 로는 못 한다. 그래서 **줄이되 0 이라고 말하지 않는다** — 화면에서도 '더 보기'로
+   네이버 뉴스를 열어 둔다. */
+const SAME_STORY_GRAM = 0.15;   // 글자 2-gram 자카드
+const SAME_STORY_WORD = 0.40;   // 단어 포함률(교집합 / 작은 쪽)
+/* 세 번째 신호 — 같은 고유명사를 공유하는 경우.
+   실측(2026-08): 'KT 박윤영 대표, 데이터센터 방문' 과 '박윤영 KT 대표, 현장 경영 나서'
+   는 같은 일정인데 위 두 지표로는 안 잡혔다(포함률 0.25, 2-gram 낮음). 사람 이름처럼
+   **드문 말을 같이 쓰는지**를 보면 갈린다. 다만 이름 하나만으로는 부족하다 —
+   포함률도 함께 넘어야 한다. 실측에서 이 둘을 같이 걸면:
+     같은 사건 → 0.25 + 공통 특징어 있음 ('박윤영', '노사갈등')
+     다른 사건 → 0.25 이지만 공통 특징어 없음 / 특징어는 있지만 포함률 0.17
+   로 정확히 갈렸다. 특징어는 3글자 이상만 본다(2글자는 '대표·기술'처럼 흔하다). */
+const SAME_STORY_NAME_WORD = 0.25;
+const NAME_MIN_LEN = 3;
+/* 언론사가 붙이는 말머리. 서로 다른 두 '단독' 기사가 이 말로 겹쳐 보이지 않게 뺀다. */
+const TITLE_NOISE = /\[[^\]]*\]|【[^】]*】|<[^>]*>|단독|종합|속보|영상|사진|인터뷰/g;
+
+function bigrams(title, company) {
+  const s = String(title || '')
+    .replace(TITLE_NOISE, ' ')
+    .split(company || ' ').join(' ')       // 회사명 제거(정규식 특수문자 안전)
+    .replace(/[^0-9A-Za-z가-힣]+/g, '');
+  const out = new Set();
+  for (let i = 0; i < s.length - 1; i++) out.add(s.slice(i, i + 2));
+  return out;
+}
+
+function jaccardSet(a, b) {
+  if (!a.size || !b.size) return 0;
+  let inter = 0;
+  for (const t of a) if (b.has(t)) inter++;
+  return inter / (a.size + b.size - inter);
+}
+
+function containment(a, b) {
+  if (!a.size || !b.size) return 0;
+  let inter = 0;
+  for (const t of a) if (b.has(t)) inter++;
+  return inter / Math.min(a.size, b.size);
+}
+
+function dedupeStories(items, company) {
+  const key = String(company || '').replace(/\s+/g, '');
+  const drop = new Set(tokenize(key));
+  const kept = [];
+  for (const it of items) {
+    const grams = bigrams(it.title, key);
+    const words = new Set(tokenize(String(it.title || '').replace(TITLE_NOISE, ' '))
+      .filter(w => !drop.has(w)));
+    if (!grams.size) continue;
+    const dup = kept.some(k => {
+      if (jaccardSet(k.grams, grams) >= SAME_STORY_GRAM) return true;
+      const near = containment(k.words, words);
+      if (near >= SAME_STORY_WORD) return true;
+      /* 고유명사를 공유하면서 어느 정도 겹치기도 하면 같은 사건으로 본다 */
+      if (near < SAME_STORY_NAME_WORD) return false;
+      return [...k.words].some(w => w.length >= NAME_MIN_LEN && words.has(w));
+    });
+    if (dup) continue;
+    kept.push({ grams, words, item: it });
+  }
+  return kept.map(k => k.item);
+}
+
 /* 회사명이 제목·요약 어디에도 없으면 다른 회사 기사다. 지원동기 근거로 쓰면
    면접에서 그대로 들통나므로 걸러낸다. */
 function relevant(items, company) {
   const key = company.replace(/\s+/g, '');
   return items.filter(it => (it.title + it.summary).replace(/\s+/g, '').includes(key));
+}
+
+/* ── 회사 이야기가 아닌 기사 걸러내기 ───────────────────────
+   회사명이 들어 있어도 회사 이야기가 아닌 기사가 많다. 실측(2026-08, 'KT'):
+   5건 중 3건이 프로야구 KT위즈 기사였고, 사용자가 본 화면에는 배우 결혼 기사가
+   섞여 있었다(배우자 이름이 '케이티'). 그대로 두면 학생이 "이 회사는 요즘 뭘 하나"를
+   야구 순위로 읽는다.
+
+   ── AI 를 쓰지 않는다 ──
+   기사마다 모델에 물으면 같은 회사를 두 번 검색했을 때 목록이 달라진다. 자소서
+   근거는 재현되어야 하고(같은 회사 = 같은 사실), 무엇이 왜 빠졌는지도 설명할 수
+   있어야 한다. 그래서 단어 목록으로 판단한다 — 이 파일이 키워드를 AI 로 안 뽑는
+   것과 같은 이유다.
+
+   ── 판정 규칙: 신호를 '세어서' 판단한다 ──
+   처음에는 '스포츠 단어가 하나라도 있고 사업 단어가 없으면 뺀다'로 했는데 그대로
+   새어 나왔다. 야구 기사에도 사업 단어가 우연히 하나쯤 들어가기 때문이다 —
+   실측: '선두 KT, 폭염 방학도 바쁘다' 는 본문의 "순위 경쟁"의 **경쟁** 하나로 살아남았다.
+   그래서 서로 다른 스포츠·연예 단어가 **몇 종류** 나왔는지를 센다:
+     · 2종류 이상  → 뺀다. 우연히 겹칠 수 있는 수가 아니다.
+     · 1종류       → 사업 단어가 같이 있어야 남긴다.
+     · 0종류       → 그대로 둔다.
+   애매한 쪽(0~1종류)은 남긴다 — 근거가 될 기사를 지우는 쪽이 잡음 한 건보다 나쁘다. */
+const OFF_TOPIC = new RegExp([
+  /* 프로스포츠 — 구단 이름이 회사명 그대로인 곳이 많아(KT위즈·LG트윈스·삼성라이온즈)
+     이 걸러내기가 없으면 통신·전자 회사 뉴스가 야구 순위표가 된다. */
+  '위즈', '이글스', '트윈스', '베어스', '라이온즈', '자이언츠', '다이노스', '히어로즈', '랜더스',
+  '구단', '선두', '연승', '연패', '투수', '타자', '타선', '타율', '홈런', '득점', '실책',
+  '감독', '코치진', '선수', '선발', '마운드', '불펜', '이닝', '수비', '주루', '타점',
+  '리그', '시즌', '플레이오프', '포스트시즌', 'KBO', '프로야구', '축구단', '농구단', '배구단',
+  '승점', '순위표', '홈경기', '원정', 'FA', '용병', '외국인\\s*투수', '스프링캠프',
+  /* 연예 */
+  '배우', '아이돌', '가수', '열애', '결혼식', '화보', '셀럽', '드라마', '예능', '비주얼',
+  '팬미팅', '컴백', '앨범', '출연료', '스타일링', '몸매', '나들이', '근황',
+].join('|'), 'g');
+
+/* 사업 신호. '경쟁·고객·시장' 처럼 스포츠 기사에도 흔히 나오는 말은 뺐다 —
+   그런 말이 판정을 뒤집으면 걸러내기가 무력해진다. */
+const BUSINESS = new RegExp([
+  '매출', '영업이익', '순이익', '실적', '적자', '흑자', '분기실적',
+  '계약', '수주', '공급', '납품', '출시', '론칭', '특허', '연구개발',
+  '투자', '인수', '합병', '지분', '상장', '공시', '주가', '배당',
+  '채용', '공채', '신입', '임원', '선임', '취임', '조직\\s*개편',
+  '사업', '전략', '진출', '증설', '공장', '설비', '생산', '점유율',
+  '제휴', 'MOU', '플랫폼', '솔루션', '클라우드', '반도체', '요금제', '가입자',
+].join('|'), 'g');
+
+const countKinds = (text, re) => {
+  re.lastIndex = 0;
+  return new Set(text.match(re) || []).size;
+};
+
+function onTopic(items) {
+  return items.filter(it => {
+    const text = `${it.title} ${it.summary || ''}`;
+    const off = countKinds(text, OFF_TOPIC);
+    if (off === 0) return true;
+    if (off >= 2) return false;
+    return countKinds(text, BUSINESS) > 0;
+  });
 }
 
 /* ── 기사에서 자소서에 쓸 키워드 뽑기 ───────────────────────
@@ -473,8 +640,13 @@ async function companyNews(companyName) {
   const p = provider();
   let used = p;
   let raw = p === 'web' ? await fromWeb(company) : await fromNaver(company, p);
-  let pool = relevant(raw, company);
-  let items = dedupe(pool).slice(0, MAX_ITEMS);
+  let pool = onTopic(relevant(raw, company));
+  /* dedupe() 로는 부족하다 — 앞 25자 비교라 말머리·꼬리가 다른 같은 사건이 갈라진다.
+     실측(삼성전자): 5건 중 3건이 '영하 30도 히트펌프', 2건이 '테일러팹 인턴' 이었다.
+     화면에는 5건이 뜨는데 실제 사건은 2개라, 학생이 쓸 소재는 두 개뿐인 셈이다.
+     dedupeStories() 로 **서로 다른 사건 5개**를 내려보낸다. 화면 쪽에서 한 번 더 거르지
+     않는다 — 같은 규칙이 두 곳에 있으면 어긋난다. */
+  let items = dedupeStories(dedupe(pool), company).slice(0, MAX_ITEMS);
 
   /* 주간 정리를 만들려면 5주치 표본이 필요하다. 회사명 단독 검색으로는 안 되므로
      주제를 붙인 검색을 함께 돌려 표본을 넓힌다(TREND_QUERIES 주석 참고).
@@ -482,7 +654,7 @@ async function companyNews(companyName) {
   if (p !== 'web') {
     const extra = await Promise.all(TREND_QUERIES.map(async topic => {
       try {
-        return relevant(await fromNaver(`${company} ${topic}`, p), company);
+        return onTopic(relevant(await fromNaver(`${company} ${topic}`, p), company));
       } catch {
         return [];                 // 한 주제가 실패해도 나머지로 계속한다
       }
@@ -498,8 +670,8 @@ async function companyNews(companyName) {
   if (p !== 'web' && !items.length) {
     try {
       const webRaw = await fromWeb(company);
-      const webPool = relevant(webRaw, company);
-      const webItems = dedupe(webPool).slice(0, MAX_ITEMS);
+      const webPool = onTopic(relevant(webRaw, company));
+      const webItems = dedupeStories(dedupe(webPool), company).slice(0, MAX_ITEMS);
       if (webItems.length) { items = webItems; pool = webPool; used = 'web-fallback'; }
     } catch { /* 폴백까지 실패하면 그냥 0건으로 둔다 — 화면에 안내가 나간다 */ }
   }
@@ -564,6 +736,7 @@ const MOTIVE_GUIDE = {
 
 module.exports = {
   companyNews, provider, newsKeywords, tokenize, MOTIVE_GUIDE, MAX_ITEMS,
-  // 테스트용 — 주간 묶기는 외부 호출 없이 검증할 수 있어야 한다
-  cluster, weeklyPicks, weekIndex, trendScore, WEEKS,
+  // 테스트용 — 주간 묶기·목록 중복 제거는 외부 호출 없이 검증할 수 있어야 한다
+  cluster, weeklyPicks, weekIndex, trendScore, WEEKS, onTopic,
+  dedupeStories, SAME_STORY_GRAM, SAME_STORY_WORD,
 };

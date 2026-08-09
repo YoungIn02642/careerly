@@ -168,12 +168,30 @@ window.DB = (() => {
   /* 직무기술서(채용공고) → 요구역량 + 자소서 작성 가이드.
      내 활동을 함께 보내면 역량마다 "이 경험으로 쓰라"까지 붙는다. 로그인하지 않았거나
      스펙이 없으면 활동 없이 호출되고, 가이드는 일반 골격만 나온다(빈 화면이 되지 않는다). */
-  async function coachJd(text, { useAi = true } = {}) {
+  async function coachJd(text, { useAi = true, company = '' } = {}) {
     return api('POST', '/api/jd/coach', {
       text,
       activities: _mySpec?.activities || [],
       useAi,
+      company,
     });
+  }
+
+  /* 역량 하나에 대한 AI 초안. 내 활동(_mySpec)을 같이 보내야 모델이 **내 경험으로**
+     문장을 짠다 — 안 보내면 일반론이 나오고, 그건 자소서에 쓸 수 없다. */
+  async function draftJd({ competency, company = '', jobTitle = '', question = '',
+                           quotes = [], reads = '', frame = '', limit = 600 } = {}) {
+    return api('POST', '/api/jd/draft', {
+      competency, company, jobTitle, question, quotes, reads, frame, limit,
+      activities: _mySpec?.activities || [],
+    });
+  }
+
+  /* 기업분석 5단계 — 개요·재무·경쟁사(DART) + 최근이슈(뉴스).
+     자소서 코치와 **따로** 부른다. 공고 없이 회사만 정해도 지원동기는 준비할 수 있고,
+     뉴스·DART 는 외부 API 라 느려서 역량 분석까지 같이 붙들고 있으면 안 된다. */
+  async function companyAnalysis(name) {
+    return api('GET', '/api/company/analysis?name=' + encodeURIComponent(name));
   }
 
   /* ── 커리어 인사이트(커뮤니티 게시판) ─────────────────────────
@@ -326,7 +344,7 @@ window.DB = (() => {
     checkUsername, verifyStatus, verifyRequest,
     createUser, login, logout, withdraw, changePassword, completeOnboarding, confirmPayment, updateUser, requestRoleChange, upsertSpec, getProfile, updateProfile,
     classifyCompany, suggestCompanies, suggestCerts, suggestMajors, suggestUniversities, classifyMajor, jobCatalog,
-    analyzeCas, coachJd,
+    analyzeCas, coachJd, draftJd, companyAnalysis,
     insightCategories, listInsights, getInsight, createInsight, updateInsight, deleteInsight,
     addInsightComment, deleteInsightComment,
     seedDemo, seedRandom, clearAll, deleteUser,
