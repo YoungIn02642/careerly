@@ -4,6 +4,11 @@ backend/node_modules/
 .env
 backend/.env
 
+# Claude Code 개인 설정. 허용 명령 목록에 접속 문자열이 그대로 들어가는 일이 있어
+# (실제로 운영 MYSQL_URL 이 들어 있었다) 절대 커밋하지 않는다.
+# .claude/launch.json 은 팀이 공유하는 실행 설정이라 커밋한다.
+.claude/settings.local.json
+
 data/db.json
 backend/data/db.json
 
