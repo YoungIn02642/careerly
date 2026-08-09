@@ -17,6 +17,7 @@ const NiceAuth = require('./nice-auth');
 const recommendationsRouter = require("./routes/recommendations");
 const casAnalyzeRouter = require("./routes/casAnalyze");
 const jdCoachRouter = require("./routes/jdCoach");
+const companyAnalysisRouter = require("./routes/companyAnalysis");
 const { router: mentoringRouter } = require("./routes/mentoring");
 const { router: paymentsRouter } = require("./routes/payments");
 const { router: insightRouter } = require("./routes/insight");
@@ -54,12 +55,26 @@ app.use(cookieParser());
 const FRONTEND_DIR = path.join(__dirname, '..', '..', 'frontend');
 
 // 프론트엔드는 careerly.html 단일 문서 SPA (해시 라우팅). / 로 들어오면 그걸 준다.
-app.get('/', (req, res) => res.sendFile(path.join(FRONTEND_DIR, 'careerly.html')));
+app.get('/', (req, res) => {
+  res.set('Cache-Control', 'no-cache');
+  res.sendFile(path.join(FRONTEND_DIR, 'careerly.html'));
+});
 
-app.use(express.static(FRONTEND_DIR));
+/* ── 정적 파일: 'no-cache' 는 캐시를 끄는 게 아니라 '매번 물어보고 쓰라'는 뜻이다 ──
+   기본값(지시 없음)이면 브라우저가 Last-Modified 로 유효기간을 **자기 마음대로 추정**해서
+   js/css 를 몇 분씩 안 물어보고 쓴다. 실제로 화면을 고쳐도 Ctrl+F5 를 눌러야만 보이는
+   일이 반복됐다. no-cache 를 붙이면 ETag 로 재검증해서, 안 바뀌었으면 304(본문 없음)로
+   끝나고 바뀌었을 때만 새로 받는다 — 대역폭은 거의 그대로면서 갱신은 즉시 된다.
+   (/api/jobs 가 같은 이유로 같은 헤더를 쓴다.) */
+app.use(express.static(FRONTEND_DIR, {
+  setHeaders: res => res.set('Cache-Control', 'no-cache'),
+}));
 app.use("/api/recommendations", recommendationsRouter);
 app.use("/api/cas", casAnalyzeRouter);
 app.use("/api/jd", jdCoachRouter);
+/* 기업분석(뉴스+DART)은 /api/company/analysis 하나다. 같은 접두사의 classify·suggest 는
+   아래쪽에 app.get 으로 따로 있는데, 경로가 겹치지 않아 순서 문제가 생기지 않는다. */
+app.use("/api/company", companyAnalysisRouter);
 /* 멘토링·결제·인사이트는 라우터 안에서 req.user 를 보므로 세션을 먼저 붙여 준다
    (전역 requireAuth 는 아니다 — 가격표·게시판 읽기는 비로그인도 본다). */
 app.use(["/api/mentoring", "/api/payments", "/api/insights"], async (req, res, next) => {
