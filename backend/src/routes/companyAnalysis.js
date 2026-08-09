@@ -1,0 +1,231 @@
+/* GET /api/company/analysis?name=<회사명>
+   기업분석 5단계 — 자소서 '지원동기' 문항의 근거를 한 번에 모아 준다.
+
+   ── 왜 한 라우트로 묶는가 ──
+   사업구조·재무·경쟁사(DART)와 최근이슈(뉴스)는 출처가 다르지만 학생이 쓰는
+   문항은 하나다("왜 우리 회사인가"). 화면에서 두 번 부르게 하면 하나가 느릴 때
+   반쪽만 그려지고, 무엇이 빠졌는지도 알 수 없다. 여기서 묶어 **단계마다 채워졌는지
+   여부(status)를 명시**해 내려보낸다 — 빈칸을 숨기지 않는 것이 이 기능의 요점이다.
+
+   ── 하나가 실패해도 나머지는 준다 ──
+   DART 키가 없으면 재무·경쟁사만 빠지고, 뉴스가 실패하면 최근이슈만 빠진다.
+   전부 실패했을 때만 502 다. 자소서는 근거가 하나라도 있으면 쓸 수 있다.
+
+   ── 점수를 만들지 않는다 ──
+   작업정리 11-1 의 원칙 그대로다. 뉴스와 재무를 하나의 '기업 매력도' 숫자로
+   버무리지 않는다. 단위도 의미도 다른 데이터라 가중치를 정당화할 수 없고,
+   결국 아무도 검증 못 하는 숫자가 된다. 각 칸은 자기 출처를 달고 따로 선다. */
+const express = require('express');
+const NEWS = require('../news');
+const DART = require('../dart');
+const GUIDE = require('../cover-guide');
+const SARAMIN = require('../saramin-jobs');
+const WORKNET = require('../worknet-jobs');
+
+const router = express.Router();
+
+/* 억 단위로 접는다. 원 단위 12자리 숫자는 화면에서 읽히지 않고, 자소서에
+   쓸 때도 "매출 3조 1,200억" 처럼 말하지 "3120000000000원" 이라고 쓰지 않는다. */
+function readableAmount(won) {
+  if (won === null || won === undefined) return null;
+  const abs = Math.abs(won);
+  if (abs >= 1e12) return `${(won / 1e12).toFixed(1)}조원`;
+  if (abs >= 1e8) return `${Math.round(won / 1e8).toLocaleString()}억원`;
+  return `${won.toLocaleString()}원`;
+}
+
+/* 3년 추이를 '늘었다/줄었다'로 요약한다. 자소서에서 쓸 수 있는 말은 액수 자체보다
+   방향이다("역성장 구간에서 무엇을 하려는 회사인가"가 지원동기의 재료가 된다).
+   전년 대비만 본다 — 3년 평균 성장률은 한 해 적자로 뒤집혀 오해를 만든다. */
+function trend(series) {
+  if (!Array.isArray(series) || series.length < 2) return null;
+  const [now, prev] = series;
+  if (now?.amount == null || prev?.amount == null || prev.amount === 0) return null;
+  const pct = ((now.amount - prev.amount) / Math.abs(prev.amount)) * 100;
+  return {
+    pct: Math.round(pct * 10) / 10,
+    direction: pct > 0 ? 'up' : pct < 0 ? 'down' : 'flat',
+    from: prev.year, to: now.year,
+  };
+}
+
+function summarizeFinancials(fin) {
+  if (!fin) return null;
+  const out = { baseYear: fin.baseYear, fsDiv: fin.fsDiv, accounts: {} };
+  for (const [key, series] of Object.entries(fin.series || {})) {
+    out.accounts[key] = {
+      series: series.map(s => ({ ...s, readable: readableAmount(s.amount) })),
+      trend: trend(series),
+    };
+  }
+  return out;
+}
+
+const LABELS = { revenue: '매출액', operating: '영업이익', net: '당기순이익' };
+
+/* ── 5단계 틀 ────────────────────────────────────────────────
+   단계마다 '무엇을 확인하는 칸인지'와 '지금 채워졌는지'를 같이 준다.
+   비어 있는 칸은 숨기지 않고 "직접 확인하라"고 남긴다 — careerly 가 못 채우는
+   칸을 안 보여주면, 학생은 그 칸이 필요 없다고 오해한다. */
+function buildSteps({ news, dart, jobs }) {
+  const fin = dart?.financials;
+  const prof = dart?.profile;
+
+  return [
+    /* ── '사업 구조' 를 '개요' 로 바꾼 이유 (2026-08 조사) ────────────────
+       원래 이 칸은 "무엇을 팔아 돈을 버는가"(부문별 매출 비중)를 보여주려 했다.
+       공개 API 로 그 값을 받을 수 있는지 확인했고, **없다**:
+         · OPEN DART 오픈API 6개 그룹(공시정보·정기보고서 주요정보·정기보고서 재무정보·
+           지분공시·주요사항보고서·증권신고서) 어디에도 '사업의 내용'이나 부문별 매출
+           비중을 주는 엔드포인트가 없다. 그 내용은 사업보고서 **본문(원문 XML)** 에만
+           있고, 서식이 회사마다 달라 일괄 파싱이 안 된다.
+         · 공공데이터포털도 마찬가지다. 기업 관련 개방 API 는 공정위 기업집단포털의
+           '대규모기업집단 소속회사 참여업종' 정도라 업종 나열이지 매출 비중이 아니다.
+       그래서 지어내지 않고, 실제로 열려 있는 값(개황 + 직원 수)으로 '개요'를 만든다.
+       부문별 매출은 "직접 확인하라"고 남긴다 — 빈칸을 숨기면 필요 없는 항목으로 오해한다. */
+    {
+      no: 1, key: 'overview', label: '개요',
+      asks: '어떤 회사이고 규모가 어느 정도인가',
+      status: prof ? 'ok' : 'todo',
+      note: prof
+        ? `업종코드 ${prof.industryCode || '미상'}${prof.established ? ` · ${prof.established.slice(0, 4)}년 설립` : ''}`
+        : '회사 홈페이지의 회사 소개에서 사업 영역을 직접 확인하세요.',
+      link: prof?.homepage || null,
+    },
+    {
+      no: 2, key: 'financial', label: '재무·실적',
+      asks: '최근 3년 실적이 어느 방향인가',
+      status: fin ? 'ok' : 'todo',
+      note: fin
+        ? `${fin.baseYear}년 사업보고서 기준 (${fin.fsDiv === 'CFS' ? '연결' : '개별'})`
+        : (dart?.note || 'DART 에서 사업보고서를 직접 확인하세요. 비상장사는 공시 자료가 없습니다.'),
+    },
+    {
+      no: 3, key: 'issue', label: '최근 이슈',
+      asks: '지금 이 회사가 무엇을 하고 있는가',
+      status: news?.items?.length ? 'ok' : 'todo',
+      note: news?.items?.length
+        ? '아래 기사 중 하나를 골라 지원동기의 근거로 삼으세요.'
+        : '최근 6개월 기사를 직접 찾아 3건만 정리하세요.',
+    },
+    /* '인재상' 을 '채용공고' 로 바꿨다. 인재상은 회사 홈페이지의 캐치프레이즈라
+       모든 회사가 비슷하고("도전·소통·열정") 자소서에 쓰면 오히려 감점이다.
+       실제로 필요한 건 그 회사가 **지금 올린 공고의 자격요건**이라, 공고를 찾는
+       경로와 붙여넣는 자리로 연결한다. */
+    {
+      no: 4, key: 'recruit', label: '채용공고',
+      asks: '이 직무에 무엇을 요구하는가',
+      status: jobs?.items?.length ? 'ok' : 'link',
+      note: jobs?.items?.length
+        ? '워크넷에 열려 있는 공고입니다. 공고 본문을 자소서 코치에 붙여넣으면 요구 역량이 나옵니다.'
+        : '채용 사이트에서 이 회사 공고를 찾아 자소서 코치에 붙여넣으면 요구 역량과 작성 지침이 나옵니다.',
+    },
+    {
+      no: 5, key: 'competitor', label: '경쟁사',
+      asks: '같은 시장의 다른 회사와 무엇이 다른가',
+      status: dart?.competitors?.length ? 'ok' : 'todo',
+      note: dart?.competitors?.length
+        ? '업종코드가 같은 상장사입니다. 실제 경쟁 관계인지는 직접 확인하세요.'
+        : '경쟁사를 2~3곳 정해 같은 항목으로 비교표를 만들어 보세요.',
+    },
+  ];
+}
+
+/* 지원동기 공식 — 세 조각이 다 있어야 문단이 선다. 어느 조각이 비었는지
+   화면에서 바로 보이게 조각별로 내려보낸다. */
+function motiveFormula({ news, dart }) {
+  return [
+    { part: '내 경험·인사이트', from: 'spec', filled: null,
+      how: '아래 역량 카드에서 배정된 활동 하나를 고릅니다.' },
+    { part: '기업의 전략·이슈', from: 'analysis',
+      filled: Boolean(news?.items?.length || dart?.financials),
+      how: '위 기사나 실적 추이에서 사실 하나를 고릅니다. 홈페이지의 비전·연혁은 쓰지 마세요.' },
+    { part: '내가 기여할 지점', from: 'jd', filled: null,
+      how: '공고의 담당업무 중 그 사실과 맞닿는 항목 하나를 짚습니다.' },
+  ];
+}
+
+/* ── 채용공고: 사람인 우선, 워크넷 보조 ────────────────────────
+   사람인이 주 경로다. 대기업·중견 공고가 실제로 여기 올라오고, 워크넷은 발급 키가
+   개인회원이면 목록 API 자체가 막힌다. 사람인이 0건이거나 키가 없을 때만 워크넷을
+   시도한다 — 둘 다 부르면 느려지기만 하고, 같은 공고가 두 번 나올 수도 있다.
+   둘 다 못 주면 **왜 못 줬는지**를 합쳐서 내려보낸다(화면이 그대로 보여준다). */
+async function fetchJobs(name) {
+  const first = await SARAMIN.companyJobs(name).catch(e => ({
+    items: [], configured: SARAMIN.isConfigured(), source: 'saramin', reason: e.message,
+  }));
+  if (first.items.length) return first;
+
+  const second = await WORKNET.companyJobs(name).catch(e => ({
+    items: [], configured: WORKNET.isConfigured(), source: 'worknet', reason: e.message,
+  }));
+  if (second.items.length) return { ...second, source: 'worknet' };
+
+  /* 둘 다 빈손 — 사유를 합쳐 준다. 한쪽만 보여주면 "키를 넣었는데 왜 안 되지" 가 된다. */
+  const reasons = [first.reason && `사람인: ${first.reason}`, second.reason && `워크넷: ${second.reason}`]
+    .filter(Boolean);
+  return {
+    items: [], source: null,
+    configured: first.configured || second.configured,
+    reason: reasons.join(' · ') || null,
+  };
+}
+
+router.get('/analysis', async (req, res) => {
+  const name = String(req.query.name || '').trim();
+  if (!name) return res.status(400).json({ error: '회사명을 입력해 주세요.' });
+
+  /* 둘을 동시에 던진다. 뉴스는 외부 검색이라 느리고 DART 는 호출이 여러 번이라,
+     순서대로 기다리면 대기시간이 그대로 더해진다. */
+  const [newsResult, dartResult, jobsResult] = await Promise.allSettled([
+    NEWS.companyNews(name),
+    DART.analyze(name),
+    fetchJobs(name),
+  ]);
+
+  const news = newsResult.status === 'fulfilled' ? newsResult.value : null;
+  const dart = dartResult.status === 'fulfilled' ? dartResult.value : null;
+  /* 공고는 없어도 리포트가 성립한다 — 실패하면 조용히 빈 목록으로 둔다. */
+  const jobs = jobsResult.status === 'fulfilled'
+    ? jobsResult.value
+    : { items: [], configured: false, reason: '채용공고를 불러오지 못했습니다.' };
+
+  if (!news && !(dart && dart.available)) {
+    const reason = newsResult.reason;
+    const status = reason?.status === 503 || reason?.status === 400 ? reason.status : 502;
+    return res.status(status).json({
+      error: status === 502
+        ? '기업 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.'
+        : reason?.message,
+    });
+  }
+
+  res.json({
+    company: name,
+    steps: buildSteps({ news, dart, jobs }),
+    motiveFormula: motiveFormula({ news, dart }),
+
+    news: news ? { ...news, provider: NEWS.provider(), guide: NEWS.MOTIVE_GUIDE } : null,
+    newsError: newsResult.status === 'rejected' ? '뉴스를 불러오지 못했습니다.' : null,
+
+    /* DART 는 '없음'과 '실패'를 구분해 내려보낸다. 키가 없어서 없는 것과 호출이
+       실패한 것은 사용자가 할 일이 다르다(전자는 관리자 설정, 후자는 재시도). */
+    dart: dart && dart.available ? {
+      profile: dart.profile,
+      financials: summarizeFinancials(dart.financials),
+      employees: dart.employees,
+      labels: LABELS,
+      competitors: dart.competitors,
+      note: dart.note,
+    } : null,
+    dartReason: dart && !dart.available ? dart.reason : null,
+
+    /* 회사별 채용공고(워크넷). 대기업 공채는 자사 사이트로만 올라오는 일이 많아
+       0건이 정상인 경우가 있다 — 그래서 사유(reason)도 같이 내려보낸다. */
+    jobs,
+
+    interview: GUIDE.interviewQuestions({ company: name, hasNews: Boolean(news?.items?.length) }),
+  });
+});
+
+module.exports = router;

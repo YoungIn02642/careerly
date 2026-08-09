@@ -6,6 +6,17 @@
         오탐이 섞이는데, 근거가 보이면 사용자가 스스로 걸러낼 수 있다.
      2) 완성된 자소서 문장을 주지 않는다는 것을 화면에 적어 둔다(서버가 문구를 준다).
         대필로 오해하면 그대로 베껴 쓰고, 유사도 검사에 걸린다.
+
+   ── 화면 구조 ──────────────────────────────────────────────
+   입력부는 **문서형**이다. rows 를 고정하지 않고 내용만큼 자라며, 다 쓴 칸은
+   접힌다. 접힌 칸도 첫 두 줄과 글자수를 남겨서 "내가 뭘 넣었는지"를 펼치지 않고
+   확인할 수 있다. 왼쪽 사이드바가 '입력 항목' 목록이자 확인 표시(점)를 겸하고,
+   그 아래 '분석 준비' 막대 하나가 전체가 얼마나 찼는지를 말한다.
+
+   결과부는 **좌우 2단**이다. 왼쪽은 요구 역량 하나로 합친 목록(예전에는 요구역량
+   카드와 문항별 직무역량 카드가 따로 나와 같은 말을 두 번 읽어야 했다), 오른쪽은
+   자소서 초안 에디터. 둘 다 화면에 남아 있어서, 역량을 보면서 그 자리에서 쓴다.
+   왼쪽 맨 위 키워드 칩을 누르면 그 역량으로 바꿔 가며 볼 수 있다.
    ════════════════════════════════════════════════════════════ */
 /* cas.js 와 같은 이중 노출 — 브라우저에서는 window.JdCoach, node 에서는 module.exports.
    문항 분류 규칙(classifyQuestion)을 화면 없이 테스트하기 위해서다. DOM 은 함수 안에서만
@@ -21,16 +32,18 @@
   const bold = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
 
   let _last = null;         // 마지막 결과 — 다시 그릴 때 재요청하지 않는다
+  let _focused = 0;         // 지금 펼친 역량 index
+  let _tab = 0;             // 지금 쓰고 있는 초안 탭 index
+  let _lastTabs = [];       // 지금 그려진 초안 탭 — AI 초안이 문항 문구를 같이 보낸다
 
   /* ── 내가 쓴 자소서 초안 보관 ────────────────────────────────
-     역량 카드마다 작성칸을 두고, 입력하는 대로 브라우저에 저장한다.
      가이드를 보면서 바로 쓰고, 다음에 같은 회사로 들어오면 이어 쓰게 하는 게 목적.
 
      저장 위치는 localStorage 다. 서버에 두면 계정·동기화·삭제 정책이 따라붙는데
      아직 그 설계가 없고, 초안은 남에게 보일 물건도 아니다. 기기를 옮기면
      안 따라온다는 한계는 화면에 적어 둔다.
 
-     키는 '회사명 + 역량 이름'. 회사명을 안 적었으면 공용 칸(기본)으로 떨어진다 —
+     키는 '회사명 + 항목 이름'. 회사명을 안 적었으면 공용 칸(기본)으로 떨어진다 —
      회사를 적어야 회사별로 따로 쌓인다. */
   const LS_DRAFTS = 'careerly_jd_drafts_v1';
 
@@ -40,17 +53,167 @@
   function draftScope() {
     return ($('#jd-company')?.value || '').trim() || '(회사 미지정)';
   }
+
+  /* 저장 형태가 두 가지다. 처음에는 문자열만 넣었는데(v1), 보관함에서 "언제 쓴 글인지"를
+     보여주려면 시각이 필요해 { text, at } 로 바꿨다(v2). 이미 저장해 둔 초안을 버릴 수는
+     없으므로 **읽을 때 두 모양을 다 받는다.** 다음에 저장될 때 자연스럽게 v2 가 된다. */
+  function unwrap(v) {
+    if (typeof v === 'string') return { text: v, at: null };
+    if (v && typeof v === 'object') return { text: String(v.text || ''), at: v.at || null };
+    return { text: '', at: null };
+  }
+
   function getDraft(label) {
-    return loadDrafts()[draftScope()]?.[label] || '';
+    return unwrap(loadDrafts()[draftScope()]?.[label]).text;
   }
   function saveDraft(label, text) {
     const all = loadDrafts();
     const scope = draftScope();
     all[scope] = all[scope] || {};
-    if (text.trim()) all[scope][label] = text;
+    if (text.trim()) all[scope][label] = { text, at: Date.now() };
     else delete all[scope][label];            // 비우면 흔적을 남기지 않는다
     if (!Object.keys(all[scope]).length) delete all[scope];
     localStorage.setItem(LS_DRAFTS, JSON.stringify(all));
+    paintLibrary();
+  }
+
+  /* ── 보관함 ────────────────────────────────────────────────
+     초안은 예전에도 저장은 됐지만, 분석을 다시 돌리기 전에는 **화면에 꺼낼 방법이
+     없었다**. 어제 쓴 글이 어디 있는지 알 수 없으면 저장한 것이 아니다.
+     그래서 회사별로 모아 보여주고, 여기서 바로 열어 읽고 복사할 수 있게 한다. */
+  const timeAgo = at => {
+    if (!at) return '';
+    const m = Math.floor((Date.now() - at) / 60000);
+    if (m < 1) return '방금';
+    if (m < 60) return `${m}분 전`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}시간 전`;
+    const d = Math.floor(h / 24);
+    return d < 30 ? `${d}일 전` : new Date(at).toLocaleDateString('ko-KR');
+  };
+
+  function libraryEntries() {
+    const all = loadDrafts();
+    return Object.entries(all).map(([company, items]) => ({
+      company,
+      drafts: Object.entries(items)
+        .map(([label, v]) => ({ label, ...unwrap(v) }))
+        .filter(d => d.text.trim())
+        .sort((a, b) => (b.at || 0) - (a.at || 0)),
+    })).filter(g => g.drafts.length)
+      .sort((a, b) => (b.drafts[0].at || 0) - (a.drafts[0].at || 0));
+  }
+
+  let _libOpen = null;      // 지금 펼쳐 본 초안 키 (회사::항목)
+
+  function paintLibrary() {
+    const box = $('#jd-library');
+    if (!box) return;
+    const groups = libraryEntries();
+    if (!groups.length) { box.hidden = true; box.innerHTML = ''; return; }
+
+    const total = groups.reduce((n, g) => n + g.drafts.length, 0);
+    box.hidden = false;
+    box.innerHTML = `
+      <div class="co-sec-h">
+        <h2>내 자소서 보관함</h2>
+        <span class="co-src">${groups.length}개 회사 · 초안 ${total}건 · 이 브라우저에만 저장됩니다</span>
+      </div>
+      <div class="jd-lib">
+        ${groups.map(g => `
+          <div class="jd-lib-group">
+            <div class="jd-lib-company">
+              <span class="wf-avatar wf-avatar--sm" style="--co-color:${accentOf(g.company)}">${esc(g.company.charAt(0))}</span>
+              <b>${esc(g.company)}</b>
+              <span class="wf-badge wf-badge--mute">${g.drafts.length}건</span>
+              <button type="button" class="wf-btn wf-btn--xs" data-lib-open="${esc(g.company)}">이 회사로 이어쓰기</button>
+            </div>
+            ${g.drafts.map(d => {
+              const key = `${g.company}::${d.label}`;
+              const open = _libOpen === key;
+              return `<div class="jd-lib-item ${open ? 'is-open' : ''}">
+                <button type="button" class="jd-lib-h" data-lib-toggle="${esc(key)}">
+                  <b>${esc(d.label)}</b>
+                  <span class="jd-lib-meta">${d.text.length.toLocaleString()}자${d.at ? ` · ${timeAgo(d.at)}` : ''}</span>
+                  <i class="ti ti-chevron-down jd-block-chev"></i>
+                </button>
+                ${open ? `<div class="jd-lib-body">
+                  <pre class="jd-lib-text">${esc(d.text)}</pre>
+                  <div class="jd-lib-act">
+                    <button type="button" class="wf-btn wf-btn--xs" data-lib-copy="${esc(key)}">복사</button>
+                    <button type="button" class="wf-btn wf-btn--xs" data-lib-del="${esc(key)}">삭제</button>
+                  </div>
+                </div>` : ''}
+              </div>`;
+            }).join('')}
+          </div>`).join('')}
+      </div>`;
+
+    bindLibrary(box);
+  }
+
+  /* 회사명 색은 회사 리포트 화면과 같은 규칙으로 고른다(같은 회사 = 같은 색). */
+  const LIB_ACCENTS = ['#7a3dff', '#ed52cb', '#3b89ff', '#ff6b00', '#00a83a'];
+  function accentOf(name) {
+    let h = 0;
+    for (const ch of String(name)) h = (h * 31 + ch.codePointAt(0)) % 9973;
+    return LIB_ACCENTS[h % LIB_ACCENTS.length];
+  }
+
+  function draftAt(key) {
+    const [company, label] = key.split('::');
+    return unwrap(loadDrafts()[company]?.[label]).text;
+  }
+
+  function bindLibrary(box) {
+    box.querySelectorAll('[data-lib-toggle]').forEach(el =>
+      el.addEventListener('click', () => {
+        _libOpen = _libOpen === el.dataset.libToggle ? null : el.dataset.libToggle;
+        paintLibrary();
+      }));
+
+    box.querySelectorAll('[data-lib-copy]').forEach(el =>
+      el.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(draftAt(el.dataset.libCopy));
+          el.textContent = '복사됨';
+          setTimeout(() => { el.textContent = '복사'; }, 1500);
+        } catch { el.textContent = '복사 실패'; }
+      }));
+
+    box.querySelectorAll('[data-lib-del]').forEach(el =>
+      el.addEventListener('click', () => {
+        const [company, label] = el.dataset.libDel.split('::');
+        /* 지우면 되돌릴 수 없다 — 자소서는 다시 쓰기 어려운 글이라 한 번 묻는다. */
+        if (!confirm(`${company} · ${label} 초안을 지울까요? 되돌릴 수 없어요.`)) return;
+        const all = loadDrafts();
+        delete all[company]?.[label];
+        if (all[company] && !Object.keys(all[company]).length) delete all[company];
+        localStorage.setItem(LS_DRAFTS, JSON.stringify(all));
+        _libOpen = null;
+        paintLibrary();
+      }));
+
+    /* 그 회사로 이어쓰기 — 회사명을 채우면 저장 칸(scope)이 그 회사로 바뀌므로
+       분석을 다시 돌렸을 때 예전 초안이 그대로 불러와진다. */
+    box.querySelectorAll('[data-lib-open]').forEach(el =>
+      el.addEventListener('click', () => {
+        const input = $('#jd-company');
+        if (!input) return;
+        input.value = el.dataset.libOpen;
+        input.dispatchEvent(new Event('input'));
+        STEPS.forEach(paintBlock);
+        paintProgress();
+        $('#jd-doc')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }));
+  }
+
+  /* 회사 리포트 화면(company-cover.js)에서 담은 근거를 같은 키로 읽는다.
+     지원동기 문항은 공고가 아니라 이 사실들로 쓴다. */
+  function evidenceFor(company) {
+    if (!company) return [];
+    try { return (JSON.parse(localStorage.getItem('careerly_company_evidence_v1')) || {})[company] || []; }
+    catch { return []; }
   }
 
   const SAMPLE = `[주요업무]
@@ -67,19 +230,250 @@
 2. 직무 수행에 필요한 역량을 갖추기 위해 노력한 경험을 서술해 주십시오.
 3. 팀으로 일하며 갈등을 해결한 경험을 기술해 주십시오.`;
 
+  /* ══ 입력부 — 문서형 에디터 ═══════════════════════════════ */
+
+  const STEPS = [
+    { id: 'jd-step-company',     label: '지원 회사',   input: '#jd-company',   optional: true  },
+    { id: 'jd-step-posting',     label: '채용공고',    input: '#jd-text',      optional: false },
+    { id: 'jd-step-description', label: '직무기술서',  input: '#jd-jd',        optional: true  },
+    { id: 'jd-step-questions',   label: '자소서 문항', input: '#jd-questions', optional: true  },
+  ];
+
+  const valueOf = sel => ($(sel)?.value || '').trim();
+
+  /* 내용만큼 자란다. scrollHeight 를 그대로 쓰면 지울 때 줄어들지 않으므로
+     먼저 auto 로 되돌린 뒤 잰다. 전체화면일 때는 CSS 가 높이를 맡는다. */
+  function autoGrow(el) {
+    if (!el || el.closest('.jd-block')?.classList.contains('is-full')) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }
+
+  function blockOf(step) { return document.getElementById(step.id); }
+
+  /* 접힌 칸의 미리보기 — 두 줄까지. CSS 가 line-clamp 로 자른다. */
+  function paintPeek(step) {
+    const block = blockOf(step);
+    const peek = block?.querySelector('[data-peek]');
+    if (!peek) return;
+    const v = valueOf(step.input);
+    if (v) {
+      peek.textContent = v.replace(/\s+/g, ' ').slice(0, 300);
+      peek.classList.remove('jd-block-peek--empty');
+    } else {
+      peek.textContent = step.optional ? '아직 비어 있어요 (선택 항목)' : '아직 비어 있어요';
+      peek.classList.add('jd-block-peek--empty');
+    }
+  }
+
+  function paintBlock(step) {
+    const block = blockOf(step);
+    if (!block) return;
+    const v = valueOf(step.input);
+    block.classList.toggle('is-filled', Boolean(v));
+
+    const count = block.querySelector('[data-count]');
+    if (count) count.textContent = v ? `${v.length.toLocaleString()}자` : '';
+
+    const stat = block.querySelector('[data-stat]');
+    if (stat) {
+      const lines = v ? v.split(/\r?\n/).filter(s => s.trim()).length : 0;
+      /* 문단 수까지 세는 건 붙여넣기가 제대로 됐는지 확인하는 자리라서다 —
+         공고를 통째로 복사하면 문단이 여러 개 잡히고, 한 줄만 들어오면 1개로 나온다. */
+      const paras = v ? v.split(/\n\s*\n/).filter(s => s.trim()).length : 0;
+      stat.textContent = v
+        ? `${v.length.toLocaleString()}자 · ${lines}줄${paras > 1 ? ` · 문단 ${paras}개 인식됨` : ''}`
+        : '아직 비어 있어요';
+    }
+
+    /* 1번 칸은 글자수가 의미 없다(회사명 한 개다). 대신 채웠는지 여부를 배지로 말한다. */
+    const badge = block.querySelector('[data-badge]');
+    if (badge) {
+      badge.textContent = v ? '입력됨' : '선택';
+      badge.className = v ? 'wf-badge wf-badge--ok' : 'wf-badge wf-badge--mute';
+    }
+
+    const toggleLabel = block.querySelector('[data-toggle-label]');
+    if (toggleLabel) toggleLabel.textContent = block.classList.contains('is-open') ? '접기' : '펼치기';
+
+    paintPeek(step);
+  }
+
+  /* 진행도 — 사이드바의 '입력 항목' 목록이 겸한다. 각 칸은 채웠나/비었나 두 상태뿐이라
+     퍼센트 막대를 그리지 않고 **체크 표시**로 둔다(55% 가 무슨 뜻인지 설명할 수 없다). */
+  function paintProgress() {
+    const box = $('#jd-progress-steps');
+    if (!box) return;
+    box.innerHTML = STEPS.map((s, i) => {
+      const v = valueOf(s.input);
+      const open = blockOf(s)?.classList.contains('is-open');
+      const cls = v ? 'is-done' : open ? 'is-active' : '';
+      const meta = v
+        ? (i === 0 ? esc(v) : `${v.length.toLocaleString()}자`)
+        : '비어 있음';
+      return `<button type="button" class="jd-pstep ${cls}" data-goto="${i}">
+        <span class="jd-pstep-mark"></span>
+        <span class="jd-pstep-t"><b>${i + 1} ${esc(s.label)}</b><small>${meta}</small></span>
+      </button>`;
+    }).join('');
+
+    box.querySelectorAll('[data-goto]').forEach(btn =>
+      btn.addEventListener('click', () => openStep(Number(btn.dataset.goto), true)));
+
+    /* 분석 준비 — 항목별 점이 '이 칸을 채웠나'라면, 이 막대는 '전체가 얼마나 찼나'다.
+       분석을 돌릴 수 있는지도 같이 알린다. 버튼을 눌러 보고 나서 "공고를 넣으세요"를
+       만나면 늦다. */
+    const done = STEPS.filter(s => valueOf(s.input)).length;
+    const canRun = valueOf('#jd-text').length >= 30;
+
+    const bar = $('#jd-ready-fill');
+    if (bar) {
+      bar.style.width = `${(done / STEPS.length) * 100}%`;
+      bar.parentElement.classList.toggle('is-ready', canRun);
+    }
+    const ready = $('#jd-ready');
+    if (ready) {
+      ready.innerHTML = canRun
+        ? `${STEPS.length}개 중 <b>${done}개</b> 입력됨.${
+            valueOf('#jd-questions') ? '' : ' 문항까지 넣으면 문항별 배분까지 나와요.'}`
+        : `<b>채용공고</b>를 넣어야 분석할 수 있어요.`;
+    }
+  }
+
+  function openStep(i, scroll) {
+    const step = STEPS[i];
+    const block = blockOf(step);
+    if (!block) return;
+    block.classList.add('is-open');
+    paintBlock(step);
+    paintProgress();
+    if (scroll) block.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const el = $(step.input);
+    if (el) { autoGrow(el); el.focus({ preventScroll: true }); }
+  }
+
+  function toggleBlock(block) {
+    block.classList.toggle('is-open');
+    if (block.classList.contains('is-open')) {
+      const ta = block.querySelector('[data-grow]');
+      if (ta) autoGrow(ta);
+    }
+    const step = STEPS[Number(block.dataset.step)];
+    if (step) paintBlock(step);          // '펼치기 ↔ 접기' 문구를 같이 바꾼다
+    paintProgress();
+  }
+
+  /* 넓게 보기 — 긴 공고를 통째로 확인하는 자리. Esc 로 닫힌다. */
+  function setFull(block, on) {
+    document.querySelectorAll('.jd-block.is-full').forEach(b => {
+      if (b !== block) b.classList.remove('is-full');
+    });
+    block.classList.toggle('is-full', on);
+    block.classList.add('is-open');
+    const scrim = $('#jd-scrim');
+    if (scrim) scrim.hidden = !on;
+    const btn = block.querySelector('[data-full]');
+    if (btn) btn.textContent = on ? '닫기' : '전체화면';
+    const ta = block.querySelector('[data-grow]');
+    if (ta) { if (on) ta.style.height = ''; else autoGrow(ta); ta.focus({ preventScroll: true }); }
+  }
+
+  function closeFull() {
+    const open = document.querySelector('.jd-block.is-full');
+    if (open) setFull(open, false);
+  }
+
+  /* 회사 리포트에서 담아 온 근거 — 1번 칸 안에 그대로 보여준다. */
+  function paintEvidence() {
+    const box = $('#jd-evidence');
+    if (!box) return;
+    const company = ($('#jd-company')?.value || '').trim();
+    const list = evidenceFor(company);
+
+    if (!company) {
+      box.innerHTML = `<p class="jd-hint" style="padding:0 16px 16px">회사명을 적으면 초안이 회사별로 나뉘어 저장돼요.
+        회사 리포트에서 기사·실적을 담아 오면 지원동기 문항의 근거로 여기에 나타납니다.</p>`;
+      return;
+    }
+    box.innerHTML = `
+      <div style="padding:0 16px 16px">
+        <span class="wf-eyebrow">${esc(company)} · 담은 지원동기 근거 ${list.length}건</span>
+        ${list.length ? `
+          <div class="co-picked" style="margin-top:8px">
+            ${list.map(e => `<div class="co-picked-item"><span>${esc(e.text)}</span></div>`).join('')}
+          </div>`
+          : `<p class="jd-hint">아직 없어요. <b>회사 리포트에서 근거 담기</b>를 누르면
+               기사와 실적에서 인용할 사실을 담을 수 있습니다.</p>`}
+      </div>`;
+  }
+
   function init() {
     const runBtn = $('#jd-run');
     if (runBtn) runBtn.addEventListener('click', run);
-
-    const companyEl = $('#jd-company');
 
     const sampleBtn = $('#jd-sample');
     if (sampleBtn) sampleBtn.addEventListener('click', () => {
       $('#jd-text').value = SAMPLE;
       $('#jd-questions').value = SAMPLE_QUESTIONS;
+      STEPS.forEach(s => { blockOf(s)?.classList.add('is-open'); paintBlock(s); });
+      document.querySelectorAll('#jd-doc [data-grow]').forEach(autoGrow);
+      paintProgress();
       $('#jd-text').focus();
     });
 
+    // 접기·펼치기
+    document.querySelectorAll('#jd-doc [data-toggle]').forEach(btn =>
+      btn.addEventListener('click', () => toggleBlock(btn.closest('.jd-block'))));
+
+    // 넓게 보기
+    document.querySelectorAll('#jd-doc [data-full]').forEach(btn =>
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const block = btn.closest('.jd-block');
+        setFull(block, !block.classList.contains('is-full'));
+      }));
+    const scrim = $('#jd-scrim');
+    if (scrim) scrim.addEventListener('click', closeFull);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeFull(); });
+
+    // 자라는 입력칸 + 진행도 갱신
+    STEPS.forEach(step => {
+      const el = $(step.input);
+      if (!el) return;
+      el.addEventListener('input', () => {
+        autoGrow(el);
+        paintBlock(step);
+        paintProgress();
+      });
+      /* 입력칸 안에서 Ctrl+Enter 로 바로 분석. 칸 아래에 그렇게 적어 뒀으므로
+         실제로 되게 해 둔다 — 안 되는 안내를 띄우면 그 화면 전체를 못 믿게 된다. */
+      el.addEventListener('keydown', e => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); run(); }
+      });
+    });
+
+    /* 회사명을 고치면 앞 회사의 결과를 지운다. 남겨 두면 새 회사의 자료인 줄 알고
+       그 기사를 지원동기에 쓴다. 초안 저장 칸(scope)도 회사명을 따라가므로 같이 다시 그린다. */
+    const companyEl = $('#jd-company');
+    if (companyEl) {
+      let t = null;
+      companyEl.addEventListener('input', () => {
+        const box = $('#jd-result');
+        if (box && !box.hidden) { box.hidden = true; box.innerHTML = ''; }
+        paintEvidence();
+        clearTimeout(t);
+        t = setTimeout(() => fillCompanyOptions(companyEl.value), 250);
+      });
+    }
+
+    /* 회사 리포트로 넘어갈 때 지금 적은 회사명을 들고 간다 —
+       이름을 다시 치게 하지 않는다. (인라인 onclick 대신 여기서 묶는다) */
+    document.querySelectorAll('#jd-step-company .wf-btn').forEach(btn =>
+      btn.addEventListener('click', () => {
+        const name = ($('#jd-company')?.value || '').trim();
+        if (name) localStorage.setItem('careerly_company_open', name);
+        navigate('company');
+      }));
   }
 
   async function fillCompanyOptions(q) {
@@ -87,30 +481,32 @@
     if (!dl) return;
     const query = (q || '').trim();
     if (query.length < 2) { dl.innerHTML = ''; return; }
-    const items = await DB.suggestCompanies(query);
+    const items = await DB.suggestCompanies(query).catch(() => []);
     if (dl.dataset.q && dl.dataset.q !== query) return;   // 늦게 온 응답으로 덮지 않는다
     dl.dataset.q = query;
     dl.innerHTML = items.map(i => `<option value="${esc(i.name)}"></option>`).join('');
   }
 
-  /* 페이지에 들어올 때마다 — 로그인 상태에 따라 안내가 달라진다. */
+  /* 페이지에 들어올 때마다 — 지난번 분석 결과를 지우고 들어온다. 안 지우면 다른 회사를
+     보러 다시 들어와도 이전 회사의 역량·문항이 그대로 남아 새 결과인 줄 알고 읽게 된다. */
   function onEnter() {
-    /* 지난번 분석 결과를 지우고 들어온다. 안 지우면 다른 회사를 보러 다시 들어와도
-       이전 회사 기사·문항 카드가 그대로 남아, 새 회사의 결과인 줄 알고 읽게 된다. */
-    ['#jd-result', '#jd-questions-result']
-      .forEach(sel => { const el = $(sel); if (el) el.hidden = true; });
+    const result = $('#jd-result');
+    if (result) { result.hidden = true; result.innerHTML = ''; }
     const status = $('#jd-status');
     if (status) status.textContent = '';
-    const pickedCompany = localStorage.getItem('careerly_selected_company');
-    if (pickedCompany && $('#jd-company')) {
-      $('#jd-company').value = pickedCompany;
+    closeFull();
+
+    const picked = localStorage.getItem('careerly_selected_company');
+    if (picked && $('#jd-company')) {
+      $('#jd-company').value = picked;
       localStorage.removeItem('careerly_selected_company');
     }
 
-    /* 예전에는 여기서 "내 활동 N건을 불러왔어요" 안내를 띄웠다. 아무것도 안 한 상태에서
-       먼저 말을 거는 배너라 페이지를 열자마자 눈에 걸렸고, 정작 필요한 시점(역량 카드에
-       내 경험이 붙을 때)에는 이미 스크롤 위로 사라져 있었다. 그 안내는 카드가 직접
-       하고 있으므로(mineHtml) 배너는 두지 않는다. */
+    STEPS.forEach(paintBlock);
+    document.querySelectorAll('#jd-doc [data-grow]').forEach(autoGrow);
+    paintEvidence();
+    paintProgress();
+    paintLibrary();
   }
 
   /* 공고와 직무기술서를 합쳐 하나의 분석 입력으로 만든다.
@@ -118,8 +514,8 @@
      같이 읽어야 정확해진다(공고에만 있는 우대사항, JD 에만 있는 업무 상세가 있다).
      구분선을 넣어 서버 문장 분리가 두 문서를 한 문장으로 잇지 않게 한다. */
   function analysisText() {
-    const jd  = $('#jd-jd')?.value.trim() || '';
-    const ad  = $('#jd-text').value.trim();
+    const jd = valueOf('#jd-jd');
+    const ad = valueOf('#jd-text');
     return [ad, jd].filter(Boolean).join('\n\n');
   }
 
@@ -133,13 +529,14 @@
   }
 
   async function run() {
-    const btn      = $('#jd-run');
+    const btn = $('#jd-run');
     const statusEl = $('#jd-status');
     const resultEl = $('#jd-result');
-    const text     = analysisText();
+    const text = analysisText();
 
     if (text.length < 30) {
-      statusEl.textContent = '채용공고 내용을 30자 이상 붙여넣어 주세요.';
+      statusEl.textContent = '채용공고를 30자 이상 넣어 주세요.';
+      openStep(1, true);
       return;
     }
 
@@ -147,15 +544,20 @@
     /* AI 보강은 항상 켠다(끄는 토글을 없앴다). 규칙만 쓰면 즉시 끝나지만
        AI 보강이 붙으면 로컬 모델에서 1분 이상 걸릴 수 있어 그 이유를 적어둔다 —
        안 그러면 사용자가 멈춘 줄 안다. */
-    statusEl.textContent = '공고를 읽고 있어요… (AI 보강이 필요하면 1분 이상 걸릴 수 있어요)';
+    statusEl.textContent = '공고를 읽고 있어요… (1분 이상 걸릴 수 있어요)';
     resultEl.hidden = true;
-    $('#jd-questions-result').hidden = true;
 
     try {
-      _last = await DB.coachJd(text, { useAi: true });
+      _last = await DB.coachJd(text, { useAi: true, company: valueOf('#jd-company') });
       statusEl.textContent = '';
-      renderQuestions(parseQuestions(), _last);
+      _focused = 0; _tab = 0;
       render(_last);
+      /* 결과가 나오면 입력칸을 접는다 — 다 쓴 입력이 화면을 차지하고 있으면
+         결과를 보려고 매번 그만큼을 스크롤해서 지나가야 한다. */
+      STEPS.forEach(s => blockOf(s)?.classList.remove('is-open'));
+      STEPS.forEach(paintBlock);
+      paintProgress();
+      resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (e) {
       statusEl.textContent = '';
       resultEl.hidden = false;
@@ -220,299 +622,531 @@
     return items.slice(0, 3);
   }
 
-  function renderQuestions(questions, r) {
-    const box = $('#jd-questions-result');
-    if (!box) return;
-    if (!questions.length) { box.hidden = true; return; }
-
-    const company = ($('#jd-company')?.value || '').trim();
-
-    box.hidden = false;
-    box.innerHTML = `
-      <div class="jd-summary">
-        <div class="jd-summary-h">자소서 문항 <b>${questions.length}개</b>에 이렇게 배분하세요</div>
-        <div class="jd-summary-sub">
-          같은 역량을 여러 문항에 반복해서 쓰면 읽는 사람에게는 소재가 하나로 보입니다.
-          문항마다 <b>다른 경험</b>을 배치하는 게 목적이에요.
-        </div>
-      </div>
-      <div class="jd-cards">${questions.map((q, i) => questionHtml(q, i, r, company)).join('')}</div>`;
-
-    bindDrafts(box);
-  }
-
   /* 문항 초안의 저장 키. **문항 문구가 아니라 순번**을 쓴다.
      문구를 키로 잡으면 오타 하나만 고쳐도 저장된 초안을 못 찾아 사라진 것처럼 보인다.
      자소서는 문항을 다듬어 가며 쓰는 물건이라 그 일이 실제로 자주 일어난다.
      대신 문항 순서를 바꾸면 초안이 자리에 남는데, 그건 화면에 적어 알린다. */
   const questionDraftKey = i => `문항${i + 1}`;
 
-  function questionHtml(q, i, r, company) {
-    const type  = classifyQuestion(q);
-    const comps = competenciesFor(type, r?.items);
+  /* ══ 결과부 — 좌우 2단 작업 화면 ═══════════════════════════ */
 
-    /* 지원동기 문항은 공고가 아니라 회사 소식이 근거다. 뉴스를 아직 안 찾았으면
-       "여기서 찾아라"까지만 말하고 없는 소재를 지어내지 않는다. */
-    const source = type?.pick === 'news'
-      ? `<div class="jd-block jd-block--mine">
-           <div class="jd-block-h"><i class="ti ti-news"></i> 이 문항의 근거</div>
-           <p class="jd-frame">${company
-             ? `<b>회사 검색과 자소서</b> 페이지에서 정한 관점 하나를 사용하세요. 회사명은 이 문항의 작성 방향을 맞추는 보조 정보입니다.`
-             : `<b>회사 검색과 자소서</b> 페이지에서 회사를 먼저 선택하면 지원동기 작성 순서를 준비할 수 있어요.`}</p>
-         </div>`
-      : comps.length
-        ? `<div class="jd-block jd-block--mine">
-             <div class="jd-block-h"><i class="ti ti-target"></i> 이 문항에 쓸 역량</div>
-             <div class="jd-chips">${comps.map(c => `<span class="jd-chip jd-chip--static">${esc(c.label)}</span>`).join('')}</div>
-             ${comps[0]?.mine?.length
-               ? `<p class="jd-frame">내 활동 중 <b>${esc(comps[0].mine[0].name || comps[0].mine[0])}</b> 이(가) 이 역량의 소재로 맞습니다.</p>`
-               : `<p class="jd-frame">마이페이지에 활동을 입력하면 어떤 경험을 쓸지까지 짚어드려요.</p>`}
-           </div>`
-        : '';
-
-    return `<article class="jd-card">
-      <header class="jd-card-h">
-        <span class="jd-idx">${i + 1}</span>
-        <h3>${esc(q)}</h3>
-        <span class="jd-src jd-src--${type ? 'ai' : 'rule'}">${type ? esc(type.label) : '유형 미확인'}</span>
-      </header>
-
-      <p class="jd-lead">${type
-        ? esc(type.how)
-        : '문항 유형을 알아보지 못했어요. 아래 역량 카드에서 이 문항과 가까운 것을 직접 고르세요.'}</p>
-
-      ${source}
-
-      <div class="jd-draft">
-        <div class="jd-block-h">
-          <i class="ti ti-pencil"></i> 내 자소서 초안
-          <span class="jd-draft-state" id="jd-draft-state-q${i}"></span>
-        </div>
-        <textarea class="jd-draft-text" id="jd-draft-q${i}" rows="8"
-          data-label="${esc(questionDraftKey(i))}"
-          placeholder="이 문항의 답변을 여기에 쓰세요. 적는 대로 저장돼요.">${esc(getDraft(questionDraftKey(i)))}</textarea>
-        <div class="jd-draft-foot">
-          <span class="jd-draft-count" id="jd-draft-count-q${i}"></span>
-          <span class="jd-draft-hint">이 브라우저에만 저장됩니다 · 문항 문구를 고쳐도 초안은 남아요
-            (문항 <b>순서</b>를 바꾸면 초안은 그 자리에 남습니다)</span>
-        </div>
-      </div>
-    </article>`;
+  /* 초안 탭. 문항을 넣었으면 문항이 탭이 되고(제출 단위가 문항이니까),
+     안 넣었으면 역량이 탭이 된다. 어느 쪽이든 오른쪽 칸 하나에서 쓴다. */
+  function tabsOf(r) {
+    const questions = parseQuestions();
+    if (questions.length) {
+      return questions.map((q, i) => {
+        const type = classifyQuestion(q);
+        return {
+          kind: 'question', text: q, type,
+          label: `문항 ${i + 1}`, key: questionDraftKey(i),
+          comps: competenciesFor(type, r.items),
+        };
+      });
+    }
+    return r.items.map(it => ({
+      kind: 'item', text: it.label, type: null,
+      label: it.label, key: it.label, comps: [it],
+    }));
   }
 
-  function mineHtml(item) {
-    if (item.gap) return `<div class="jd-gap"><i class="ti ti-alert-triangle"></i> ${esc(item.gap)}</div>`;
-    if (!item.mine.length) return '';
-
-    const rows = item.mine.map((m, i) => `
-      <li class="${i === 0 ? 'is-top' : ''}">
-        <span class="jd-mine-name">${esc(m.name)}</span>
-        <span class="jd-mine-meta">${esc(m.typeLabel)}${m.duration ? ' · ' + esc(m.duration) : ''}${m.role ? ' · ' + esc(m.role) : ''}${m.outcome && m.outcome !== '결과물 없음' ? ' · ' + esc(m.outcome) : ''}</span>
-      </li>`).join('');
-    return `<div class="jd-block jd-block--mine">
-        <div class="jd-block-h"><i class="ti ti-user-star"></i> 소재로 쓸 내 경험</div>
-        <ul class="jd-mine">${rows}</ul>
-      </div>`;
-  }
-
-  /* 시장 빈도 — careerly 만 할 수 있는 말이라 카드에서 가장 눈에 띄는 자리에 둔다.
-     비율만 쓰면 근거 없는 숫자로 보이므로 표본 수를 항상 같이 적는다.
-     데이터가 없으면(채용공고 미수집) 통째로 생략 — 빈 자리를 만들지 않는다. */
   const RARITY_TEXT = {
     common: '지원자 대부분이 쓰는 역량입니다. <b>안 쓰면 감점</b>이니 반드시 넣되, 여기서 차별화되긴 어렵습니다.',
     normal: '절반 이하의 공고가 요구합니다. 근거가 있다면 <b>비중 있게</b> 쓰세요.',
     rare:   '요구하는 공고가 드뭅니다. 근거가 있다면 <b>가장 강한 차별점</b>이 됩니다.',
   };
 
-  function marketHtml(item) {
-    const m = item.market;
-    if (!m) return '';
-    return `<div class="jd-market jd-market--${m.rarity}">
-        <div class="jd-market-num">${m.pct}<span>%</span></div>
-        <div class="jd-market-txt">
-          <div class="jd-market-h">${esc(m.bucket)} 공고 <b>${m.sample}건</b> 중 ${m.count}건이 요구</div>
-          <div class="jd-market-note">${RARITY_TEXT[m.rarity] || ''}</div>
-        </div>
-      </div>`;
+  const hasMine = it => Boolean(it.mine?.length) && !it.gap;
+
+  /* 역량 키워드 칩 — 왼쪽 맨 위. 눌러서 역량을 바꿔 가며 본다. */
+  function keysHtml(r) {
+    const ok = r.items.filter(hasMine).length;
+    return `<div class="jd-comp-keys">
+      <div class="jd-comp-keys-h">
+        <b>요구 역량 ${r.items.length}가지</b>
+        <span>내 근거 있음 ${ok} · 없음 ${r.items.length - ok}</span>
+      </div>
+      <div class="jd-keys">
+        ${r.items.map((it, i) => `
+          <button type="button" class="jd-key ${i === _focused ? 'is-on' : ''}" data-key="${i}">
+            <span class="jd-key-dot ${hasMine(it) ? 'jd-key-dot--ok' : 'jd-key-dot--gap'}"></span>
+            ${esc(it.label)}
+            ${it.market ? `<span class="jd-key-n">${it.market.pct}%</span>` : ''}
+          </button>`).join('')}
+      </div>
+      <p class="jd-hint">점이 <b>초록</b>이면 내 활동에 쓸 소재가 있고, <b>빨강</b>이면 아직 없습니다.
+        옆 숫자는 같은 직군 공고 중 이 역량을 요구한 비율이에요.</p>
+    </div>`;
   }
 
-  function itemHtml(item, idx) {
-    const quotes = item.quotes.length
-      ? `<div class="jd-quotes">
-           <div class="jd-quotes-h">공고 근거</div>
-           ${item.quotes.map(q => `<blockquote>${esc(q)}</blockquote>`).join('')}
-         </div>`
-      : '';
+  function mineHtml(item) {
+    if (item.gap) return `<div class="jd-gap"><i class="ti ti-alert-triangle"></i> ${esc(item.gap)}</div>`;
+    if (!item.mine?.length) return '';
+    return `<ul class="jd-mine">
+      ${item.mine.map((m, i) => `
+        <li class="${i === 0 ? 'is-top' : ''}">
+          <div class="jd-mine-name">${esc(m.name)}${i === 0
+            ? ' <span class="wf-badge wf-badge--ok">1순위</span>' : ''}</div>
+          <div class="jd-mine-meta">${esc(m.typeLabel)}${m.duration ? ' · ' + esc(m.duration) : ''}${
+            m.role ? ' · ' + esc(m.role) : ''}${
+            m.outcome && m.outcome !== '결과물 없음' ? ' · ' + esc(m.outcome) : ''}</div>
+        </li>`).join('')}
+    </ul>`;
+  }
 
-    const openers = item.openers?.length
-      ? `<div class="jd-block">
-           <div class="jd-block-h"><i class="ti ti-quote"></i> 첫 문장 여는 방법</div>
-           <ul class="jd-list">${item.openers.map(o => `<li>${esc(o)}</li>`).join('')}</ul>
-         </div>`
-      : '';
+  /* 한 역량의 상세. 펼친 것만 보이고 나머지는 머리줄만 남는다 —
+     예전에는 7개가 통째로 세로로 쌓여 카드 하나가 화면보다 길었다. */
+  function compHtml(item, i, qMap) {
+    const m = item.market;
+    const badges = qMap[i] || [];
 
-    return `<article class="jd-card">
-      <header class="jd-card-h">
-        <span class="jd-idx">${idx + 1}</span>
-        <h3>${esc(item.label)}</h3>
-        <span class="jd-src jd-src--${item.source}">${item.source === 'ai' ? 'AI 추출' : '공고 키워드'}</span>
-      </header>
+    return `<div class="jd-comp ${i === _focused ? 'is-open' : ''}" id="jd-comp-${i}">
+      <button type="button" class="jd-comp-h" data-comp="${i}">
+        <span class="jd-comp-rank">${i + 1}</span>
+        <span class="jd-comp-h-t">
+          <b>${esc(item.label)}</b>
+          <span class="jd-comp-h-meta">
+            ${m ? `<span class="jd-freq jd-freq--${esc(m.rarity)}">
+                     <span class="jd-freq-bar"><i style="width:${Math.min(100, m.pct)}%"></i></span>
+                     <span class="jd-freq-t">${m.pct}% 요구</span>
+                   </span>` : ''}
+            ${hasMine(item)
+              ? `<span class="wf-badge wf-badge--ok">내 소재 ${item.mine.length}건</span>`
+              : `<span class="wf-badge wf-badge--error">소재 없음</span>`}
+            ${badges.map(n => `<span class="wf-badge wf-badge--mute">문항 ${n}</span>`).join('')}
+            <span class="wf-badge wf-badge--mute">${item.source === 'ai' ? 'AI 추출' : '공고 키워드'}</span>
+          </span>
+        </span>
+      </button>
 
-      ${marketHtml(item)}
-      <p class="jd-reads"><b>기업이 보는 것</b> — ${esc(item.reads)}</p>
-      ${quotes}
-
-      <p class="jd-lead">${bold(item.lead)}</p>
-
-      <div class="jd-block jd-block--frame">
-        <div class="jd-block-h"><i class="ti ti-list-numbers"></i> 이 순서로 쓰세요</div>
-        <p class="jd-frame">${esc(item.frame)}</p>
-      </div>
-
-      ${mineHtml(item)}
-      ${openers}
-
-      <div class="jd-block">
-        <div class="jd-block-h"><i class="ti ti-number-123"></i> 반드시 숫자로 바꿀 것</div>
-        <ul class="jd-list">${item.numbers.map(n => `<li>${esc(n)}</li>`).join('')}</ul>
-      </div>
-
-      <div class="jd-block jd-block--avoid">
-        <div class="jd-block-h"><i class="ti ti-circle-x"></i> 이렇게 쓰면 감점</div>
-        <ul class="jd-list">${item.avoid.map(a => `<li>${esc(a)}</li>`).join('')}</ul>
-      </div>
-
-      ${item.followup ? `<div class="jd-followup">
-          <i class="ti ti-messages"></i> 이렇게 쓰면 면접에서 이걸 물어봅니다 —
-          <b>“${esc(item.followup)}”</b>
+      <div class="jd-comp-body">
+        ${m ? `<div class="jd-comp-sec">
+          <span class="wf-eyebrow">시장 빈도</span>
+          <p class="jd-comp-p">${esc(m.bucket)} 공고 <b>${m.sample}건</b> 중 ${m.count}건이 요구 —
+            ${RARITY_TEXT[m.rarity] || ''}</p>
         </div>` : ''}
 
-      <div class="jd-draft">
-        <div class="jd-block-h">
-          <i class="ti ti-pencil"></i> 내 자소서 초안
-          <span class="jd-draft-state" id="jd-draft-state-${idx}"></span>
+        <div class="jd-comp-sec">
+          <span class="wf-eyebrow">기업이 보는 것</span>
+          <p class="jd-comp-p">${esc(item.reads)}</p>
         </div>
-        <textarea class="jd-draft-text" id="jd-draft-${idx}" rows="6"
-          data-label="${esc(item.label)}"
-          placeholder="위 순서대로 이 역량에 대한 문단을 써 보세요. 적는 대로 저장돼요.">${esc(getDraft(item.label))}</textarea>
-        <div class="jd-draft-foot">
-          <span class="jd-draft-count" id="jd-draft-count-${idx}"></span>
-          <span class="jd-draft-hint">이 브라우저에만 저장됩니다 · 회사명을 적으면 회사별로 나뉘어요</span>
+
+        ${item.quotes?.length ? `<div class="jd-comp-sec">
+          <span class="wf-eyebrow">공고 근거</span>
+          ${item.quotes.map(q => `<div class="jd-quote">${esc(q)}</div>`).join('')}
+        </div>` : ''}
+
+        <div class="jd-comp-sec">
+          <span class="wf-eyebrow">이 순서로 쓰세요</span>
+          <div class="jd-frame">${esc(item.frame)}</div>
+          <p class="jd-hint">${bold(item.lead)}</p>
+          <div class="jd-ai-row">
+            <button type="button" class="wf-btn wf-btn--sm wf-btn--primary" data-ai="${i}">
+              <i class="ti ti-sparkles"></i> AI 초안 넣기
+            </button>
+            <span class="jd-ai-state" data-ai-state="${i}"></span>
+          </div>
+          <p class="jd-hint">내 활동·공고 근거·이 역량을 같이 읽고 문단을 만들어 오른쪽 작성칸에 넣습니다.
+            <b>모르는 수치는 [대괄호]로 남습니다</b> — 그 자리는 본인 사실로 채우셔야 해요.</p>
         </div>
+
+        ${(item.mine?.length || item.gap) ? `<div class="jd-comp-sec">
+          <span class="wf-eyebrow">소재로 쓸 내 경험</span>
+          ${mineHtml(item)}
+        </div>` : ''}
+
+        ${item.openings?.length ? `<div class="jd-comp-sec">
+          <span class="wf-eyebrow">첫 문장 틀 · ${esc(item.openings[0].basedOn)} 기준</span>
+          ${item.openings[0].warn
+            ? `<div class="jd-gap" style="margin-bottom:8px"><i class="ti ti-alert-triangle"></i> ${esc(item.openings[0].warn)}</div>` : ''}
+          <ul class="jd-openings">
+            ${item.openings.map(o => `<li>
+              <div class="jd-opening-label">${esc(o.label)}</div>
+              <p class="jd-opening-text">${esc(o.text)}</p>
+            </li>`).join('')}
+          </ul>
+          <p class="jd-hint"><b>[대괄호]는 직접 채우세요.</b> 채우지 않으면 문장이 되지 않습니다 —
+            남은 빈칸은 오른쪽 작성칸 아래가 세어 줍니다.</p>
+        </div>` : ''}
+
+        ${item.openers?.length ? `<div class="jd-comp-sec">
+          <span class="wf-eyebrow">첫 문장 여는 방법</span>
+          <ul class="jd-list">${item.openers.map(o => `<li>${esc(o)}</li>`).join('')}</ul>
+        </div>` : ''}
+
+        <div class="jd-comp-sec">
+          <span class="wf-eyebrow">반드시 숫자로 바꿀 것</span>
+          <ul class="jd-list">${item.numbers.map(n => `<li>${esc(n)}</li>`).join('')}</ul>
+        </div>
+
+        <div class="jd-comp-sec">
+          <span class="wf-eyebrow">이렇게 쓰면 감점</span>
+          <ul class="jd-list jd-list--avoid">${item.avoid.map(a => `<li>${esc(a)}</li>`).join('')}</ul>
+        </div>
+
+        ${item.followup ? `<div class="jd-followup">
+          이렇게 쓰면 면접에서 이걸 물어봅니다 — <b>“${esc(item.followup)}”</b>
+        </div>` : ''}
+
+        <!-- AI 초안이 같이 준 '채워야 할 빈칸'과 '약한 지점'이 여기에 들어온다 -->
+        <div data-ai-notes="${i}"></div>
       </div>
-    </article>`;
+    </div>`;
+  }
+
+  /* 오른쪽 초안 칸. 지금 고른 탭 하나만 그린다. */
+  function draftHtml(r, tabs) {
+    const tab = tabs[_tab] || tabs[0];
+    if (!tab) {
+      return `<div class="jd-draft-pane"><div class="jd-empty">쓸 문항이 없어요.
+        위 <b>자소서 문항</b> 칸에 문항을 한 줄에 하나씩 넣으면 문항별로 쓸 수 있습니다.</div></div>`;
+    }
+
+    const company = valueOf('#jd-company');
+    const ev = evidenceFor(company);
+    /* 지원동기 문항은 공고가 아니라 회사 소식이 근거다. 없는 소재를 지어내지 않고
+       "어디서 가져오라"까지만 말한다. */
+    const isMotive = tab.type?.pick === 'news';
+
+    const source = isMotive
+      ? `<div class="jd-qprompt-comps">
+           ${ev.length
+             ? ev.slice(0, 3).map(e => `<span class="wf-badge wf-badge--soft">${esc(e.text.slice(0, 28))}${e.text.length > 28 ? '…' : ''}</span>`).join('')
+             : `<span class="wf-badge wf-badge--warn">회사 리포트에서 근거를 먼저 담으세요</span>`}
+         </div>`
+      : `<div class="jd-qprompt-comps">
+           ${tab.comps.map(c => {
+             const i = r.items.indexOf(c);
+             return `<button type="button" class="jd-key" data-key="${i}">
+               <span class="jd-key-dot ${hasMine(c) ? 'jd-key-dot--ok' : 'jd-key-dot--gap'}"></span>
+               ${esc(c.label)}</button>`;
+           }).join('')}
+           ${tab.comps.length > 2
+             ? `<span class="wf-badge wf-badge--mute">한 문항에 역량 2개까지가 안전해요</span>` : ''}
+         </div>`;
+
+    const draft = getDraft(tab.key);
+
+    return `<div class="jd-draft-pane">
+      <div class="jd-draft-h">
+        <b>내 자소서 초안</b>
+        <span class="jd-draft-end">
+          <span class="jd-draft-state" id="jd-draft-state"></span>
+        </span>
+      </div>
+
+      <div class="jd-qtabs">
+        ${tabs.map((t, i) => {
+          const len = getDraft(t.key).length;
+          return `<button type="button" class="jd-qtab ${i === _tab ? 'is-on' : ''}" data-tab="${i}">
+            ${esc(t.label)}<span>${len ? len.toLocaleString() : '0'}</span>
+          </button>`;
+        }).join('')}
+      </div>
+
+      <div class="jd-qprompt">
+        <div class="jd-qprompt-q">${esc(tab.text)}</div>
+        ${tab.kind === 'question' ? `<p class="jd-qprompt-how">${tab.type
+          ? esc(tab.type.how)
+          : '문항 유형을 알아보지 못했어요. 왼쪽 역량 중 이 문항과 가까운 것을 직접 고르세요.'}</p>` : ''}
+        ${source}
+      </div>
+
+      <div class="jd-draft-wrap">
+        <textarea class="jd-draft-text" id="jd-draft" data-key="${esc(tab.key)}"
+          placeholder="왼쪽 역량의 '이 순서로 쓰세요'를 보면서 여기에 쓰세요. 적는 대로 저장돼요.">${esc(draft)}</textarea>
+      </div>
+
+      <div class="jd-draft-foot">
+        <span class="jd-draft-count" id="jd-draft-count"></span>
+        <span>이 브라우저에만 저장됩니다${company ? ` · ${esc(company)} 기준` : ''}</span>
+        <span class="jd-chk-row" id="jd-chk"></span>
+      </div>
+    </div>`;
+  }
+
+  /* STAR — 초안을 쓰는 내내 보고 있어야 하는 뼈대라 작업 화면 **위**에 둔다.
+     아래에 두면 문단을 쓰다가 골격을 확인하려고 매번 스크롤을 내려야 했다. */
+  function starHtml(r) {
+    if (!r.star?.length) return '';
+    return `<div class="jd-star-band">
+      <div class="co-sec-h"><h2>모든 문항의 뼈대 — STAR</h2>
+        <span class="co-src">아래 역량별 순서는 이 뼈대를 그 역량에 맞게 편 것입니다</span></div>
+      <div class="jd-star-grid">
+        ${r.star.map(s => `<div class="jd-star-cell">
+          <div class="jd-star-key">${esc(s.key)}<span>${esc(s.label)}</span></div>
+          <div class="jd-star-what">${esc(s.what)}</div>
+          <div class="jd-star-check">${esc(s.check)}</div>
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  function checklistHtml(r) {
+    if (!r.checklist?.length) return '';
+    return `<div class="co-sec">
+      <div class="co-sec-h"><h2>제출 전 체크리스트</h2></div>
+      <div class="wf-card">
+        <ul class="jd-list">${r.checklist.map(c => `<li>${esc(c)}</li>`).join('')}</ul>
+        <p class="jd-hint">위에서부터 순서대로 봅니다 — 앞이 걸리면 뒤를 볼 필요가 없어요.
+          상투 표현·AI 흔적은 작성칸 아래에서 <b>브라우저 안에서만</b> 검사합니다(초안은 서버로 보내지 않아요).</p>
+      </div>
+    </div>`;
   }
 
   function render(r) {
-    const resultEl = $('#jd-result');
-    resultEl.hidden = false;
+    const box = $('#jd-result');
+    if (!box) return;
+    box.hidden = false;
+
+    if (!r.items?.length) {
+      box.innerHTML = `<div class="wf-card"><div class="jd-empty">공고에서 역량을 뽑아내지 못했어요.
+        모집분야·자격요건이 들어간 본문을 넣어 주세요.</div></div>`;
+      return;
+    }
+
+    _focused = Math.min(_focused, r.items.length - 1);
+    const tabs = tabsOf(r);
+    _lastTabs = tabs;
+    _tab = Math.min(_tab, Math.max(0, tabs.length - 1));
+
+    /* 역량 → 그 역량이 배정된 문항 번호. 예전에는 문항 카드가 따로 한 벌 더 나와서
+       같은 역량 설명을 두 번 읽어야 했다. 여기서는 역량 줄에 문항 번호만 붙인다. */
+    const qMap = {};
+    tabs.forEach((t, ti) => {
+      if (t.kind !== 'question') return;
+      t.comps.forEach(c => {
+        const i = r.items.indexOf(c);
+        if (i < 0) return;
+        (qMap[i] = qMap[i] || []).push(ti + 1);
+      });
+    });
 
     const src = r.provider === 'rule'
       ? '공고 키워드로 직접 추출 (AI 미사용)'
       : `공고 키워드 + AI 보강 (${esc(r.model || r.provider)})`;
 
-    resultEl.innerHTML = `
-      <div class="jd-summary">
-        <div class="jd-summary-h">
-          이 공고가 요구하는 역량 <b>${r.items.length}가지</b>
+    box.innerHTML = `
+      <div class="jd-workspace">
+        <div class="jd-ws-bar">
+          <h2>분석 결과</h2>
+          <span class="jd-ws-src">공고 문장 ${r.jdSentences}개를 읽었어요 · ${src}</span>
+          <span class="jd-ws-end">
+            ${r.notice ? `<span class="jd-notice">${esc(r.notice)}</span>` : ''}
+            <button type="button" class="wf-btn wf-btn--sm" data-reopen>입력 다시 보기</button>
+          </span>
         </div>
-        <div class="jd-summary-sub">공고 문장 ${r.jdSentences}개를 읽었어요 · ${src}</div>
-        ${r.market ? `<div class="jd-market-src">
-            시장 비율은 워크넷 <b>${esc(r.market.bucket)}</b> 채용공고 ${r.market.totalJobs.toLocaleString()}건을
-            ${esc(r.market.basedOn)} 기준으로 집계한 값이에요. 공고 본문에 적혔지만 제목에 없는 요건은 빠지므로
-            실제보다 낮게 나옵니다.
-          </div>` : ''}
-        <div class="jd-chips">
-          <button class="jd-chip jd-chip--all is-on" data-i="" onclick="JdCoach.focusItem(null)">전체 ${r.items.length}</button>
-          ${r.items.map((it, i) =>
-            `<button class="jd-chip" data-i="${i}" onclick="JdCoach.focusItem(${i})">${esc(it.label)}</button>`).join('')}
-        </div>
-        <div class="jd-chips-hint">역량을 누르면 그 역량만 봅니다. 다시 누르면 전체로 돌아와요.</div>
-        ${r.notice ? `<div class="jd-notice">${esc(r.notice)}</div>` : ''}
-        <div class="jd-disclaimer"><i class="ti ti-alert-circle"></i> ${esc(r.disclaimer)}</div>
-      </div>
-      <div class="jd-cards">${r.items.map(itemHtml).join('')}</div>`;
 
-    _focused = null;        // 새 분석 결과는 항상 전체 보기로 시작한다
-    bindDrafts(resultEl);
+        ${starHtml(r)}
+
+        <div class="jd-split">
+          <div class="jd-comp-pane">
+            ${keysHtml(r)}
+            <div class="jd-comp-list">
+              ${r.items.map((it, i) => compHtml(it, i, qMap)).join('')}
+            </div>
+          </div>
+          ${draftHtml(r, tabs)}
+        </div>
+
+        ${r.market ? `<p class="jd-hint" style="margin-top:10px">시장 비율은 워크넷
+          <b>${esc(r.market.bucket)}</b> 채용공고 ${r.market.totalJobs.toLocaleString()}건을
+          ${esc(r.market.basedOn)} 기준으로 집계한 값이에요. 공고 본문에 적혔지만 제목에 없는 요건은
+          빠지므로 실제보다 낮게 나옵니다.</p>` : ''}
+
+        <div class="co-sec">
+          <div class="jd-disclaimer"><i class="ti ti-alert-circle"></i> ${esc(r.disclaimer)}</div>
+        </div>
+
+        ${checklistHtml(r)}
+      </div>`;
+
+    bind(box, r, tabs);
+  }
+
+  function bind(box, r, tabs) {
+    // 역량 키워드 칩 · 역량 머리줄 — 둘 다 같은 역량을 연다
+    box.querySelectorAll('[data-key]').forEach(el =>
+      el.addEventListener('click', () => focusItem(Number(el.dataset.key))));
+    box.querySelectorAll('[data-comp]').forEach(el =>
+      el.addEventListener('click', () => focusItem(Number(el.dataset.comp))));
+
+    // 초안 탭
+    box.querySelectorAll('[data-tab]').forEach(el =>
+      el.addEventListener('click', () => { _tab = Number(el.dataset.tab); render(r); }));
+
+    // 'AI 초안 넣기' — 내 활동과 공고 근거로 문단을 만들어 작성칸에 끼워 넣는다
+    box.querySelectorAll('[data-ai]').forEach(el => {
+      const i = Number(el.dataset.ai);
+      el.addEventListener('click', () => insertAiDraft(r.items[i], i, r));
+    });
+
+    const reopen = box.querySelector('[data-reopen]');
+    if (reopen) reopen.addEventListener('click', () => {
+      STEPS.forEach(s => blockOf(s)?.classList.add('is-open'));
+      STEPS.forEach(paintBlock);
+      document.querySelectorAll('#jd-doc [data-grow]').forEach(autoGrow);
+      paintProgress();
+      $('#jd-doc')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+
+    bindDraft(box);
+  }
+
+  /* 역량 바꿔 보기 — 다시 그리지 않고 클래스만 토글한다.
+     innerHTML 로 새로 그리면 작성 중이던 초안이 날아간다(자동저장은 600ms 디바운스라
+     방금 친 글자는 아직 저장 전이다). */
+  function focusItem(i) {
+    if (!Number.isInteger(i) || i < 0) return;
+    _focused = i;
+
+    document.querySelectorAll('#jd-result .jd-comp').forEach((el, idx) =>
+      el.classList.toggle('is-open', idx === i));
+    document.querySelectorAll('#jd-result .jd-keys .jd-key').forEach(el =>
+      el.classList.toggle('is-on', Number(el.dataset.key) === i));
+
+    const el = document.getElementById(`jd-comp-${i}`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  /* ── AI 초안 ──────────────────────────────────────────────
+     서버(draft-coach.js)가 인사담당자·현업 관점의 틀로 문단을 만들어 온다.
+     받은 문단은 **덮어쓰지 않고 커서 자리에 끼워 넣는다** — 이미 쓰던 글이 있으면
+     그게 사용자의 문장이고, 그걸 AI 문장으로 지우면 되돌릴 방법이 없다. */
+  async function insertAiDraft(item, i, r) {
+    const ta = $('#jd-draft');
+    const btn = document.querySelector(`[data-ai="${i}"]`);
+    const stateEl = document.querySelector(`[data-ai-state="${i}"]`);
+    if (!ta || !item) return;
+
+    const tabs = _lastTabs || [];
+    const tab = tabs[_tab];
+
+    btn.disabled = true;
+    if (stateEl) stateEl.textContent = '초안을 쓰는 중… (1분 이상 걸릴 수 있어요)';
+
+    try {
+      const out = await DB.draftJd({
+        competency: item.label,
+        company: valueOf('#jd-company'),
+        jobTitle: r?.market?.bucket || '',
+        question: tab?.kind === 'question' ? tab.text : '',
+        quotes: item.quotes || [],
+        reads: item.reads || '',
+        frame: item.frame || '',
+        limit: 600,
+      });
+
+      const at = ta.selectionStart ?? ta.value.length;
+      const pad = ta.value.trim() && at > 0 ? '\n\n' : '';
+      const text = pad + out.draft;
+      ta.value = ta.value.slice(0, at) + text + ta.value.slice(ta.selectionEnd ?? at);
+      ta.focus();
+      ta.setSelectionRange(at + text.length, at + text.length);
+      ta.dispatchEvent(new Event('input'));
+
+      if (stateEl) {
+        stateEl.innerHTML = out.blankCount
+          ? `<b>빈칸 ${out.blankCount}개</b>를 본인 사실로 채우세요`
+          : '넣었어요';
+      }
+      paintAiNotes(i, out);
+    } catch (e) {
+      if (stateEl) stateEl.textContent = e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  /* 모델이 같이 준 '무엇을 채워야 하는지'와 '채용담당자가 볼 약한 지점'.
+     초안만 주고 끝내면 학생은 그대로 낸다 — 고칠 지점을 같이 붙인다. */
+  function paintAiNotes(i, out) {
+    const host = document.querySelector(`[data-ai-notes="${i}"]`);
+    if (!host) return;
+    const list = (arr, title) => arr?.length
+      ? `<div class="jd-comp-sec"><span class="wf-eyebrow">${title}</span>
+           <ul class="jd-list">${arr.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`
+      : '';
+    host.innerHTML = list(out.blanks, '채워야 할 빈칸') + list(out.review, '채용담당자가 볼 약한 지점');
   }
 
   /* 작성칸 자동 저장. 글자마다 localStorage 를 때리지 않도록 600ms 묶어서 쓴다.
      저장은 조용히 되면 사용자가 저장됐는지 모른다 — 상태 문구를 같이 갱신한다. */
-  function bindDrafts(root) {
-    root.querySelectorAll('.jd-draft-text').forEach(ta => {
-      const idx     = ta.id.replace('jd-draft-', '');
-      const stateEl = root.querySelector(`#jd-draft-state-${idx}`);
-      const countEl = root.querySelector(`#jd-draft-count-${idx}`);
-      const label   = ta.dataset.label;
-      let timer = null;
+  function bindDraft(box) {
+    const ta = box.querySelector('#jd-draft');
+    if (!ta) return;
+    const stateEl = box.querySelector('#jd-draft-state');
+    const countEl = box.querySelector('#jd-draft-count');
+    const chkEl = box.querySelector('#jd-chk');
+    const key = ta.dataset.key;
+    let timer = null;
 
-      const paintCount = () => {
-        const n = ta.value.length;
-        countEl.textContent = n ? `${n.toLocaleString()}자` : '';
-      };
-      paintCount();
-      if (ta.value.trim()) stateEl.textContent = '저장된 초안을 불러왔어요';
+    const paint = () => {
+      countEl.textContent = ta.value.length ? `${ta.value.length.toLocaleString()}자` : '0자';
+      paintCheck(chkEl, ta.value);
+    };
+    paint();
+    if (ta.value.trim()) stateEl.textContent = '저장된 초안을 불러왔어요';
 
-      ta.addEventListener('input', () => {
-        paintCount();
-        stateEl.textContent = '작성 중…';
-        clearTimeout(timer);
-        timer = setTimeout(() => {
-          saveDraft(label, ta.value);
-          stateEl.textContent = '저장됨';
-        }, 600);
-      });
-      // 탭을 옮기거나 페이지를 뜨면 대기 중인 저장을 흘려보내지 않는다
-      ta.addEventListener('blur', () => {
-        clearTimeout(timer);
-        saveDraft(label, ta.value);
-        if (ta.value.trim()) stateEl.textContent = '저장됨';
-      });
+    ta.addEventListener('input', () => {
+      paint();
+      stateEl.textContent = '작성 중…';
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        saveDraft(key, ta.value);
+        stateEl.textContent = '저장됨';
+        // 탭 글자수도 같이 갱신 — 어느 문항이 얼마나 찼는지가 탭에 보인다
+        const tab = box.querySelector(`[data-tab="${_tab}"] span`);
+        if (tab) tab.textContent = ta.value.length.toLocaleString();
+      }, 600);
+    });
+    // 탭을 옮기거나 페이지를 뜨면 대기 중인 저장을 흘려보내지 않는다
+    ta.addEventListener('blur', () => {
+      clearTimeout(timer);
+      saveDraft(key, ta.value);
+      if (ta.value.trim()) stateEl.textContent = '저장됨';
     });
   }
 
-  /* ── 요약 칩 → 그 역량만 보기 ────────────────────────────────
-     예전에는 해당 카드로 스크롤만 했다. 역량이 7개면 카드 하나가 화면보다 길어서,
-     스크롤로 옮겨가도 위아래에 다른 역량이 걸쳐 보여 "이 역량만" 읽기가 어려웠다.
-     지금은 고른 카드만 남기고 나머지를 접는다. 같은 칩을 다시 누르면 전체로 돌아온다.
+  /* ── 초안 검사 (브라우저에서만 돈다) ──────────────────────────
+     상투 표현·AI 흔적 검사는 서버로 보내지 않는다. 자소서 초안은 남의 서버에
+     올릴 이유가 없는 글이고, 검사 자체가 단순 문자열 대조라 여기서 끝난다.
+     서버는 '무엇을 찾을지'(사전)만 내려보낸다. */
+  function checkDraft(text) {
+    const body = String(text || '');
+    const out = { cliches: [], aiTells: [], blanks: 0 };
+    if (!body.trim() || !_last) return out;
 
-     ── 다시 그리지 않고 클래스만 토글한다 ──
-     innerHTML 로 카드를 새로 그리면 **작성 중이던 초안이 날아간다**. 초안 자동저장은
-     600ms 디바운스라 방금 친 글자는 아직 저장 전이다. 그래서 DOM 은 그대로 두고
-     보이기만 바꾼다.
-
-     선택자를 #jd-result 로 묶는 것도 중요하다 — 문항 카드(#jd-questions-result)에도
-     같은 .jd-chip 클래스를 쓰는데, 그쪽은 누르는 물건이 아니다. */
-  let _focused = null;          // 현재 필터 중인 역량 index (null = 전체)
-
-  function focusItem(i) {
-    const wrap = document.querySelector('#jd-result .jd-cards');
-    if (!wrap) return;
-
-    // 같은 칩을 다시 누르면 해제 — 되돌릴 방법을 못 찾는 상태를 만들지 않는다
-    _focused = (i == null || _focused === i) ? null : i;
-
-    const cards = [...wrap.querySelectorAll('.jd-card')];
-    wrap.classList.toggle('is-filtered', _focused !== null);
-    cards.forEach((c, idx) => c.classList.toggle('is-shown', idx === _focused));
-
-    document.querySelectorAll('#jd-result .jd-chip').forEach(chip => {
-      const ci = chip.dataset.i === '' ? null : Number(chip.dataset.i);
-      chip.classList.toggle('is-on', ci === _focused);
-    });
-
-    // 필터를 걸면 결과 머리로 올려준다. 아래쪽 칩을 눌렀을 때 빈 화면처럼 보이지 않게.
-    if (_focused !== null) {
-      document.querySelector('#jd-result .jd-summary')
-        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    for (const c of _last.cliches || []) {
+      if (body.includes(c.term)) out.cliches.push(c);
     }
+    for (const t of _last.aiTells || []) {
+      const parts = t.term.split('~').map(s => s.trim()).filter(Boolean);
+      const counts = parts.map(p => body.split(p).length - 1);
+      const n = parts.length > 1 ? Math.min(...counts) : counts[0];
+      if (n > t.repeat) out.aiTells.push({ ...t, count: n });
+    }
+    out.blanks = (body.match(/\[[^\]]+\]/g) || []).length;
+    return out;
+  }
+
+  function paintCheck(el, text) {
+    if (!el) return;
+    const r = checkDraft(text);
+    const bits = [];
+    if (r.blanks) bits.push(`<span class="jd-chk jd-chk--warn">빈칸 ${r.blanks}개</span>`);
+    for (const c of r.cliches) bits.push(`<span class="jd-chk jd-chk--bad" title="${esc(c.why)}">${esc(c.term)}</span>`);
+    for (const t of r.aiTells) bits.push(`<span class="jd-chk jd-chk--ai" title="${esc(t.why)}">${esc(t.term)} ×${t.count}</span>`);
+    el.innerHTML = bits.length
+      ? `<span class="jd-chk-h">고칠 것</span>${bits.join('')}`
+      : (text.trim() ? '<span class="jd-chk jd-chk--ok">걸리는 표현 없음</span>' : '');
   }
 
   const api = {
     init, onEnter, focusItem,
     // 화면 없이 검증하는 규칙들 (test/jd-questions.test.js)
     classifyQuestion, competenciesFor, parseQuestions, questionDraftKey, QUESTION_TYPES,
+    checkDraft,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;   // node 테스트용

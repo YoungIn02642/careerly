@@ -14,6 +14,8 @@ const express = require('express');
 const { callModel, modelLabel, PROVIDER } = require('../ai-provider');
 const JD = require('../jd-competency');
 const TRENDS = require('../job-trends');
+const GUIDE = require('../cover-guide');
+const DRAFT = require('../draft-coach');
 
 const router = express.Router();
 
@@ -112,6 +114,9 @@ router.post('/coach', async (req, res) => {
   const bucket = TRENDS.pickBucket(text, req.body?.jobKeyword);
   for (const item of items) {
     item.market = item.custom ? null : TRENDS.marketFor(bucket, item.id);
+    /* 첫 문장 틀 — 배정된 활동이 있을 때만 만든다. spreadMaterials 가 소재를
+       나눠 배정한 **뒤**라야 카드마다 다른 활동으로 문장이 나온다. */
+    item.openings = GUIDE.openingDrafts(item.mine, { reuse: item.reuse });
   }
 
   res.json({
@@ -120,14 +125,75 @@ router.post('/coach', async (req, res) => {
     /* 화면에 그대로 띄우는 안내. 이 기능은 문장을 대신 써 주지 않는다는 것을
        사용자가 오해하지 않게 서버가 문구를 갖고 있는다. */
     disclaimer: '완성된 자소서 문장을 대신 써 드리지는 않습니다. 무엇을 어떤 순서로 쓸지에 대한 작성 지침이며, '
-      + '문장은 직접 쓰셔야 합니다(대필 문장은 유사도·AI 검출에 걸립니다).',
+      + '첫 문장은 빈칸이 있는 틀로만 드립니다 — [대괄호]는 본인 사실로 채우셔야 합니다 '
+      + '(대필 문장은 유사도·AI 검출에 걸립니다).',
     jdSentences: rule.sentenceCount,
     /* 트렌드 출처·기준을 함께 내려보낸다. 비율만 던지면 그게 어디서 나온 숫자인지
        화면에서 설명할 수 없다(제목 기준이라는 한계도 여기서 전달된다). */
     market: bucket ? { bucket, ...TRENDS.meta() } : null,
     items,
+
+    /* ── 문항 전체에 걸리는 작성 기준 ──
+       역량 카드마다 반복하지 않고 응답에 한 번만 싣는다. STAR 를 카드마다 붙이면
+       역량별 frame 과 골격이 두 개로 보여 어느 쪽을 따를지 알 수 없게 된다. */
+    star: GUIDE.STAR,
+    checklist: GUIDE.SUBMIT_CHECKLIST,
+    /* 검사 목록을 값으로 내려보낸다 — 화면이 초안을 서버로 보내지 않고 그 자리에서
+       검사할 수 있게 하려는 것이다. 자소서 초안은 남의 서버에 안 보내는 편이 낫다. */
+    cliches: GUIDE.CLICHES,
+    aiTells: GUIDE.AI_TELLS,
+    /* 회사명은 프론트가 입력칸에서 보내온다. 없으면 '지원 회사'로 나간다. */
+    interview: GUIDE.interviewQuestions({
+      company: req.body?.company,
+      hasNews: false,                    // 뉴스는 /api/company/analysis 쪽 책임이다
+      competencies: items,
+    }).filter(q => q.from === 'competency'),
     notice: aiError ? 'AI 보강은 실패해서, 공고에서 직접 찾아낸 역량만 정리했어요.' : undefined,
   });
+});
+
+/* ── POST /api/jd/draft ─────────────────────────────────────
+   역량 하나에 대한 자소서 문단 초안. 역량 추출(/coach)과 분리한 이유는 셋이다:
+     · 사용자가 역량 6개를 다 쓰지 않는다. 누른 역량만 만들면 되는데 한 번에 다
+       만들면 안 쓸 문단까지 기다리게 된다.
+     · 초안은 활동·문항이 바뀌면 다시 만들어야 한다. 그때마다 공고 분석을
+       처음부터 돌릴 이유가 없다.
+     · 실패해도 역량 카드는 살아 있어야 한다. 같은 응답에 묶으면 같이 죽는다.
+
+   초안은 서버에 저장하지 않는다. 만들어서 돌려주고 끝이며, 보관은 브라우저가 한다
+   (초안 검사와 같은 원칙 — 남의 서버에 둘 이유가 없는 글이다). */
+router.post('/draft', async (req, res) => {
+  const competency = String(req.body?.competency || '').trim();
+  if (!competency) return res.status(400).json({ error: '어느 역량으로 쓸지 알려 주세요.' });
+
+  const limit = Math.min(Math.max(Number(req.body?.limit) || 600, 200), 1500);
+  const prompt = DRAFT.buildPrompt({
+    company: String(req.body?.company || '').trim(),
+    jobTitle: String(req.body?.jobTitle || '').trim(),
+    competency,
+    quotes: Array.isArray(req.body?.quotes) ? req.body.quotes.slice(0, 4).map(String) : [],
+    reads: String(req.body?.reads || '').trim(),
+    frame: String(req.body?.frame || '').trim(),
+    activities: Array.isArray(req.body?.activities) ? req.body.activities.slice(0, 5) : [],
+    question: String(req.body?.question || '').trim(),
+    limit,
+  });
+
+  try {
+    /* num_predict 를 넉넉히 준다 — 문단 + 빈칸 안내 + 검토까지 한 응답에 담기므로
+       기본값(512)이면 JSON 이 중간에 잘려서 파싱이 통째로 실패한다. */
+    const raw = await callModel(prompt, DRAFT.SYSTEM, { num_ctx: 8192, num_predict: 1100 });
+    const out = DRAFT.parseDraft(raw);
+    res.json({ ...out, model: modelLabel(), provider: PROVIDER });
+  } catch (e) {
+    const status = e?.status || 502;
+    res.status(status).json({
+      error: (status === 503 || status === 429)
+        ? e.message
+        : 'AI 초안을 만들지 못했어요. 잠시 후 다시 시도해 주세요.',
+      detail: e.message,
+    });
+  }
 });
 
 module.exports = router;
