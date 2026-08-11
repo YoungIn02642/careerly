@@ -12,6 +12,7 @@ const { CORP_TYPE_ID } = require('./company-classify');
 /* 카탈로그 조회는 DB 에서 한다. 파일 기반 모듈(cert-catalog·major-catalog·
    company-classify·wage-jobs)은 수집·이관 전용으로 남는다 — catalog-db.js 머리주석 참고. */
 const catalog = require('./catalog-db');
+const sectors = require('./company-sectors');
 const OAuth = require('./oauth');
 const NiceAuth = require('./nice-auth');
 const recommendationsRouter = require("./routes/recommendations");
@@ -830,6 +831,13 @@ app.get('/api/company/suggest', ah(async (req, res) => {
 
 // 분류 캐시 상태 — 배치를 돌렸는지 확인용
 app.get('/api/company/stats', ah(async (req, res) => res.json(await catalog.companyStats())));
+
+/* 계열별 기업 목록 — 회사 찾기 첫 화면. 캐시 파일만 읽으므로 빠르다.
+   내용이 하루에 바뀌는 자료가 아니라 ETag 재검증에 맡긴다(/api/jobs 와 같은 규약). */
+app.get('/api/company/sectors', (req, res) => {
+  res.set('Cache-Control', 'no-cache');
+  res.json(sectors.sectors());
+});
 
 /* ── 자격증 카탈로그 ────────────────────────────────────────────
    스펙 입력 화면의 자격증 선택 목록. 국가자격(큐넷 API 캐시) + 민간자격(수기).

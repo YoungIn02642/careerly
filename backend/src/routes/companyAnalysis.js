@@ -21,6 +21,7 @@ const DART = require('../dart');
 const GUIDE = require('../cover-guide');
 const SARAMIN = require('../saramin-jobs');
 const WORKNET = require('../worknet-jobs');
+const SECTORS = require('../company-sectors');
 
 const router = express.Router();
 
@@ -88,7 +89,9 @@ function buildSteps({ news, dart, jobs }) {
       asks: '어떤 회사이고 규모가 어느 정도인가',
       status: prof ? 'ok' : 'todo',
       note: prof
-        ? `업종코드 ${prof.industryCode || '미상'}${prof.established ? ` · ${prof.established.slice(0, 4)}년 설립` : ''}`
+        ? [SECTORS.sectorOfCode(prof.industryCode),
+           prof.established && `${prof.established.slice(0, 4)}년 설립`,
+           prof.market].filter(Boolean).join(' · ') || '공시 개황'
         : '회사 홈페이지의 회사 소개에서 사업 영역을 직접 확인하세요.',
       link: prof?.homepage || null,
     },
@@ -211,7 +214,11 @@ router.get('/analysis', async (req, res) => {
     /* DART 는 '없음'과 '실패'를 구분해 내려보낸다. 키가 없어서 없는 것과 호출이
        실패한 것은 사용자가 할 일이 다르다(전자는 관리자 설정, 후자는 재시도). */
     dart: dart && dart.available ? {
-      profile: dart.profile,
+      /* 업종코드(264)는 화면에 못 올린다 — 사람이 쓰는 계열 이름을 같이 붙인다. */
+      profile: dart.profile && {
+        ...dart.profile,
+        sector: SECTORS.sectorOfCode(dart.profile.industryCode),
+      },
       financials: summarizeFinancials(dart.financials),
       employees: dart.employees,
       labels: LABELS,

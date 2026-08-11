@@ -187,6 +187,11 @@ window.DB = (() => {
     });
   }
 
+  /* 계열별 기업 목록 — 회사 찾기 첫 화면. 서버가 캐시 파일만 읽어 빠르다. */
+  async function companySectors() {
+    return api('GET', '/api/company/sectors');
+  }
+
   /* 기업분석 5단계 — 개요·재무·경쟁사(DART) + 최근이슈(뉴스).
      자소서 코치와 **따로** 부른다. 공고 없이 회사만 정해도 지원동기는 준비할 수 있고,
      뉴스·DART 는 외부 API 라 느려서 역량 분석까지 같이 붙들고 있으면 안 된다. */
@@ -348,7 +353,7 @@ window.DB = (() => {
     checkUsername, verifyStatus, verifyRequest,
     createUser, login, logout, withdraw, changePassword, completeOnboarding, confirmPayment, updateUser, requestRoleChange, upsertSpec, getProfile, updateProfile,
     classifyCompany, suggestCompanies, suggestCerts, suggestMajors, suggestUniversities, classifyMajor, jobCatalog,
-    analyzeCas, coachJd, draftJd, companyAnalysis,
+    analyzeCas, coachJd, draftJd, companyAnalysis, companySectors,
     insightCategories, listInsights, getInsight, createInsight, updateInsight, deleteInsight,
     addInsightComment, deleteInsightComment,
     seedDemo, seedRandom, clearAll, deleteUser,
