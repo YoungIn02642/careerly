@@ -84,7 +84,7 @@ careerly
 │  │  ├─ wage-jobs.js       # 직업별 임금·전망
 │  │  ├─ news.js            # 회사 뉴스 → 지원동기 소재
 │  │  ├─ demo-seed.js       # 백오피스 데모 시드
-│  │  ├─ ai-provider.js     # LLM 호출 한 겹 (Groq / Ollama)
+│  │  ├─ ai-provider.js     # LLM 호출 한 겹 (Groq 전용)
 │  │  └─ routes             # recommendations · casAnalyze · jdCoach · news · mentoring · payments
 │  ├─ database/schema.sql   # MySQL 스키마
 │  ├─ data                  # 수집 캐시 (NCS·공공기관·대기업·중견기업·자격증·임금)
@@ -148,17 +148,18 @@ node scripts/check-careernet-api.js # 커리어넷
 
 ## AI 프로바이더
 
-기본은 **Groq**(`llama-3.3-70b-versatile`) 입니다. 응답이 1초 안팎이고 무료 티어가 있습니다.
+**Groq**(`llama-3.3-70b-versatile`) 하나만 씁니다. 응답이 1초 안팎이고 무료 티어가 있습니다.
+`backend/.env` 의 `GROQ_API_KEY` 만 채우면 되고, 확인은 `node scripts/check-ai.js` 입니다.
 
-키 없이 오프라인으로 쓰려면 로컬 [Ollama](https://ollama.com) 로 바꿀 수 있습니다.
+키가 없으면 AI 기능(스펙 "AI로 한 번에 입력" · 자소서 코치 역량 보강 · AI 초안)만 503 을
+돌려주고 나머지 화면은 그대로 동작합니다.
 
-```bash
-ollama pull qwen3:8b
-# backend/.env 에 CAS_AI_PROVIDER=ollama
-```
+Groq 모델이 폐기되면 `.env` 의 `GROQ_MODEL` 만
+[현행 모델](https://console.groq.com/docs/models)로 바꾸면 됩니다.
 
-다만 8B 는 CPU 추론에서 요청당 1분 안팎이 걸립니다. Groq 모델이 폐기되면 `.env` 의
-`GROQ_MODEL` 만 [현행 모델](https://console.groq.com/docs/models)로 바꾸면 됩니다.
+> 예전에는 로컬 Ollama 를 기본으로 두고 Groq 를 선택지로 뒀는데, 환경변수가 안 읽히면
+> 조용히 Ollama 로 떨어져 **쓰지도 않는 도구의 연결 오류**가 사용자 화면에 떴습니다.
+> 프로바이더를 하나로 줄여 그 실패 모드를 없앴습니다(2026-08).
 
 **AI 는 분류·추출에만 씁니다.** 점수 계산과 자소서 문장은 코드가 담당합니다 — 모델이 낸
 점수는 서버가 `cas.js` 로 다시 계산하고(`rescore`), 기간·성과는 원문 근거가 있을 때만

@@ -64,9 +64,9 @@ window.CompanyCover = (() => {
     if (list.length) all[name] = list; else delete all[name];
     localStorage.setItem(LS_EVIDENCE, JSON.stringify(all));
   }
-  /* 근거는 5칸을 목표로 센다 — 기업분석 5단계와 같은 수다. 5건을 채우면
-     "왜 우리 회사인가" 문단을 사실만으로 쓸 수 있다. */
-  const EVIDENCE_GOAL = 5;
+  /* 담는 대상은 '지원할 공고' 하나다(채용공고 칸에만 담기가 있다). 예전에는 기사·
+     실적·직원수에도 담기가 있어 '근거 n/5' 로 셌는데, 담은 것들이 서로 다른 종류라
+     자소서 코치로 넘어가서 무엇에 쓰라는 것인지 알 수 없었다. */
 
   let selected = null;      // { name, industry }
   let analysis = null;      // DB.companyAnalysis 결과
@@ -76,6 +76,11 @@ window.CompanyCover = (() => {
   let query    = '';
   let suggestions = [];
   let reqSeq   = 0;         // 늦게 온 응답으로 지금 화면을 덮지 않기 위한 순번
+
+  /* 계열별 기업 — 첫 화면에서 한 번만 받는다(캐시 파일이라 서버도 빠르다). */
+  let sectorData = null;
+  let sectorErr = null;
+  let openSector = null;    // 펼친 계열 이름
 
   const root = () => document.getElementById('company-root');
 
@@ -179,8 +184,8 @@ window.CompanyCover = (() => {
         <span class="co-tile-sub">${esc(c.industry || sub || '기업 리포트 보기')}</span>
         <span class="co-tile-foot">${
           (evAll[c.name] || []).length
-            ? `<span class="wf-badge wf-badge--ok">근거 ${evAll[c.name].length}건 담김</span>`
-            : `<span class="wf-badge wf-badge--mute">근거 0건</span>`}</span>
+            ? `<span class="wf-badge wf-badge--ok">공고 ${evAll[c.name].length}건 담김</span>`
+            : `<span class="wf-badge wf-badge--mute">기업 리포트</span>`}</span>
       </button>`;
 
     return `
@@ -211,8 +216,50 @@ window.CompanyCover = (() => {
             <div class="co-lane-h"><h2>많이 찾는 회사</h2><span>골라서 바로 시작할 수 있어요</span></div>
             <div class="co-lane-grid">${FEATURED.slice(0, 8).map(c => tile(c)).join('')}</div>
           </section>
+
+          ${sectorsHtml()}
         </div>
       </div>`;
+  }
+
+  /* ── 계열별 기업 ───────────────────────────────────────────
+     "이미 아는 회사 8곳" 만 보여주면 학생은 아는 데만 지원한다. 계열로 묶어 펼치면
+     **몰랐던 회사**를 만난다 — 이 화면을 만든 이유가 그것이다.
+     한 계열에 많게는 145곳이라 처음에는 접어 두고, 눌러야 펼친다. */
+  const SECTOR_PREVIEW = 12;
+
+  function sectorsHtml() {
+    if (sectorErr) {
+      return `<section><div class="co-note"><i class="ti ti-info-circle"></i> ${esc(sectorErr)}</div></section>`;
+    }
+    if (!sectorData) return `<section><div class="co-loading">계열별 기업을 불러오는 중…</div></section>`;
+    if (!sectorData.sectors?.length) return '';
+
+    return `<section>
+      <div class="co-lane-h">
+        <h2>계열로 둘러보기</h2>
+        <span>상장사 ${sectorData.total.toLocaleString()}곳 · 이름을 못 들어본 회사를 찾아보세요</span>
+      </div>
+      <div class="co-sectors">
+        ${sectorData.sectors.map(s => {
+          const open = openSector === s.name;
+          const list = open ? s.companies : s.companies.slice(0, SECTOR_PREVIEW);
+          return `<div class="co-sector ${open ? 'is-open' : ''}">
+            <button type="button" class="co-sector-h" data-sector="${esc(s.name)}">
+              <b>${esc(s.name)}</b>
+              <span class="wf-badge wf-badge--mute">${s.companies.length}곳</span>
+              <i class="ti ti-chevron-down"></i>
+            </button>
+            <div class="co-sector-body">
+              ${list.map(c => `<button type="button" class="co-chip" data-pick="${esc(c.name)}">${esc(c.name)}</button>`).join('')}
+              ${!open && s.companies.length > SECTOR_PREVIEW
+                ? `<button type="button" class="co-chip co-chip--more" data-sector="${esc(s.name)}">+${s.companies.length - SECTOR_PREVIEW}곳 더</button>`
+                : ''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </section>`;
   }
 
   function suggestHtml() {
@@ -246,7 +293,7 @@ window.CompanyCover = (() => {
         <span class="wf-avatar wf-avatar--sm" style="--co-color:${accentOf(name)}">${esc(name.charAt(0))}</span>
         <span class="co-side-t">
           <b>${esc(name)}</b>
-          <small>근거 ${(evAll[name] || []).length}/${EVIDENCE_GOAL}</small>
+          <small>${(evAll[name] || []).length ? `공고 ${(evAll[name] || []).length}건 담김` : '기업 리포트'}</small>
         </span>
       </button>`;
 
@@ -281,7 +328,6 @@ window.CompanyCover = (() => {
 
   function mainHtml() {
     const ev = evidenceOf(selected.name);
-    const pct = Math.min(100, Math.round((ev.length / EVIDENCE_GOAL) * 100));
 
     const head = `
       <div class="co-hero">
@@ -299,13 +345,13 @@ window.CompanyCover = (() => {
         </div>
         <div class="co-gauge">
           <div class="co-gauge-h">
-            <span class="wf-eyebrow">지원동기 근거</span>
-            <b>${ev.length}<span>/${EVIDENCE_GOAL}</span></b>
+            <span class="wf-eyebrow">담은 공고</span>
+            <b>${ev.length}<span>건</span></b>
           </div>
-          <div class="co-bar ${ev.length >= EVIDENCE_GOAL ? 'co-bar--ok' : ''}"><i style="width:${pct}%"></i></div>
+          <div class="co-bar ${ev.length ? 'co-bar--ok' : ''}"><i style="width:${ev.length ? 100 : 0}%"></i></div>
           <p class="co-gauge-note">${ev.length
-            ? '아래에서 더 담거나, 자소서 코치로 넘어가 지원동기를 쓰세요.'
-            : '기사·실적 옆의 <b>근거로 담기</b>를 누르면 여기에 쌓입니다.'}</p>
+            ? '자소서 코치로 넘어가면 회사·공고 칸이 채워져 있어요.'
+            : '<b>채용공고</b> 칸에서 지원할 공고를 담으세요.'}</p>
           <!-- 다음 행동. 예전에는 5번 카드를 눌러야 나왔는데, 그 칸까지 가는 사람이
                드물어서 게이지 바로 아래로 올렸다 — 리포트 어디를 보고 있든 눈에 든다. -->
           <button type="button" class="wf-btn wf-btn--primary wf-btn--sm wf-btn--block"
@@ -483,10 +529,12 @@ window.CompanyCover = (() => {
     }
 
     const facts = [
-      ['업종코드', p.industryCode || '—'],
+      ['계열', p.sector || (p.industryCode ? `업종코드 ${p.industryCode}` : '—')],
       ['설립일', est],
       ['대표자', p.ceo || '—'],
-      ['상장', p.listed ? `상장 (${p.stockCode || '—'})` : '비상장'],
+      ['상장', p.listed ? `${p.market || '상장'} ${p.stockCode || ''}`.trim() : '비상장'],
+      ['결산월', p.settlementMonth ? `${p.settlementMonth}월` : '—'],
+      ['본사', p.address || '—'],
     ];
 
     return `
@@ -495,9 +543,6 @@ window.CompanyCover = (() => {
           <div class="co-stat-l">${esc(s.label)}</div>
           <div class="co-stat-v">${esc(String(s.value))}${s.unit ? `<small>${esc(s.unit)}</small>` : ''}</div>
           <div class="co-stat-sub">${esc(s.sub)}</div>
-          <div class="co-stat-act">${isPicked(s.id)
-            ? `<span class="wf-badge wf-badge--ok">담김</span>`
-            : `<button type="button" class="wf-btn wf-btn--xs" data-add="${esc(s.id)}" data-text="${esc(s.text)}">근거로 담기</button>`}</div>
         </div>`).join('')}
       </div>` : ''}
 
@@ -506,10 +551,14 @@ window.CompanyCover = (() => {
           <div class="co-fact-l">${esc(l)}</div><div class="co-fact-v">${esc(v)}</div></div>`).join('')}
         ${p.homepage ? `<div class="co-fact"><div class="co-fact-l">홈페이지</div>
           <div class="co-fact-v"><a href="${esc(p.homepage)}" target="_blank" rel="noopener noreferrer">바로가기</a></div></div>` : ''}
+        ${p.irUrl ? `<div class="co-fact"><div class="co-fact-l">IR 자료</div>
+          <div class="co-fact-v"><a href="${esc(p.irUrl)}" target="_blank" rel="noopener noreferrer">사업부문별 매출 보기</a></div></div>` : ''}
       </div>
-      <p class="jd-hint">업종코드는 표준산업분류입니다. <b>사업부별 매출 비중은 여기서 채워드리지 못합니다</b> —
-        전자공시(DART)와 공공데이터포털 어느 쪽도 그 값을 API 로 열어두지 않았고, 사업보고서 본문에만
-        글로 적혀 있어요. 홈페이지의 사업 소개나 사업보고서 「II. 사업의 내용」에서 직접 확인하세요.</p>`;
+      <p class="jd-hint"><b>사업부별 매출 비중은 API 로 받을 수 없습니다</b> — 전자공시(DART)와
+        공공데이터포털 어느 쪽도 그 값을 열어두지 않았고, 사업보고서 본문에만 글로 적혀 있어요.
+        ${p.irUrl
+          ? '대신 위 <b>IR 자료</b> 링크에 그 표가 거의 항상 있습니다.'
+          : '홈페이지의 사업 소개나 사업보고서 「II. 사업의 내용」에서 직접 확인하세요.'}</p>`;
   }
 
   /* 채용공고 — 우리가 회사별 공고를 들고 있지 않다. 있는 척하지 않고 찾는 경로를 준다.
@@ -524,10 +573,15 @@ window.CompanyCover = (() => {
       ['워크넷', `https://www.work24.go.kr/wk/a/b/1200/retriveDtlEmpSrchList.do?searchWord=${n}`],
     ];
 
+    /* 담기는 **여기에만** 있다. 예전에는 기사·실적·직원수에도 붙어 있었는데, 담은
+       것들이 서로 다른 종류라 자소서 코치로 넘어가서 무엇에 쓰라는 것인지 알 수
+       없었다. 지금은 담는 대상이 '지원할 공고' 하나로 정해져 있고, 넘어가면 그
+       공고가 자소서 코치의 회사·공고 칸에 바로 들어간다. */
     const list = jobs.items?.length ? `
       <div class="co-jobs">
-        ${jobs.items.map(j => `
-          <div class="co-job">
+        ${jobs.items.map(j => {
+          const id = `job-${j.id || j.title}`;
+          return `<div class="co-job">
             <div class="co-job-t">
               ${j.url
                 ? `<a href="${esc(j.url)}" target="_blank" rel="noopener noreferrer">${esc(j.title)}</a>`
@@ -537,12 +591,22 @@ window.CompanyCover = (() => {
             ${j.dday !== null
               ? `<span class="wf-badge ${j.dday <= 7 ? 'wf-badge--error' : 'wf-badge--mute'}">D-${j.dday}</span>`
               : `<span class="wf-badge wf-badge--mute">상시</span>`}
-          </div>`).join('')}
+            ${isPicked(id)
+              ? `<span class="wf-badge wf-badge--ok"><i class="ti ti-check"></i> 담김</span>`
+              : `<button type="button" class="wf-btn wf-btn--xs wf-btn--primary"
+                   data-add="${esc(id)}" data-title="${esc(j.title)}" data-url="${esc(j.url || '')}"
+                   data-career="${esc(j.career || '')}" data-edu="${esc(j.edu || '')}"
+                   data-region="${esc(j.region || '')}" data-dday="${j.dday ?? ''}"
+                   >이 공고로 자소서 쓰기</button>`}
+          </div>`;
+        }).join('')}
       </div>
-      <p class="jd-hint">한국고용정보원 워크넷 기준입니다. 공고를 열어 본문을 복사한 뒤
-        자소서 코치 <b>2번 칸</b>에 붙여넣으면 그 공고가 요구하는 역량과 내 활동을 맞춰 드려요.</p>`
+      <p class="jd-hint">${esc(jobs.source === 'saramin' ? '사람인' : '워크넷')} 기준입니다.
+        공고를 <b>담으면</b> 자소서 코치로 그대로 넘어가요. 요구 역량까지 뽑으려면
+        공고를 열어 <b>본문을 복사해 붙여넣어야</b> 합니다 — 채용 API 는 제목·조건만 주고
+        본문은 주지 않습니다.</p>`
       : `<div class="co-note"><i class="ti ti-info-circle"></i>
-           ${esc(jobs.reason || '워크넷에 이 회사 이름으로 열린 공고가 없습니다.')}
+           ${esc(jobs.reason || '이 회사 이름으로 열린 공고가 없습니다.')}
            대기업 공채는 자사 채용 사이트로만 올라오는 일이 많아, 없는 것이 정상인 경우도 있어요.</div>`;
 
     return `
@@ -573,16 +637,13 @@ window.CompanyCover = (() => {
         <th>${esc(label)}</th>
         ${acc.series.map(x => `<td>${x.readable ? esc(x.readable) : '—'}<span>${x.year}</span></td>`).join('')}
         <td class="co-trend--${t ? t.direction : 'none'}">${t ? `${arrowOf(t.direction)} ${Math.abs(t.pct)}%` : '—'}</td>
-        <td style="text-align:right">${isPicked(id)
-          ? `<span class="wf-badge wf-badge--ok">담김</span>`
-          : `<button type="button" class="wf-btn wf-btn--xs" data-add="${esc(id)}" data-text="${esc(text)}">담기</button>`}</td>
       </tr>`;
     }).join('');
 
     return `
       <div class="co-tblwrap">
         <table class="co-tbl">
-          <thead><tr><th style="text-align:left">계정</th><th>당기</th><th>전기</th><th>전전기</th><th>전년비</th><th></th></tr></thead>
+          <thead><tr><th style="text-align:left">계정</th><th>당기</th><th>전기</th><th>전전기</th><th>전년비</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
@@ -646,11 +707,6 @@ window.CompanyCover = (() => {
               <a href="${esc(it.url || '#')}" target="_blank" rel="noopener noreferrer">${esc(it.title)}</a>
               <div class="co-news-meta">${esc(it.date || '')}</div>
             </div>
-            ${isPicked(id)
-              ? `<span class="wf-badge wf-badge--ok"><i class="ti ti-check"></i> 담김</span>`
-              : `<button type="button" class="wf-btn wf-btn--xs"
-                   data-add="${esc(id)}" data-text="${esc(it.title)}" data-date="${esc(it.date || '')}"
-                   data-url="${esc(it.url || '')}">근거로 담기</button>`}
           </div>`;
         }).join('')}
       </div>
@@ -671,28 +727,37 @@ window.CompanyCover = (() => {
 
 
   /* 담은 근거 — 리포트 위쪽에 둔다. 담는 순간 결과가 보여야 계속 담는다. */
+  /* 담은 공고 — 이 화면의 결과물이다. 담기는 채용공고 칸에만 있으므로
+     여기 쌓이는 것도 공고 하나뿐이고, 넘어가면 자소서 코치가 그대로 받는다. */
   function evidenceHtml() {
     const ev = evidenceOf(selected.name);
     return `<div class="co-sec">
       <div class="co-sec-h">
-        <h2>담은 근거</h2>
-        <span class="co-src">자소서 코치 1번 칸으로 그대로 넘어갑니다</span>
+        <h2>담은 공고</h2>
+        <span class="co-src">자소서 코치로 그대로 넘어갑니다</span>
       </div>
       ${ev.length ? `
         <div class="co-picked">
           ${ev.map(e => `<div class="co-picked-item">
-            <span>${esc(e.text)}${e.date ? ` <span style="color:var(--wf-mute-soft)">· ${esc(e.date)}</span>` : ''}</span>
-            <button type="button" data-unpick="${esc(e.id)}" aria-label="근거 빼기">
+            <span>
+              <b>${esc(e.text)}</b>
+              ${[e.region, e.career, e.edu].filter(Boolean).length
+                ? `<br><span style="color:var(--wf-mute)">${[e.region, e.career, e.edu].filter(Boolean).map(esc).join(' · ')}</span>`
+                : ''}
+              ${e.dday !== '' && e.dday != null ? ` <span class="wf-badge wf-badge--mute">D-${esc(String(e.dday))}</span>` : ''}
+            </span>
+            <button type="button" data-unpick="${esc(e.id)}" aria-label="공고 빼기">
               <i class="ti ti-x"></i></button>
           </div>`).join('')}
         </div>
         <div class="co-sec" style="margin-top:14px">
           <button type="button" class="wf-btn wf-btn--primary" data-tocoach>
-            담은 근거로 지원동기 쓰러 가기
+            이 공고로 자소서 쓰러 가기
           </button>
         </div>`
-        : `<p class="co-picked-empty">아직 담은 근거가 없어요. 아래 기사와 실적 옆의
-             <b>근거로 담기</b>를 누르면 여기에 쌓이고, 자소서 코치의 지원동기 문항에 그대로 나타납니다.</p>`}
+        : `<p class="co-picked-empty">아직 담은 공고가 없어요. <b>채용공고</b> 칸에서
+             <b>이 공고로 자소서 쓰기</b>를 누르면 여기에 담기고, 자소서 코치의 회사·공고 칸이
+             자동으로 채워집니다.</p>`}
     </div>`;
   }
 
@@ -710,9 +775,21 @@ window.CompanyCover = (() => {
       el.addEventListener('click', () => unpick(el.dataset.unpick)));
     box.querySelectorAll('[data-add]').forEach(el =>
       el.addEventListener('click', () => pick({
-        id: el.dataset.add, text: el.dataset.text,
-        date: el.dataset.date || '', url: el.dataset.url || '',
+        id: el.dataset.add,
+        text: el.dataset.title,
+        url: el.dataset.url || '',
+        career: el.dataset.career || '',
+        edu: el.dataset.edu || '',
+        region: el.dataset.region || '',
+        dday: el.dataset.dday === '' ? null : Number(el.dataset.dday),
       })));
+
+    // 계열 펼치기/접기
+    box.querySelectorAll('[data-sector]').forEach(el =>
+      el.addEventListener('click', () => {
+        openSector = openSector === el.dataset.sector ? null : el.dataset.sector;
+        paint();
+      }));
 
     // 기업분석 5단계 카드 — 누른 칸만 아래에 펼친다
     box.querySelectorAll('[data-step]').forEach(el =>
@@ -771,7 +848,20 @@ window.CompanyCover = (() => {
   }
 
   /* 페이지 진입 — 자소서 코치에서 회사명을 들고 왔으면 그 회사를 연다. */
+  /* 계열 목록은 화면을 막지 않는다 — 먼저 그리고, 도착하면 그 자리만 다시 그린다. */
+  async function loadSectors() {
+    if (sectorData || sectorErr) return;
+    try {
+      sectorData = await DB.companySectors();
+      if (!sectorData.sectors?.length && sectorData.reason) sectorErr = sectorData.reason;
+    } catch (e) {
+      sectorErr = e.message;
+    }
+    if (!selected) paint();
+  }
+
   function onEnter() {
+    loadSectors();
     const handoff = localStorage.getItem('careerly_company_open');
     if (handoff) {
       localStorage.removeItem('careerly_company_open');
@@ -783,5 +873,5 @@ window.CompanyCover = (() => {
     paint();
   }
 
-  return { onEnter, select, evidenceOf, EVIDENCE_GOAL };
+  return { onEnter, select, evidenceOf };
 })();

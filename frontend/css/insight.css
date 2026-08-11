@@ -24,6 +24,40 @@
 .insight-tab.on { background: var(--brand); border-color: var(--brand); color: #fff; }
 .insight-login-hint { font-size: 12.5px; color: var(--text-s); }
 
+/* ── 검색 ─────────────────────────────────────────────────── */
+.insight-search {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px;
+}
+.insight-search-box {
+  display: flex; align-items: center; gap: 8px; flex: 1 1 260px; min-width: 0;
+  padding: 9px 13px; border: 1px solid var(--border); border-radius: 999px; background: #fff;
+}
+.insight-search-box:focus-within { border-color: var(--brand); }
+.insight-search-box i { color: var(--text-m); font-size: 16px; flex: none; }
+.insight-search-box input {
+  flex: 1; min-width: 0; border: 0; outline: 0; background: transparent;
+  font: inherit; font-size: 13.5px; color: var(--text-p);
+}
+.insight-scope { display: flex; gap: 4px; flex: none; }
+.insight-scope-btn {
+  padding: 8px 13px; border: 1px solid var(--border); border-radius: 999px;
+  background: #fff; color: var(--text-s); font: inherit; font-size: 12.5px; font-weight: 600;
+  cursor: pointer;
+}
+.insight-scope-btn:hover { border-color: var(--brand); color: var(--brand); }
+.insight-scope-btn.on { background: var(--brand-soft); border-color: var(--brand); color: var(--brand-dark); }
+.insight-search-btn { flex: none; padding: 9px 20px; }
+.insight-search-clear {
+  display: inline-flex; align-items: center; gap: 5px; flex: none;
+  padding: 8px 12px; border: 0; border-radius: 999px; background: none;
+  color: var(--text-s); font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.insight-search-clear:hover { color: var(--text-p); text-decoration: underline; }
+.insight-search-note {
+  margin-bottom: 12px; font-size: 13px; color: var(--text-s);
+}
+.insight-search-note b { color: var(--text-p); }
+
 /* ── 목록 ─────────────────────────────────────────────────── */
 .insight-list { display: flex; flex-direction: column; border-top: 1px solid var(--border); }
 .insight-row {
@@ -36,6 +70,31 @@
   flex: none; padding: 4px 10px; border-radius: 999px; background: var(--brand-soft);
   color: var(--brand-dark); font-size: 11.5px; font-weight: 700;
 }
+/* ── 공지 ──────────────────────────────────────────────────
+   목록을 훑을 때 그냥 지나치지 않게, 배지 색·줄 배경·왼쪽 띠를 한꺼번에 바꾼다.
+   글자만 '공지'로 바꾸면 같은 모양이라 눈에 안 걸린다.
+   색은 브랜드 보라가 아니라 주황 계열로 —— 보라는 카테고리 배지가 이미 쓰고 있어
+   같은 색을 쓰면 '카테고리 하나'로 읽힌다. */
+.insight-row.is-notice {
+  background: #fff8f1;
+  box-shadow: inset 3px 0 0 #ff6b00;
+}
+.insight-row.is-notice:hover { background: #fff2e4; }
+.insight-row.is-notice .insight-row-cat {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: #ff6b00; color: #fff;
+}
+.insight-row.is-notice .insight-row-title { color: #8a3b00; }
+
+/* 글쓰기 — 관리자에게만 보이는 공지 체크 */
+.insight-notice-toggle {
+  display: flex; align-items: flex-start; gap: 9px; padding: 12px 14px;
+  border: 1px solid #ffd7b0; border-radius: 10px; background: #fff8f1;
+  font-size: 12.5px; line-height: 1.6; color: var(--text-s); cursor: pointer;
+}
+.insight-notice-toggle input { margin-top: 2px; flex: none; accent-color: #ff6b00; }
+.insight-notice-toggle b { color: #8a3b00; }
+
 .insight-row-body { flex: 1; min-width: 0; }
 .insight-row-title {
   display: block; font-size: 14.5px; font-weight: 700; color: var(--text-p);

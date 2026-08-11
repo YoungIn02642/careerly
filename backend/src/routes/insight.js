@@ -37,6 +37,7 @@ function toPostSummary(r) {
     authorName: displayName(r),
     viewCount: r.view_count,
     commentCount: Number(r.comment_count || 0),
+    isNotice: Boolean(r.is_notice),
     createdAt: r.created_at,
   };
 }
@@ -50,6 +51,7 @@ function toPostDetail(r) {
     authorId: r.user_id,
     authorName: displayName(r),
     viewCount: r.view_count,
+    isNotice: Boolean(r.is_notice),
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -69,19 +71,45 @@ function toComment(r) {
 // 카테고리 목록 — 화면이 이 순서·라벨 그대로 탭을 그린다
 router.get('/categories', (req, res) => res.json({ categories: CATEGORIES }));
 
-/* 목록. 카테고리로 거르고(선택), 최신순 페이지네이션. 본문은 미리보기만
-   잘라 보낸다 — 목록에서 전체 본문까지 실어 보낼 이유가 없다. */
+/* 검색 범위. 제목만 볼지, 본문까지 볼지 사용자가 고른다.
+   본문까지 뒤지면 원하는 글이 더 잘 걸리지만 엉뚱한 글도 같이 걸린다 —
+   어느 쪽이 나은지는 찾는 사람이 안다. */
+const SEARCH_SCOPES = new Set(['title', 'all']);
+
+/* LIKE 검색이라 % 와 _ 를 그대로 넣으면 와일드카드가 된다. '100%' 를 검색하면
+   '100' 으로 시작하는 글이 전부 걸리는 식이라, 사용자가 친 글자는 글자로만 쓴다. */
+const escapeLike = s => s.replace(/[\\%_]/g, m => `\\${m}`);
+
+/* 목록. 카테고리로 거르고(선택), 검색어로 거르고(선택), 최신순 페이지네이션.
+   본문은 미리보기만 잘라 보낸다 — 목록에서 전체 본문까지 실어 보낼 이유가 없다.
+
+   ── 공지는 항상 맨 위 ──
+   운영방침 같은 글은 몇 페이지 뒤로 밀리면 없는 것과 같다. is_notice 를 먼저
+   정렬해 페이지 1의 맨 위에 둔다. 다만 **검색 중에는 고정하지 않는다** —
+   검색은 "이 말이 들어간 글"을 찾는 일이라, 상관없는 공지가 맨 위에 있으면
+   결과를 잘못 읽게 된다. */
 router.get('/', ah(async (req, res) => {
   const category = String(req.query.category || '').trim();
   if (category && !categoryIds.has(category)) {
     return res.status(400).json({ error: '올바르지 않은 카테고리입니다.' });
   }
+  const q = String(req.query.q || '').trim().slice(0, 100);
+  const scope = SEARCH_SCOPES.has(req.query.scope) ? req.query.scope : 'title';
+
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 50);
   const offset = (page - 1) * limit;
 
-  const where = category ? 'WHERE p.category=?' : '';
-  const params = category ? [category] : [];
+  const conds = [];
+  const params = [];
+  if (category) { conds.push('p.category=?'); params.push(category); }
+  if (q) {
+    const like = `%${escapeLike(q)}%`;
+    if (scope === 'all') { conds.push('(p.title LIKE ? OR p.body LIKE ?)'); params.push(like, like); }
+    else { conds.push('p.title LIKE ?'); params.push(like); }
+  }
+  const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+  const order = q ? 'p.created_at DESC' : 'p.is_notice DESC, p.created_at DESC';
 
   const [{ n: total }] = await query(
     `SELECT COUNT(*) AS n FROM insight_posts p ${where}`, params);
@@ -92,11 +120,14 @@ router.get('/', ah(async (req, res) => {
        FROM insight_posts p
        JOIN users u ON u.id = p.user_id
        ${where}
-       ORDER BY p.created_at DESC
+       ORDER BY ${order}
        LIMIT ${limit} OFFSET ${offset}`,
     params);
 
-  res.json({ posts: rows.map(toPostSummary), total: Number(total), page, limit });
+  res.json({
+    posts: rows.map(toPostSummary), total: Number(total), page, limit,
+    q, scope,
+  });
 }));
 
 /* 상세. 볼 때마다 조회수를 올린다 — 좋아요 같은 별도 집계가 없어서
@@ -133,10 +164,15 @@ router.post('/', requireAuth, ah(async (req, res) => {
     return res.status(400).json({ error: '내용을 입력해주세요.' });
   }
 
+  /* 공지는 관리자만. 일반 회원이 isNotice 를 보내도 조용히 무시한다 —
+     막았다고 오류를 돌려주면 "공지로 올릴 수 있는데 권한만 없다"는 정보를 주게 되고,
+     화면에는 그 선택지가 아예 없어서 정상 경로로는 올 수 없는 값이다. */
+  const isNotice = Boolean(req.user.isAdmin && req.body?.isNotice);
+
   const id = nanoid();
   await query(
-    'INSERT INTO insight_posts (id, user_id, category, title, body) VALUES (?,?,?,?,?)',
-    [id, req.user.id, category, t, b]);
+    'INSERT INTO insight_posts (id, user_id, category, title, body, is_notice) VALUES (?,?,?,?,?,?)',
+    [id, req.user.id, category, t, b, isNotice]);
 
   const row = await queryOne(
     `SELECT p.*, u.nickname AS author_nickname, u.name AS author_name
@@ -156,7 +192,14 @@ router.put('/:id', requireAuth, ah(async (req, res) => {
   if (!t || t.length > 200) return res.status(400).json({ error: '제목은 1~200자여야 합니다.' });
   if (!b) return res.status(400).json({ error: '내용을 입력해주세요.' });
 
-  await query('UPDATE insight_posts SET title=?, body=? WHERE id=?', [t, b, req.params.id]);
+  /* 공지 여부는 관리자만 바꾼다. 안 보내면 지금 값을 그대로 둔다 —
+     글만 고치려고 저장했는데 공지가 풀리면 안 된다. */
+  const isNotice = (req.user.isAdmin && req.body?.isNotice !== undefined)
+    ? Boolean(req.body.isNotice)
+    : Boolean(row.is_notice);
+
+  await query('UPDATE insight_posts SET title=?, body=?, is_notice=? WHERE id=?',
+    [t, b, isNotice, req.params.id]);
   const updated = await queryOne(
     `SELECT p.*, u.nickname AS author_nickname, u.name AS author_name
        FROM insight_posts p JOIN users u ON u.id = p.user_id WHERE p.id=?`, [req.params.id]);

@@ -12,14 +12,35 @@
    직접 읽고 zlib 로 푼다(항목 1개짜리 단순 ZIP 이라 40줄이면 된다).
    → 의존성을 늘리지 않는 편이 낫다는 판단. 형식이 바뀌면 여기만 고치면 된다.
 
-   ── 기본은 상장사만 ──
-   전체는 10만 건이 넘는데 대부분 자소서와 무관한 법인(펀드·SPC·소규모 법인)이다.
-   상장사(stock_code 가 있는 회사)만 남기면 2,700여 건으로 줄고, 다음 단계
-   (build-dart-industry.js)의 API 호출도 그만큼 줄어든다. --all 로 전체를 받을 수 있다.
+   ── 기본은 공시대상 전체다 (예전에는 상장사만이었다) ──
+   처음에는 "대부분 자소서와 무관한 법인(펀드·SPC)이니 상장사 3,981건만" 이었다.
+   그런데 학생이 실제로 지원하는 회사 중 **비상장 대기업 자회사**가 통째로 빠졌다.
+   실측: 캐논코리아(00120580)는 DART 에 등록돼 있는데도 캐시에 없어서 화면이
+   "공시 자료 없음" 이었다. 개황(업종·설립연도·대표·본사·홈페이지)은 비상장사도
+   전부 열려 있다 — 없는 것은 재무(사업보고서)뿐이다. 그 하나 때문에 나머지를
+   통째로 버리고 있었다.
+
+   전체 118,000여 건 = 약 6MB. 자주 바뀌는 파일이 아니라 캐시로 들고 있어도 된다.
+   상장사만 받고 싶으면 --listed-only.
+
+   ── 업종코드는 지우지 않는다 ──
+   업종코드(build-dart-industry.js)는 회사마다 API 를 한 번씩 불러 채운 값이라
+   3,981번의 호출이 들어 있다. 다시 받을 때 통째로 덮어쓰면 그게 날아간다 —
+   기존 파일의 industry 를 고유번호로 물려받는다.
+
+   ── 결과 파일은 깃에 없다 ──
+   `backend/data/dart-corps.json` 은 .gitignore 에 있다. 6MB 짜리가 받을 때마다
+   히스토리에 쌓이는데, 우리가 만든 자료가 아니라 DART 가 매일 주는 원본이다.
+   그래서 **빌드 단계에서 받는다**(루트 package.json 의 build → `npm run build`).
+
+   빌드에서 부를 때는 --if-possible 을 붙인다. 키가 없거나 DART 가 잠깐 죽어도
+   배포는 되어야 한다 — 캐시가 없으면 기업분석 칸만 "기업 캐시가 없습니다"로 비고
+   나머지 기능은 멀쩡하다(dart.js 의 키 없음 정책과 같다).
 
    사용:
-     node scripts/fetch-dart-corps.js            # 상장사만
-     node scripts/fetch-dart-corps.js --all      # 공시대상 전체
+     node scripts/fetch-dart-corps.js               # 공시대상 전체
+     node scripts/fetch-dart-corps.js --listed-only # 상장사만
+     node scripts/fetch-dart-corps.js --if-possible # 실패해도 0 으로 끝난다(빌드용)
    env: DART_API_KEY (https://opendart.fss.or.kr 에서 무료 발급) */
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const fs = require('fs');
@@ -28,7 +49,8 @@ const zlib = require('zlib');
 
 const API_KEY = (process.env.DART_API_KEY || '').trim();
 const OUT_PATH = path.join(__dirname, '..', 'data', 'dart-corps.json');
-const ALL = process.argv.includes('--all');
+const ALL = !process.argv.includes('--listed-only');
+const SOFT = process.argv.includes('--if-possible');
 
 /* ── ZIP 풀기 ────────────────────────────────────────────────
    중앙 디렉터리(EOCD)부터 읽는다. 로컬 헤더의 크기 필드는 스트리밍으로 만든 ZIP 에서
@@ -86,14 +108,24 @@ function parseCorps(xml) {
     const code = pick(b, 'corp_code');
     const name = pick(b, 'corp_name');
     if (!code || !name) continue;
+    /* 빈 값은 키 자체를 넣지 않는다. 11만 건 × `"stock":null,"industry":null` 이
+       그대로 3MB 다. 읽는 쪽은 undefined 와 null 을 똑같이 취급한다. */
     const stock = pick(b, 'stock_code');
-    out.push({ code, name, stock: stock || null, industry: null });
+    const corp = { code, name };
+    if (stock) corp.stock = stock;
+    out.push(corp);
   }
   return out;
 }
 
 async function main() {
   if (!API_KEY) {
+    /* 빌드에서는 키가 없는 것이 배포를 막을 이유가 아니다 — 기업분석 칸만 빈다. */
+    if (SOFT) {
+      console.warn('DART_API_KEY 가 없어 기업 색인을 건너뜁니다. 기업분석의 개요·재무·경쟁사 칸이 빕니다.');
+      console.warn('  키는 https://opendart.fss.or.kr 에서 무료로 즉시 발급됩니다.');
+      return;
+    }
     console.error('DART_API_KEY 가 없습니다. https://opendart.fss.or.kr 에서 발급받아 backend/.env 에 넣어 주세요.');
     process.exit(1);
   }
@@ -115,17 +147,48 @@ async function main() {
   const all = parseCorps(unzipFirstFile(buf).toString('utf8'));
   const corps = ALL ? all : all.filter(c => c.stock);
 
+  /* 이전 파일의 업종코드를 물려받는다 — 다시 채우려면 회사마다 API 를 한 번씩 부른다. */
+  let inherited = 0;
+  if (fs.existsSync(OUT_PATH)) {
+    try {
+      const prev = JSON.parse(fs.readFileSync(OUT_PATH, 'utf8'));
+      const byCode = new Map(((prev && prev.corps) || []).map(c => [c.code, c.industry]));
+      for (const c of corps) {
+        const ind = byCode.get(c.code);
+        if (ind) { c.industry = ind; inherited++; }
+      }
+    } catch (e) {
+      console.warn(`  이전 캐시를 읽지 못해 업종코드를 물려받지 못했습니다: ${e.message}`);
+    }
+  }
+
+  /* 상장사를 앞에 둔다. 이름이 겹치는 회사가 7,957쌍이나 되는데(비상장 동명이인),
+     이름 색인은 먼저 나온 것을 쓴다 — 순서를 안 정하면 '신한'·'하나은행' 같은 이름이
+     이름만 같은 소규모 법인으로 잡힌다. dart.js 도 색인을 만들 때 한 번 더 거른다. */
+  corps.sort((a, b) => (b.stock ? 1 : 0) - (a.stock ? 1 : 0));
+
   fs.mkdirSync(path.dirname(OUT_PATH), { recursive: true });
+  /* 전체(6MB)를 들여쓰기까지 하면 10MB 다. 사람이 읽는 파일이 아니라 색인이다. */
   fs.writeFileSync(OUT_PATH, JSON.stringify({
     generatedAt: new Date().toISOString(),
     scope: ALL ? 'all' : 'listed',
     total: corps.length,
+    listed: corps.filter(c => c.stock).length,
     corps,
-  }, null, 2));
+  }, null, ALL ? 0 : 2));
 
   console.log(`\n공시대상 전체 ${all.length.toLocaleString()}건 중 ${ALL ? '전부' : '상장사'} ${corps.length.toLocaleString()}건 저장`);
+  if (inherited) console.log(`  업종코드 ${inherited.toLocaleString()}건은 이전 캐시에서 물려받았습니다.`);
   console.log(`→ ${OUT_PATH}`);
   console.log('\n다음: node scripts/build-dart-industry.js   (업종코드를 채워야 경쟁사 비교가 동작합니다)');
 }
 
-main().catch(e => { console.error('실패:', e.message); process.exit(1); });
+main().catch(e => {
+  /* 빌드 중이면 DART 가 잠깐 죽었다고 배포까지 막지 않는다. 사유는 로그에 남긴다. */
+  if (SOFT) {
+    console.warn(`기업 색인을 받지 못했습니다(${e.message}). 기업분석 칸만 비고 배포는 계속합니다.`);
+    return;
+  }
+  console.error('실패:', e.message);
+  process.exit(1);
+});

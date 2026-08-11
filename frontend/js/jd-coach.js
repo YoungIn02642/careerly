@@ -383,7 +383,9 @@
     if (open) setFull(open, false);
   }
 
-  /* 회사 리포트에서 담아 온 근거 — 1번 칸 안에 그대로 보여준다. */
+  /* 회사 리포트에서 담아 온 **공고** — 1번 칸 안에 그대로 보여준다.
+     예전에는 기사·실적을 담았는데, 담은 것들이 서로 다른 종류라 여기 와서 무엇에
+     쓰라는 것인지 알 수 없었다. 지금은 '지원할 공고' 하나만 담긴다. */
   function paintEvidence() {
     const box = $('#jd-evidence');
     if (!box) return;
@@ -392,19 +394,49 @@
 
     if (!company) {
       box.innerHTML = `<p class="jd-hint" style="padding:0 16px 16px">회사명을 적으면 초안이 회사별로 나뉘어 저장돼요.
-        회사 리포트에서 기사·실적을 담아 오면 지원동기 문항의 근거로 여기에 나타납니다.</p>`;
+        회사 리포트에서 공고를 담아 오면 여기에 나타나고, 아래 채용공고 칸도 함께 채워집니다.</p>`;
       return;
     }
     box.innerHTML = `
       <div style="padding:0 16px 16px">
-        <span class="wf-eyebrow">${esc(company)} · 담은 지원동기 근거 ${list.length}건</span>
+        <span class="wf-eyebrow">${esc(company)} · 담은 공고 ${list.length}건</span>
         ${list.length ? `
           <div class="co-picked" style="margin-top:8px">
-            ${list.map(e => `<div class="co-picked-item"><span>${esc(e.text)}</span></div>`).join('')}
+            ${list.map(e => `<div class="co-picked-item"><span>
+              <b>${esc(e.text)}</b>
+              ${[e.region, e.career, e.edu].filter(Boolean).length
+                ? `<br><span style="color:var(--wf-mute)">${[e.region, e.career, e.edu].filter(Boolean).map(esc).join(' · ')}</span>`
+                : ''}
+              ${e.url ? ` <a href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">공고 열기</a>` : ''}
+            </span></div>`).join('')}
           </div>`
-          : `<p class="jd-hint">아직 없어요. <b>회사 리포트에서 근거 담기</b>를 누르면
-               기사와 실적에서 인용할 사실을 담을 수 있습니다.</p>`}
+          : `<p class="jd-hint">아직 없어요. <b>회사 리포트에서 근거 담기</b>를 눌러
+               지원할 공고를 담아 오세요.</p>`}
       </div>`;
+  }
+
+  /* ── 담아 온 공고를 채용공고 칸에 적용한다 ───────────────────
+     회사명만 넘겨받던 것을 공고까지 넘겨받도록 바꿨다. 다만 **본문은 못 받는다** —
+     사람인·워크넷 API 둘 다 제목·근무지·경력·학력만 주고 공고 본문은 주지 않는다.
+     그래서 받은 것만 적어 두고, 본문은 링크를 열어 붙여넣게 안내한다.
+
+     이미 입력한 내용이 있으면 덮지 않는다. 사용자가 직접 붙여넣은 공고가
+     자동 입력으로 지워지면 되돌릴 방법이 없다. */
+  function applyPickedJob(company) {
+    const job = evidenceFor(company)[0];
+    const ta = $('#jd-text');
+    if (!job || !ta || ta.value.trim()) return false;
+
+    const lines = [
+      `[모집분야] ${job.text}`,
+      job.region ? `[근무지] ${job.region}` : null,
+      job.career ? `[경력] ${job.career}` : null,
+      job.edu ? `[학력] ${job.edu}` : null,
+      job.url ? `[공고 주소] ${job.url}` : null,
+    ].filter(Boolean);
+
+    ta.value = lines.join('\n');
+    return true;
   }
 
   function init() {
@@ -497,9 +529,13 @@
     closeFull();
 
     const picked = localStorage.getItem('careerly_selected_company');
+    let applied = false;
     if (picked && $('#jd-company')) {
       $('#jd-company').value = picked;
       localStorage.removeItem('careerly_selected_company');
+      /* 담아 온 공고가 있으면 채용공고 칸까지 채운다 — 회사만 넘기면 여기서
+         공고를 다시 찾아야 해서, 담기를 한 의미가 없다. */
+      applied = applyPickedJob(picked);
     }
 
     STEPS.forEach(paintBlock);
@@ -507,6 +543,15 @@
     paintEvidence();
     paintProgress();
     paintLibrary();
+
+    /* 공고 칸을 채웠으면 본문이 아직 없다는 것을 분명히 알린다. 제목·조건만으로
+       분석을 돌리면 역량이 빈약하게 나오는데, 그걸 '분석 결과'로 믿으면 안 된다. */
+    if (applied) {
+      openStep(1, true);
+      if (typeof toast === 'function') {
+        toast('공고를 불러왔어요 — 본문을 복사해 이어붙이면 역량이 정확해져요', { icon: false });
+      }
+    }
   }
 
   /* 공고와 직무기술서를 합쳐 하나의 분석 입력으로 만든다.

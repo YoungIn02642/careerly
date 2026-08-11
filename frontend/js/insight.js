@@ -12,6 +12,10 @@ window.Insight = (() => {
   let page = 1;
   const LIMIT = 20;
   let listData = { posts: [], total: 0 };
+  /* 검색 — q 가 비면 평소 목록이다. scope 는 '제목만' | '제목+내용'.
+     검색 중에는 서버가 공지를 위로 고정하지 않는다(routes/insight.js 주석). */
+  let q = '';
+  let scope = 'title';
   let currentPostId = null;
   let detailData = null;    // { post, comments }
   let writeError = '';
@@ -27,7 +31,7 @@ window.Insight = (() => {
       try { categories = (await DB.insightCategories()).categories; }
       catch { categories = []; }
     }
-    view = 'list'; page = 1; category = '';
+    view = 'list'; page = 1; category = ''; q = ''; scope = 'title';
     await loadList();
   }
 
@@ -35,7 +39,7 @@ window.Insight = (() => {
     const box = root();
     if (box) box.innerHTML = loadingHtml();
     try {
-      listData = await DB.listInsights({ category, page, limit: LIMIT });
+      listData = await DB.listInsights({ category, page, limit: LIMIT, q, scope });
     } catch (e) {
       if (box) box.innerHTML = errorHtml(e.message);
       return;
@@ -82,6 +86,28 @@ window.Insight = (() => {
           : `<span class="insight-login-hint">로그인하면 글을 쓸 수 있어요</span>`}
       </div>
 
+      <!-- 검색 — 범위를 사용자가 고른다. 제목만 보면 정확하고, 본문까지 보면
+           더 많이 걸린다. 어느 쪽이 나은지는 찾는 사람이 안다. -->
+      <div class="insight-search">
+        <label class="insight-search-box">
+          <i class="ti ti-search"></i>
+          <input type="search" id="insight-q" value="${esc(q)}"
+                 placeholder="검색어를 입력하세요" aria-label="게시글 검색" />
+        </label>
+        <div class="insight-scope" role="group" aria-label="검색 범위">
+          <button class="insight-scope-btn ${scope === 'title' ? 'on' : ''}" data-scope="title">제목만</button>
+          <button class="insight-scope-btn ${scope === 'all' ? 'on' : ''}" data-scope="all">제목+내용</button>
+        </div>
+        <button class="btn-save insight-search-btn" id="insight-search-go">검색</button>
+        ${q ? `<button class="insight-search-clear" id="insight-search-clear">
+                 <i class="ti ti-x"></i> 검색 해제</button>` : ''}
+      </div>
+
+      ${q ? `<div class="insight-search-note">
+          <b>‘${esc(q)}’</b> ${scope === 'all' ? '제목+내용' : '제목'} 검색 결과 ${listData.total}건
+          ${listData.total ? ' · 검색 중에는 공지를 위로 고정하지 않아요' : ''}
+        </div>` : ''}
+
       <div class="insight-list">
         ${listData.posts.length ? listData.posts.map(postRowHtml).join('') : emptyListHtml()}
       </div>
@@ -90,10 +116,14 @@ window.Insight = (() => {
     `;
   }
 
+  /* 공지는 카테고리 자리에 '공지' 배지를 놓고 줄 전체를 다르게 칠한다.
+     같은 모양에 글자만 다르면 목록을 훑을 때 그냥 지나친다. */
   function postRowHtml(p) {
     return `
-      <button class="insight-row" data-open="${esc(p.id)}">
-        <span class="insight-row-cat">${esc(catLabel(p.category))}</span>
+      <button class="insight-row ${p.isNotice ? 'is-notice' : ''}" data-open="${esc(p.id)}">
+        <span class="insight-row-cat">${p.isNotice
+          ? '<i class="ti ti-speakerphone"></i> 공지'
+          : esc(catLabel(p.category))}</span>
         <span class="insight-row-body">
           <span class="insight-row-title">${esc(p.title)}
             ${p.commentCount ? `<span class="insight-row-cc">${p.commentCount}</span>` : ''}
@@ -109,6 +139,14 @@ window.Insight = (() => {
   }
 
   function emptyListHtml() {
+    /* 검색 결과가 없는 것과 글이 아직 없는 것은 사용자가 할 일이 다르다. */
+    if (q) {
+      return `<div class="empty-block"><div class="empty-icon">🔍</div>
+        <div class="empty-title">‘${esc(q)}’ 검색 결과가 없어요</div>
+        <div class="empty-desc">${scope === 'title'
+          ? '제목만 찾고 있어요. <b>제목+내용</b>으로 넓혀 보세요.'
+          : '다른 낱말로 찾아보거나 검색을 해제해 보세요.'}</div></div>`;
+    }
     return `<div class="empty-block"><div class="empty-icon">📭</div>
       <div class="empty-title">아직 글이 없어요</div>
       <div class="empty-desc">이 카테고리에 첫 글을 남겨보세요.</div></div>`;
@@ -206,6 +244,11 @@ window.Insight = (() => {
         </select>
         <input type="text" id="insight-write-title" maxlength="200" placeholder="제목" />
         <textarea id="insight-write-body" rows="10" placeholder="내용을 적어주세요"></textarea>
+        ${DB.currentUser()?.isAdmin ? `
+          <label class="insight-notice-toggle">
+            <input type="checkbox" id="insight-write-notice" />
+            <span><b>공지로 올리기</b> — 목록 맨 위에 고정되고 다른 색으로 표시됩니다. 관리자만 보이는 항목이에요.</span>
+          </label>` : ''}
         ${writeError ? `<div class="error-box">${esc(writeError)}</div>` : ''}
         <div class="insight-write-actions">
           <button class="btn-save" id="insight-write-submit">등록</button>
@@ -219,8 +262,9 @@ window.Insight = (() => {
     const cat = document.getElementById('insight-write-cat').value;
     const title = document.getElementById('insight-write-title').value.trim();
     const body = document.getElementById('insight-write-body').value.trim();
+    const isNotice = Boolean(document.getElementById('insight-write-notice')?.checked);
     try {
-      const { post } = await DB.createInsight({ category: cat, title, body });
+      const { post } = await DB.createInsight({ category: cat, title, body, isNotice });
       await openPost(post.id);
     } catch (e) {
       writeError = e.message;
@@ -235,6 +279,29 @@ window.Insight = (() => {
 
     box.querySelectorAll('[data-cat]').forEach(btn => btn.addEventListener('click', () => {
       category = btn.dataset.cat; page = 1; loadList();
+    }));
+
+    // ── 검색 ──
+    const qInput = box.querySelector('#insight-q');
+    const runSearch = () => {
+      q = (qInput?.value || '').trim();
+      page = 1;
+      loadList();
+    };
+    /* Enter 로도 검색된다. 한글 조합 중 Enter 는 글자를 확정하는 키라 넘긴다 —
+       '취업'을 확정하려던 순간에 '취어'로 검색되면 안 된다. */
+    qInput?.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.isComposing) runSearch();
+    });
+    box.querySelector('#insight-search-go')?.addEventListener('click', runSearch);
+    box.querySelector('#insight-search-clear')?.addEventListener('click', () => {
+      q = ''; page = 1; loadList();
+    });
+    /* 범위를 바꾸면 곧바로 다시 찾는다 — 이미 검색 중일 때만.
+       검색어가 없는데 다시 부르면 같은 목록을 또 받아온다. */
+    box.querySelectorAll('[data-scope]').forEach(btn => btn.addEventListener('click', () => {
+      scope = btn.dataset.scope;
+      if (q) { page = 1; loadList(); } else { render(); }
     }));
     box.querySelectorAll('[data-page]').forEach(btn => btn.addEventListener('click', () => {
       const n = Number(btn.dataset.page);

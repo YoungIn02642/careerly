@@ -900,3 +900,27 @@ a.wf-btn { text-decoration: none; }
   .jd-comp-body { padding-left: 16px; }
   .jd-block.is-full { inset: 0; border-radius: 0; }
 }
+
+/* ── 계열별 기업 (회사 찾기 첫 화면) ────────────────────────
+   785곳을 다 펼치면 화면이 목록으로 덮인다. 계열마다 12곳만 보이고
+   나머지는 눌러야 나온다. */
+.co-sectors { display: flex; flex-direction: column; gap: 8px; }
+.co-sector { border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-md); overflow: hidden; }
+.co-sector-h {
+  display: flex; align-items: center; gap: 9px; width: 100%; padding: 13px 16px;
+  border: 0; background: var(--wf-canvas); font: inherit; text-align: left; cursor: pointer;
+}
+.co-sector-h:hover { background: var(--wf-fill); }
+.co-sector-h b { font-size: 15px; font-weight: 500; color: var(--wf-ink); }
+.co-sector-h i { margin-left: auto; color: var(--wf-mute); font-size: 16px; transition: transform .16s ease; }
+.co-sector.is-open .co-sector-h i { transform: rotate(180deg); }
+.co-sector-body {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 0 16px 14px; border-top: 1px solid var(--wf-hairline); padding-top: 14px;
+}
+.co-chip {
+  padding: 6px 11px; border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-sm);
+  background: var(--wf-canvas); font: inherit; font-size: 13px; color: var(--wf-body); cursor: pointer;
+}
+.co-chip:hover { border-color: var(--wf-ink); color: var(--wf-ink); }
+.co-chip--more { color: var(--wf-mute); border-style: dashed; }

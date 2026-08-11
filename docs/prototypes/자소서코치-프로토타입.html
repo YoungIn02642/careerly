@@ -1,0 +1,1977 @@
+<title>자소서 코치 UI/UX 프로토타입 9안</title>
+<style>
+  /* ══════════════════════════════════════════════════════════
+     갤러리 프레임 — 설계 리뷰용 도면. 조용한 냉회색 위에 목업만 밝게.
+     목업 내부(.m)는 Careerly 실제 토큰을 그대로 쓴다(= 스크린샷이라 다크로
+     뒤집지 않는다). 프레임만 테마를 따른다.
+     ══════════════════════════════════════════════════════════ */
+  :root {
+    --g-bg:      #f1f2f4;
+    --g-surf:    #ffffff;
+    --g-surf2:   #e8e9ec;
+    --g-line:    #dfe1e5;
+    --g-ink:     #16171a;
+    --g-ink2:    #4a4c53;
+    --g-mut:     #82848c;
+    --g-acc:     #6d3aff;
+    --g-bad:     #c2410c;
+    --g-bad-bg:  #fdf2ec;
+    --g-good:    #0f766e;
+    --g-good-bg: #edf7f5;
+    --g-sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont,
+              'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif;
+    --g-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, 'Liberation Mono', monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --g-bg:#131418; --g-surf:#1b1c21; --g-surf2:#24262c; --g-line:#2e3037;
+      --g-ink:#eceef2; --g-ink2:#b6b9c2; --g-mut:#83868f; --g-acc:#a488ff;
+      --g-bad:#f2916a; --g-bad-bg:#2a1d17; --g-good:#63c9bd; --g-good-bg:#152522;
+    }
+  }
+  :root[data-theme="dark"] {
+    --g-bg:#131418; --g-surf:#1b1c21; --g-surf2:#24262c; --g-line:#2e3037;
+    --g-ink:#eceef2; --g-ink2:#b6b9c2; --g-mut:#83868f; --g-acc:#a488ff;
+    --g-bad:#f2916a; --g-bad-bg:#2a1d17; --g-good:#63c9bd; --g-good-bg:#152522;
+  }
+  :root[data-theme="light"] {
+    --g-bg:#f1f2f4; --g-surf:#ffffff; --g-surf2:#e8e9ec; --g-line:#dfe1e5;
+    --g-ink:#16171a; --g-ink2:#4a4c53; --g-mut:#82848c; --g-acc:#6d3aff;
+    --g-bad:#c2410c; --g-bad-bg:#fdf2ec; --g-good:#0f766e; --g-good-bg:#edf7f5;
+  }
+
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--g-bg); color: var(--g-ink);
+    font-family: var(--g-sans); font-size: 15px; line-height: 1.7;
+    font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased;
+  }
+  * { box-sizing: border-box; }
+  h1, h2, h3, h4 { margin: 0; font-weight: 800; letter-spacing: -0.02em; text-wrap: balance; }
+  p { margin: 0; }
+  ul { margin: 0; padding: 0; list-style: none; }
+  :focus-visible { outline: 2px solid var(--g-acc); outline-offset: 2px; border-radius: 3px; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+  /* ── 레이아웃 ───────────────────────────────────────────── */
+  .g-app { display: grid; grid-template-columns: 252px minmax(0, 1fr); align-items: start; }
+  .g-rail {
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    padding: 26px 18px 40px; border-right: 1px solid var(--g-line); background: var(--g-surf);
+  }
+  .g-brand { font-size: 10.5px; font-family: var(--g-mono); letter-spacing: .14em;
+             color: var(--g-mut); text-transform: uppercase; }
+  .g-rail h1 { margin: 6px 0 3px; font-size: 19px; line-height: 1.35; }
+  .g-rail-sub { font-size: 12px; color: var(--g-mut); line-height: 1.6; }
+  .g-grp { margin-top: 22px; }
+  .g-grp-h {
+    display: flex; align-items: baseline; gap: 7px; padding: 0 4px 7px;
+    border-bottom: 1px solid var(--g-line);
+  }
+  .g-grp-h b { font-size: 12.5px; font-weight: 800; }
+  .g-grp-h span { font-family: var(--g-mono); font-size: 10px; letter-spacing: .1em; color: var(--g-mut); }
+  .g-nav { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+  .g-nav button {
+    display: flex; align-items: baseline; gap: 9px; width: 100%; padding: 8px 9px;
+    border: 0; border-radius: 7px; background: transparent; color: var(--g-ink2);
+    font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+  }
+  .g-nav button:hover { background: var(--g-surf2); color: var(--g-ink); }
+  .g-nav button em {
+    flex: none; font-family: var(--g-mono); font-style: normal; font-size: 11px;
+    color: var(--g-mut); letter-spacing: .04em;
+  }
+  .g-nav button.is-on { background: var(--g-acc); color: #fff; font-weight: 700; }
+  .g-nav button.is-on em { color: #fff; opacity: .72; }
+
+  .g-main { padding: 30px clamp(18px, 3.4vw, 46px) 90px; min-width: 0; }
+  .g-intro { max-width: 62ch; padding-bottom: 26px; border-bottom: 1px solid var(--g-line); }
+  .g-intro h2 { font-size: 24px; }
+  .g-intro p { margin-top: 9px; color: var(--g-ink2); font-size: 14px; }
+
+  /* ── 프로토타입 블록 ────────────────────────────────────── */
+  .g-proto { padding-top: 30px; }
+  .g-proto[hidden] { display: none; }
+  .g-meta { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+  .g-meta .g-code {
+    font-family: var(--g-mono); font-size: 11px; letter-spacing: .1em;
+    padding: 3px 8px; border-radius: 5px; background: var(--g-acc); color: #fff; font-weight: 700;
+  }
+  .g-meta .g-part { font-family: var(--g-mono); font-size: 11px; letter-spacing: .1em; color: var(--g-mut); }
+  .g-proto h3 { margin-top: 10px; font-size: 26px; }
+  .g-proto .g-tag { margin-top: 7px; color: var(--g-ink2); font-size: 14.5px; max-width: 68ch; }
+  .g-refs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 13px; }
+  .g-refs b {
+    font-family: var(--g-mono); font-size: 10px; letter-spacing: .1em; color: var(--g-mut);
+    align-self: center; margin-right: 2px;
+  }
+  .g-refs span {
+    padding: 3px 9px; border: 1px solid var(--g-line); border-radius: 999px;
+    font-size: 11.5px; color: var(--g-ink2); background: var(--g-surf);
+  }
+
+  .g-notes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 22px; }
+  .g-note { padding: 15px 17px; border-radius: 10px; border: 1px solid var(--g-line); background: var(--g-surf); }
+  .g-note h4 {
+    display: flex; align-items: center; gap: 7px; font-size: 12px;
+    font-family: var(--g-mono); letter-spacing: .09em; text-transform: uppercase;
+  }
+  .g-note ul { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+  .g-note li { position: relative; padding-left: 15px; font-size: 13.5px; line-height: 1.65; color: var(--g-ink2); }
+  .g-note li::before {
+    content: ''; position: absolute; left: 2px; top: .68em; width: 5px; height: 5px; border-radius: 50%;
+  }
+  .g-note--bad  { background: var(--g-bad-bg); border-color: color-mix(in srgb, var(--g-bad) 25%, transparent); }
+  .g-note--bad h4 { color: var(--g-bad); }
+  .g-note--bad li::before { background: var(--g-bad); }
+  .g-note--good { background: var(--g-good-bg); border-color: color-mix(in srgb, var(--g-good) 25%, transparent); }
+  .g-note--good h4 { color: var(--g-good); }
+  .g-note--good li::before { background: var(--g-good); }
+
+  /* 목업 프레임 — 스크린샷처럼 읽히게 */
+  .g-frame {
+    margin: 22px 0 0; border: 1px solid var(--g-line); border-radius: 12px;
+    background: var(--g-surf); overflow: hidden;
+    box-shadow: 0 1px 2px rgba(0,0,0,.05), 0 18px 40px -22px rgba(0,0,0,.35);
+  }
+  .g-frame-bar {
+    display: flex; align-items: center; gap: 8px; padding: 9px 13px;
+    border-bottom: 1px solid var(--g-line); background: var(--g-surf2);
+  }
+  .g-dots { display: flex; gap: 5px; }
+  .g-dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--g-line); }
+  .g-url {
+    flex: 1; padding: 3px 10px; border-radius: 5px; background: var(--g-surf);
+    font-family: var(--g-mono); font-size: 10.5px; color: var(--g-mut); overflow: hidden;
+    white-space: nowrap; text-overflow: ellipsis;
+  }
+  .g-sample {
+    flex: none; padding: 2px 8px; border-radius: 999px; background: #fde68a; color: #7c3f00;
+    font-size: 10px; font-weight: 800; letter-spacing: .02em;
+  }
+  .g-screen { overflow-x: auto; background: #fff; }
+
+  @media (max-width: 900px) {
+    .g-app { grid-template-columns: 1fr; }
+    .g-rail { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--g-line); }
+    .g-nav { flex-direction: row; flex-wrap: wrap; }
+    .g-nav button { width: auto; }
+    .g-notes { grid-template-columns: 1fr; }
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     목업 키트(.m) — Careerly 실제 토큰. 항상 밝게.
+     ══════════════════════════════════════════════════════════ */
+  .m {
+    --b:#6d3aff; --bd2:#5a26e8; --bs:#f0ebff;
+    --ink:#080808; --ink2:#3f3f46; --ink3:#8a8a8a;
+    --line:#e5e5e8; --bg:#f6f6f7; --white:#fff;
+    --ok:#00873a; --ok-bg:#eafaef; --warn:#b45309; --warn-bg:#fffbeb;
+    --bad:#d61c33; --bad-bg:#fef2f3; --blue:#146ef5; --blue-bg:#eaf1ff;
+    min-width: 1000px; background: #fff; color: var(--ink);
+    font-family: var(--g-sans); font-size: 13px; line-height: 1.6; text-align: left;
+  }
+  .m ::placeholder { color: #b3b4ba; }
+  .m b, .m strong { font-weight: 700; }
+
+  /* 앱 상단바 */
+  .m-top {
+    display: flex; align-items: center; gap: 22px; height: 52px; padding: 0 22px;
+    border-bottom: 1px solid var(--line);
+  }
+  .m-logo { font-size: 15px; font-weight: 900; letter-spacing: -.03em; }
+  .m-top nav { display: flex; gap: 18px; font-size: 12.5px; color: var(--ink2); }
+  .m-top nav span.on { color: var(--b); font-weight: 700; }
+  .m-top .m-me {
+    margin-left: auto; display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--ink2);
+  }
+  .m-top .m-me i {
+    width: 26px; height: 26px; border-radius: 50%; background: var(--bs); color: var(--b);
+    display: grid; place-items: center; font-style: normal; font-size: 11px; font-weight: 800;
+  }
+  /* 서브 탭 */
+  .m-sub { display: flex; align-items: center; gap: 4px; padding: 9px 22px; border-bottom: 1px solid var(--line); }
+  .m-sub span {
+    padding: 7px 14px; border-radius: 999px; font-size: 12.5px; font-weight: 700; color: var(--ink3);
+  }
+  .m-sub span.on { background: var(--ink); color: #fff; }
+  .m-sub .m-right { margin-left: auto; padding: 0; color: var(--ink3); font-weight: 400; font-size: 11.5px; }
+
+  /* 뼈대 */
+  .m-2 { display: grid; grid-template-columns: 268px minmax(0,1fr); align-items: start; }
+  .m-side { padding: 18px 14px; border-right: 1px solid var(--line); background: #fbfbfc; min-height: 560px; }
+  .m-body { padding: 24px 26px 34px; }
+  .m-body--tight { padding: 18px 22px 26px; }
+
+  .m-eyebrow { font-family: var(--g-mono); font-size: 10px; letter-spacing: .12em; color: var(--ink3); text-transform: uppercase; }
+  .m-h1 { font-size: 21px; font-weight: 800; letter-spacing: -.02em; }
+  .m-h2 { font-size: 15px; font-weight: 800; letter-spacing: -.01em; }
+  .m-h3 { font-size: 13px; font-weight: 800; }
+  .m-p  { font-size: 12.5px; color: var(--ink2); line-height: 1.65; }
+  .m-mut { font-size: 11.5px; color: var(--ink3); line-height: 1.6; }
+  .m-lb { font-size: 11.5px; font-weight: 700; color: var(--ink2); }
+  .m-stack { display: flex; flex-direction: column; }
+  .m-row { display: flex; align-items: center; gap: 8px; }
+  .m-wrap { flex-wrap: wrap; }
+  .m-sp { margin-left: auto; }
+
+  /* 검색 */
+  .m-srch {
+    display: flex; align-items: center; gap: 8px; padding: 9px 12px;
+    border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--ink3); font-size: 12.5px;
+  }
+  .m-srch--big { padding: 14px 18px; border-radius: 12px; font-size: 15px; border-color: #cfcfd6; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+  .m-srch--big .m-ico { width: 18px; height: 18px; }
+  .m-ico { width: 14px; height: 14px; flex: none; color: currentColor; }
+
+  /* 리스트/행 */
+  .m-list { display: flex; flex-direction: column; gap: 2px; }
+  .m-li {
+    display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 9px;
+  }
+  .m-li.on { background: var(--bs); }
+  .m-li.on .m-li-t b { color: var(--bd2); }
+  .m-li-t { min-width: 0; display: flex; flex-direction: column; line-height: 1.35; }
+  .m-li-t b { font-size: 13px; }
+  .m-li-t small { font-size: 10.5px; color: var(--ink3); }
+  .m-av {
+    width: 34px; height: 34px; flex: none; border-radius: 9px; display: grid; place-items: center;
+    background: var(--c, #6d3aff); color: #fff; font-size: 14px; font-weight: 900;
+  }
+  .m-av--lg { width: 52px; height: 52px; border-radius: 13px; font-size: 20px; }
+  .m-av--sm { width: 26px; height: 26px; border-radius: 7px; font-size: 11px; }
+
+  /* 카드 */
+  .m-card { padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+  .m-card--flat { background: var(--bg); border-color: transparent; }
+  .m-grid { display: grid; gap: 10px; }
+  .m-g2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .m-g3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+  .m-g4 { grid-template-columns: repeat(4, minmax(0,1fr)); }
+
+  /* KPI */
+  .m-kpi { padding: 13px 14px; border: 1px solid var(--line); border-radius: 11px; }
+  .m-kpi .k-l { font-size: 11px; color: var(--ink3); }
+  .m-kpi .k-v { margin-top: 3px; font-size: 20px; font-weight: 800; letter-spacing: -.02em; line-height: 1.15; }
+  .m-kpi .k-d { font-size: 11.5px; font-weight: 700; }
+  .k-up { color: var(--ok); } .k-dn { color: var(--bad); } .k-fl { color: var(--ink3); }
+
+  /* 칩·배지 */
+  .m-chip {
+    display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; border-radius: 999px;
+    border: 1px solid var(--line); background: #fff; font-size: 11.5px; color: var(--ink2); font-weight: 600;
+  }
+  .m-chip.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+  .m-pill {
+    display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
+    font-size: 10.5px; font-weight: 800; letter-spacing: -.01em; white-space: nowrap;
+  }
+  .p-ok   { background: var(--ok-bg);   color: var(--ok); }
+  .p-warn { background: var(--warn-bg); color: var(--warn); }
+  .p-bad  { background: var(--bad-bg);  color: var(--bad); }
+  .p-info { background: var(--blue-bg); color: var(--blue); }
+  .p-mut  { background: #f1f1f3;        color: #6b6c73; }
+  .p-br   { background: var(--bs);      color: var(--bd2); }
+
+  /* 버튼 */
+  .m-btn {
+    display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 9px;
+    border: 1px solid var(--line); background: #fff; font-size: 12.5px; font-weight: 700; color: var(--ink2);
+  }
+  .m-btn--p { background: var(--ink); border-color: var(--ink); color: #fff; }
+  .m-btn--br { background: var(--b); border-color: var(--b); color: #fff; }
+  .m-btn--sm { padding: 5px 10px; font-size: 11.5px; border-radius: 7px; }
+
+  /* 진행바 */
+  .m-prog { height: 6px; border-radius: 999px; background: #ececf0; overflow: hidden; }
+  .m-prog i { display: block; height: 100%; border-radius: 999px; background: var(--b); }
+  .m-prog.g i { background: var(--ok); }
+  .m-prog.w i { background: #f0a72a; }
+  .m-prog--thin { height: 4px; }
+
+  /* 입력 */
+  .m-fld { border: 1px solid var(--line); border-radius: 12px; background: #fff; overflow: hidden; }
+  .m-fld--on { border-color: var(--b); box-shadow: 0 0 0 3px rgba(109,58,255,.09); }
+  .m-fld-h {
+    display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #fafafb;
+    border-bottom: 1px solid var(--line);
+  }
+  .m-fld-h .n {
+    width: 19px; height: 19px; flex: none; border-radius: 6px; display: grid; place-items: center;
+    background: var(--ink); color: #fff; font-size: 10.5px; font-weight: 800;
+  }
+  .m-fld-b { padding: 13px 15px; font-size: 12.5px; line-height: 1.85; color: var(--ink2); white-space: pre-wrap; }
+  .m-fld-f {
+    display: flex; align-items: center; gap: 10px; padding: 7px 14px; border-top: 1px solid var(--line);
+    background: #fafafb; font-size: 11px; color: var(--ink3);
+  }
+  .m-caret { display: inline-block; width: 1.5px; height: 1.05em; background: var(--b); vertical-align: -2px; }
+  .m-ph { color: #b3b4ba; }
+
+  /* 인용/근거 */
+  .m-quote {
+    padding: 8px 12px; border-left: 3px solid var(--b); border-radius: 0 7px 7px 0; background: #fafafb;
+    font-size: 12px; color: var(--ink2); line-height: 1.6;
+  }
+  /* 하이라이트는 갤러리 본문(테마 반전됨)에서도 쓰이므로 글자색을 고정한다 */
+  .m-hl { background: #fff3bf; color: #4a3a00; border-radius: 3px; padding: 0 2px; box-shadow: 0 0 0 1px #f5e08a inset; }
+  .m-hl--b { background: #e3edff; color: #12386f; box-shadow: 0 0 0 1px #c3d7ff inset; }
+  .g-note code {
+    padding: 1px 5px; border-radius: 4px; background: color-mix(in srgb, currentColor 12%, transparent);
+    font-family: var(--g-mono); font-size: .86em;
+  }
+
+  /* 표 */
+  .m-tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .m-tbl th, .m-tbl td { padding: 11px 12px; border-bottom: 1px solid var(--line); text-align: left; }
+  .m-tbl thead th { font-size: 11px; font-weight: 700; color: var(--ink3); background: #fafafb; }
+  .m-tbl tbody tr.on { background: var(--bs); }
+
+  /* 탭 */
+  .m-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); }
+  .m-tabs span {
+    padding: 10px 14px; font-size: 12.5px; font-weight: 700; color: var(--ink3);
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .m-tabs span.on { color: var(--ink); border-bottom-color: var(--ink); }
+
+  .m-sticky-note {
+    display: flex; align-items: center; gap: 8px; padding: 9px 13px; border-radius: 9px;
+    background: var(--warn-bg); border: 1px solid #fde68a; font-size: 12px; color: var(--warn);
+  }
+  .m-divider { height: 1px; background: var(--line); }
+  .m-scrollbar { width: 5px; border-radius: 999px; background: #dddde2; }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+    <circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path>
+  </symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12.5l5.5 5.5L20 6.5"></path>
+  </symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 12h13M12.5 5.5L19 12l-6.5 6.5"></path>
+  </symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+    <path d="M12 5v14M5 12h14"></path>
+  </symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 4H4v5M15 20h5v-5M20 9V4h-5M4 15v5h5"></path>
+  </symbol>
+</svg>
+
+<div class="g-app">
+  <aside class="g-rail">
+    <div class="g-brand">Careerly · Design Review</div>
+    <h1>자소서 코치<br>UI/UX 프로토타입</h1>
+    <p class="g-rail-sub">3개 파트 × 3안 = 9안. 왼쪽에서 골라 보세요.</p>
+
+    <div class="g-grp">
+      <div class="g-grp-h"><span>PART A</span><b>회사 찾기</b></div>
+      <div class="g-nav">
+        <button type="button" data-go="a1"><em>A-1</em>기업 리포트형</button>
+        <button type="button" data-go="a2"><em>A-2</em>검색 우선형</button>
+        <button type="button" data-go="a3"><em>A-3</em>지원 관리 보드형</button>
+      </div>
+    </div>
+
+    <div class="g-grp">
+      <div class="g-grp-h"><span>PART B</span><b>입력 4칸</b></div>
+      <div class="g-nav">
+        <button type="button" data-go="b1"><em>B-1</em>문서형 에디터</button>
+        <button type="button" data-go="b2"><em>B-2</em>단계형 위저드</button>
+        <button type="button" data-go="b3"><em>B-3</em>좌우 분할·즉시 구조화</button>
+      </div>
+    </div>
+
+    <div class="g-grp">
+      <div class="g-grp-h"><span>PART C</span><b>AI 답변</b></div>
+      <div class="g-nav">
+        <button type="button" data-go="c1"><em>C-1</em>역량↔초안 2단 분할</button>
+        <button type="button" data-go="c2"><em>C-2</em>커버리지 대시보드</button>
+        <button type="button" data-go="c3"><em>C-3</em>문항 중심 워크스페이스</button>
+      </div>
+    </div>
+  </aside>
+
+  <main class="g-main">
+    <div class="g-intro">
+      <h2>지금 화면이 불편한 이유 4가지</h2>
+      <p>① 회사 검색은 짙은 보라 사이드바가 화면을 다 먹는데 본문에는 볼 게 없다 · ② 입력칸 4개가
+        작아서 붙여넣고 나면 내가 뭘 썼는지 다시 못 본다 · ③ 분석 결과가 세로로만 길어 역량 하나를
+        확인하려면 계속 스크롤해야 하고, 요구역량과 직무역량이 따로 나온다 · ④ 초안을 쓸 때 역량 가이드가
+        화면 밖으로 밀려난다. 아래 9안은 각각 이 넷 중 무엇을 어떻게 없앴는지로 갈린다.</p>
+    </div>
+
+    <!-- ══════════════════════ PART A ══════════════════════ -->
+    <section class="g-proto" id="p-a1">
+      <div class="g-meta"><span class="g-code">A-1</span><span class="g-part">PART A · 회사 찾기</span></div>
+      <h3>기업 리포트형</h3>
+      <p class="g-tag">사이드바를 흰색 목록으로 낮추고, 본문을 <b>“이 회사에 대해 자소서에 쓸 수 있는 사실”</b>로 가득 채웁니다.
+        지금 화면의 안내문 4칸이 실제 데이터(재무·기사·공고·경쟁사)로 바뀝니다.</p>
+      <div class="g-refs"><b>REF</b><span>사람인 기업정보</span><span>잡플래닛</span><span>Glassdoor Company</span><span>Levels.fyi</span></div>
+
+      <div class="g-notes">
+        <div class="g-note g-note--bad">
+          <h4>지금</h4>
+          <ul>
+            <li>#181818 + 보라 그라데이션 사이드바가 286px을 차지하는데, 담긴 건 검색창과 회사 7개뿐</li>
+            <li>본문은 “1 회사 움직임 → 2 직무 연결 → 3 내 경험 → 4 기여” 안내문 4칸. 회사를 바꿔도 내용이 안 바뀐다</li>
+            <li>재무·기사는 자소서 코치 쪽 ‘이 회사 분석하기’를 눌러야 나온다 — 회사 페이지에 없다</li>
+          </ul>
+        </div>
+        <div class="g-note g-note--good">
+          <h4>이 안</h4>
+          <ul>
+            <li>사이드바는 흰 배경 + 헤어라인. 검색·최근 본 회사·관심 회사만 남기고 폭 248px로 축소</li>
+            <li>본문 = 기업 리포트. 규모/설립/사원수 → 실적 4칸(스파크라인) → 최근 기사 → 반복 키워드 순</li>
+            <li>우상단 <b>지원동기 근거 3/5</b> 게이지. 이 페이지에 온 이유가 숫자로 보인다</li>
+            <li>기사 제목 옆 <b>[근거로 담기]</b> — 담은 사실이 자소서 코치 지원동기 문항에 그대로 붙는다</li>
+          </ul>
+        </div>
+      </div>
+
+      <figure class="g-frame">
+        <figcaption class="g-frame-bar">
+          <span class="g-dots"><i></i><i></i><i></i></span>
+          <span class="g-url">careerly.app/#company · 삼성전자</span>
+          <span class="g-sample">수치는 예시</span>
+        </figcaption>
+        <div class="g-screen"><div class="m">
+          <div class="m-top">
+            <div class="m-logo">careerly</div>
+            <nav><span>커리어 로드맵</span><span class="on">회사·자소서</span><span>멘토링</span><span>인사이트</span></nav>
+            <div class="m-me"><i>조</i> 조영인</div>
+          </div>
+          <div class="m-sub"><span class="on">회사 검색</span><span>자소서 코치</span></div>
+
+          <div class="m-2">
+            <aside class="m-side">
+              <div class="m-srch"><svg class="m-ico"><use href="#i-search"></use></svg> 회사명 검색</div>
+              <div style="margin-top:18px">
+                <div class="m-lb" style="padding:0 4px 7px">최근 본 회사</div>
+                <div class="m-list">
+                  <div class="m-li on"><span class="m-av" style="--c:#2563eb">삼</span>
+                    <span class="m-li-t"><b>삼성전자</b><small>전자·반도체 · 근거 3/5</small></span></div>
+                  <div class="m-li"><span class="m-av" style="--c:#03c75a">네</span>
+                    <span class="m-li-t"><b>네이버</b><small>IT·검색 · 근거 1/5</small></span></div>
+                  <div class="m-li"><span class="m-av" style="--c:#3182f6">토</span>
+                    <span class="m-li-t"><b>토스</b><small>핀테크 · 근거 0/5</small></span></div>
+                </div>
+              </div>
+              <div style="margin-top:18px">
+                <div class="m-lb" style="padding:0 4px 7px">관심 회사 <span class="m-pill p-mut">4</span></div>
+                <div class="m-list">
+                  <div class="m-li"><span class="m-av m-av--sm" style="--c:#f5c400">카</span>
+                    <span class="m-li-t"><b>카카오</b></span><span class="m-sp m-pill p-warn">D-6</span></div>
+                  <div class="m-li"><span class="m-av m-av--sm" style="--c:#1e3a8a">현</span>
+                    <span class="m-li-t"><b>현대자동차</b></span><span class="m-sp m-pill p-mut">상시</span></div>
+                  <div class="m-li"><span class="m-av m-av--sm" style="--c:#ef4444">S</span>
+                    <span class="m-li-t"><b>SK하이닉스</b></span><span class="m-sp m-pill p-mut">D-21</span></div>
+                  <div class="m-li"><span class="m-av m-av--sm" style="--c:#a50034">L</span>
+                    <span class="m-li-t"><b>LG에너지솔루션</b></span><span class="m-sp m-pill p-mut">D-30</span></div>
+                </div>
+              </div>
+            </aside>
+
+            <div class="m-body">
+              <div class="m-row" style="align-items:flex-start">
+                <span class="m-av m-av--lg" style="--c:#2563eb">삼</span>
+                <div>
+                  <div class="m-row m-wrap" style="gap:6px">
+                    <span class="m-h1">삼성전자</span>
+                    <span class="m-pill p-mut">대기업</span><span class="m-pill p-info">전자·반도체</span>
+                  </div>
+                  <div class="m-mut" style="margin-top:2px">1969 설립 · 사원 121,404명 · 상장(KOSPI) · 채용중 공고 47건</div>
+                </div>
+                <div class="m-sp" style="width:210px">
+                  <div class="m-row" style="gap:6px"><span class="m-lb">지원동기 근거</span>
+                    <span class="m-sp" style="font-size:12px;font-weight:800">3 / 5</span></div>
+                  <div class="m-prog w" style="margin-top:6px"><i style="width:60%"></i></div>
+                  <div class="m-mut" style="margin-top:5px">사업방향·실적·기사 확보 · <b>제품/경쟁사</b> 남음</div>
+                </div>
+              </div>
+
+              <div class="m-tabs" style="margin-top:18px">
+                <span class="on">개요</span><span>실적</span><span>최근 기사 12</span><span>채용공고 47</span><span>경쟁사</span>
+              </div>
+
+              <div class="m-grid m-g4" style="margin-top:16px">
+                <div class="m-kpi">
+                  <div class="k-l">매출액 (3개년)</div>
+                  <div class="k-v">258.9<span style="font-size:12px">조</span></div>
+                  <div class="m-row"><span class="k-d k-up">▲ 2.1%</span>
+                    <svg class="m-sp" width="74" height="24" viewBox="0 0 74 24" fill="none" aria-hidden="true">
+                      <path d="M2 18L20 14L38 17L56 8L72 4" stroke="#00873a" stroke-width="2" stroke-linecap="round"/>
+                      <circle cx="72" cy="4" r="3" fill="#00873a"/>
+                    </svg></div>
+                </div>
+                <div class="m-kpi">
+                  <div class="k-l">영업이익</div>
+                  <div class="k-v">6.5<span style="font-size:12px">조</span></div>
+                  <div class="m-row"><span class="k-d k-dn">▼ 84.9%</span>
+                    <svg class="m-sp" width="74" height="24" viewBox="0 0 74 24" fill="none" aria-hidden="true">
+                      <path d="M2 5L20 7L38 6L56 15L72 20" stroke="#d61c33" stroke-width="2" stroke-linecap="round"/>
+                      <circle cx="72" cy="20" r="3" fill="#d61c33"/>
+                    </svg></div>
+                </div>
+                <div class="m-kpi">
+                  <div class="k-l">채용중 공고</div>
+                  <div class="k-v">47<span style="font-size:12px">건</span></div>
+                  <div class="k-d k-fl">마케팅·데이터 6건</div>
+                </div>
+                <div class="m-kpi">
+                  <div class="k-l">최근 30일 기사</div>
+                  <div class="k-v">12<span style="font-size:12px">건</span></div>
+                  <div class="k-d k-fl">HBM · 파운드리 · 온디바이스</div>
+                </div>
+              </div>
+
+              <div class="m-grid" style="grid-template-columns:1.35fr 1fr;margin-top:14px">
+                <div class="m-card">
+                  <div class="m-row"><span class="m-h2">최근 기사</span>
+                    <span class="m-sp m-mut">네이버 뉴스 · 30일</span></div>
+                  <div class="m-stack" style="gap:11px;margin-top:12px">
+                    <div class="m-row" style="align-items:flex-start;gap:10px">
+                      <div style="min-width:0">
+                        <div style="font-size:12.5px;font-weight:600;line-height:1.5">삼성전자, HBM4 양산 라인 증설 검토… 하반기 고객사 확대</div>
+                        <div class="m-mut">2026.07.28 · 전자신문</div>
+                      </div>
+                      <span class="m-sp m-btn m-btn--sm m-btn--br" style="flex:none"><svg class="m-ico"><use href="#i-plus"></use></svg> 근거로 담기</span>
+                    </div>
+                    <div class="m-divider"></div>
+                    <div class="m-row" style="align-items:flex-start;gap:10px">
+                      <div style="min-width:0">
+                        <div style="font-size:12.5px;font-weight:600;line-height:1.5">“고객 데이터 기반 마케팅으로 전환”… DX부문 조직 개편</div>
+                        <div class="m-mut">2026.07.21 · 한국경제 · <b style="color:#00873a">내 직무와 관련</b></div>
+                      </div>
+                      <span class="m-sp m-pill p-ok" style="flex:none"><svg class="m-ico" style="width:11px;height:11px"><use href="#i-check"></use></svg> 담김</span>
+                    </div>
+                    <div class="m-divider"></div>
+                    <div class="m-row" style="align-items:flex-start;gap:10px">
+                      <div style="min-width:0">
+                        <div style="font-size:12.5px;font-weight:600;line-height:1.5">파운드리 2나노 수주 확대, 미국 공장 가동률 상향</div>
+                        <div class="m-mut">2026.07.15 · 조선비즈</div>
+                      </div>
+                      <span class="m-sp m-btn m-btn--sm" style="flex:none"><svg class="m-ico"><use href="#i-plus"></use></svg> 근거로 담기</span>
+                    </div>
+                  </div>
+                  <div class="m-card m-card--flat" style="margin-top:13px;padding:11px 13px">
+                    <div class="m-lb">기사에서 반복된 말</div>
+                    <div class="m-row m-wrap" style="gap:5px;margin-top:7px">
+                      <span class="m-pill p-br">HBM <b>8</b></span><span class="m-pill p-br">파운드리 <b>6</b></span>
+                      <span class="m-pill p-br">온디바이스 AI <b>5</b></span><span class="m-pill p-br">고객 데이터 <b>3</b></span>
+                      <span class="m-pill p-mut">감산 <b>2</b></span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="m-stack" style="gap:10px">
+                  <div class="m-card">
+                    <div class="m-h2">담은 근거 <span class="m-pill p-br">3</span></div>
+                    <div class="m-stack" style="gap:7px;margin-top:10px">
+                      <div class="m-quote">DX부문이 <span class="m-hl">고객 데이터 기반 마케팅</span>으로 전환 중 (2026.07.21)</div>
+                      <div class="m-quote">영업이익 <span class="m-hl">전년비 −84.9%</span> — 비용 효율이 화두</div>
+                      <div class="m-quote">마케팅·데이터 직군 <span class="m-hl">공고 6건</span> 상시 모집</div>
+                    </div>
+                    <div class="m-btn m-btn--p" style="width:100%;justify-content:center;margin-top:12px">
+                      담은 근거로 지원동기 쓰러 가기 <svg class="m-ico"><use href="#i-arrow"></use></svg>
+                    </div>
+                    <div class="m-mut" style="margin-top:7px;text-align:center">자소서 코치 1번 문항에 인용문으로 들어갑니다</div>
+                  </div>
+                  <div class="m-card">
+                    <div class="m-h2">업종코드가 같은 회사</div>
+                    <div class="m-row m-wrap" style="gap:5px;margin-top:9px">
+                      <span class="m-chip">SK하이닉스</span><span class="m-chip">LG전자</span><span class="m-chip">DB하이텍</span>
+                    </div>
+                    <div class="m-mut" style="margin-top:8px">표준산업분류 기준입니다. “왜 경쟁사가 아니라 우리인가” 문항의 출발점으로만 쓰세요.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div></div>
+      </figure>
+    </section>
+
+    <section class="g-proto" id="p-a2">
+      <div class="g-meta"><span class="g-code">A-2</span><span class="g-part">PART A · 회사 찾기</span></div>
+      <h3>검색 우선형 — 사이드바를 없앤다</h3>
+      <p class="g-tag">고정 사이드바를 <b>통째로 제거</b>하고 검색을 화면 한가운데로 올립니다. 검색 전에는
+        “지금 마감 임박”, “내 전공과 맞는 회사”가 카드로 깔려서 빈 화면이 없습니다.</p>
+      <div class="g-refs"><b>REF</b><span>Indeed Company Search</span><span>원티드</span><span>사람인 기업 검색</span><span>Otta</span></div>
+
+      <div class="g-notes">
+        <div class="g-note g-note--bad">
+          <h4>지금</h4>
+          <ul>
+            <li>검색창이 어두운 사이드바 안에 갇혀 있어 “이 페이지의 주된 행동”으로 안 읽힌다</li>
+            <li>추천 7곳이 하드코딩 — 나와 무관한 회사가 항상 같은 순서로 뜬다</li>
+            <li>회사를 고르기 전에는 본문이 텅 빈 안내문</li>
+          </ul>
+        </div>
+        <div class="g-note g-note--good">
+          <h4>이 안</h4>
+          <ul>
+            <li>사이드바 삭제 → 화면 전체가 본문. 검색창 하나가 화면 최상단 중앙</li>
+            <li>입력 즉시 드롭다운에 <b>회사명 + 업종 + 규모 + 채용중 공고 수</b>까지 한 줄에</li>
+            <li>검색 전 화면: 마감 임박 / 내 전공 맞춤 / 최근 분석 3레인 — 누를 것이 항상 있다</li>
+            <li>결과는 카드 그리드 + 체크박스 <b>비교하기</b> (2~3곳 나란히 두고 지원처 결정)</li>
+          </ul>
+        </div>
+      </div>
+
+      <figure class="g-frame">
+        <figcaption class="g-frame-bar">
+          <span class="g-dots"><i></i><i></i><i></i></span>
+          <span class="g-url">careerly.app/#company</span>
+          <span class="g-sample">수치는 예시</span>
+        </figcaption>
+        <div class="g-screen"><div class="m">
+          <div class="m-top">
+            <div class="m-logo">careerly</div>
+            <nav><span>커리어 로드맵</span><span class="on">회사·자소서</span><span>멘토링</span><span>인사이트</span></nav>
+            <div class="m-me"><i>조</i> 조영인</div>
+          </div>
+          <div class="m-sub"><span class="on">회사 검색</span><span>자소서 코치</span>
+            <span class="m-right">지원동기 근거를 모아 둔 회사 3곳</span></div>
+
+          <div class="m-body" style="padding:34px 26px 40px">
+            <div style="max-width:760px;margin:0 auto">
+              <div class="m-h1" style="font-size:24px;text-align:center">어느 회사에 지원하세요?</div>
+              <p class="m-p" style="text-align:center;margin-top:6px">회사를 고르면 자소서 지원동기에 쓸 수 있는 사실만 모아 드려요.</p>
+              <div class="m-srch m-srch--big" style="margin-top:16px">
+                <svg class="m-ico"><use href="#i-search"></use></svg>
+                <span style="color:var(--ink)">삼성<span class="m-caret"></span></span>
+              </div>
+
+              <div class="m-card" style="margin-top:6px;padding:6px">
+                <div class="m-li"><span class="m-av" style="--c:#2563eb">삼</span>
+                  <span class="m-li-t"><b>삼성전자</b><small>전자·반도체 · 대기업 · 사원 121,404명</small></span>
+                  <span class="m-sp m-pill p-info">채용중 47</span></div>
+                <div class="m-li"><span class="m-av" style="--c:#0ea5e9">삼</span>
+                  <span class="m-li-t"><b>삼성SDS</b><small>IT서비스 · 대기업 · 사원 12,880명</small></span>
+                  <span class="m-sp m-pill p-info">채용중 9</span></div>
+                <div class="m-li"><span class="m-av" style="--c:#1d4ed8">삼</span>
+                  <span class="m-li-t"><b>삼성바이오로직스</b><small>바이오·의약 · 대기업 · 사원 4,821명</small></span>
+                  <span class="m-sp m-pill p-mut">채용중 0</span></div>
+                <div class="m-li"><span class="m-av" style="--c:#64748b">삼</span>
+                  <span class="m-li-t"><b>삼진제약</b><small>의약품 · 중견기업 · 사원 682명</small></span>
+                  <span class="m-sp m-pill p-info">채용중 2</span></div>
+                <div class="m-row" style="padding:8px 11px 4px"><span class="m-mut">‘삼성’ 검색 결과 <b>18곳</b> · Enter 로 전체 보기</span></div>
+              </div>
+            </div>
+
+            <div style="max-width:1000px;margin:30px auto 0">
+              <div class="m-row"><span class="m-h2">이번 주 마감</span>
+                <span class="m-sp m-mut">관심 회사 기준</span></div>
+              <div class="m-grid m-g3" style="margin-top:10px">
+                <div class="m-card">
+                  <div class="m-row"><span class="m-av m-av--sm" style="--c:#f5c400">카</span>
+                    <b style="font-size:13.5px">카카오</b><span class="m-sp m-pill p-bad">D-3</span></div>
+                  <div class="m-p" style="margin-top:9px">2026 하반기 마케팅 부문</div>
+                  <div class="m-row" style="gap:7px;margin-top:10px">
+                    <div class="m-prog w" style="flex:1"><i style="width:40%"></i></div>
+                    <span class="m-mut" style="flex:none">근거 2/5</span></div>
+                  <div class="m-btn m-btn--sm" style="margin-top:10px;width:100%;justify-content:center">이어서 준비하기</div>
+                </div>
+                <div class="m-card">
+                  <div class="m-row"><span class="m-av m-av--sm" style="--c:#ef4444">S</span>
+                    <b style="font-size:13.5px">SK하이닉스</b><span class="m-sp m-pill p-warn">D-6</span></div>
+                  <div class="m-p" style="margin-top:9px">신입 공채 · 경영지원</div>
+                  <div class="m-row" style="gap:7px;margin-top:10px">
+                    <div class="m-prog" style="flex:1"><i style="width:0%"></i></div>
+                    <span class="m-mut" style="flex:none">근거 0/5</span></div>
+                  <div class="m-btn m-btn--sm" style="margin-top:10px;width:100%;justify-content:center">지금 시작하기</div>
+                </div>
+                <div class="m-card">
+                  <div class="m-row"><span class="m-av m-av--sm" style="--c:#2563eb">삼</span>
+                    <b style="font-size:13.5px">삼성전자</b><span class="m-sp m-pill p-mut">상시</span></div>
+                  <div class="m-p" style="margin-top:9px">DX부문 데이터 마케팅</div>
+                  <div class="m-row" style="gap:7px;margin-top:10px">
+                    <div class="m-prog g" style="flex:1"><i style="width:60%"></i></div>
+                    <span class="m-mut" style="flex:none">근거 3/5</span></div>
+                  <div class="m-btn m-btn--sm m-btn--p" style="margin-top:10px;width:100%;justify-content:center">자소서 이어쓰기</div>
+                </div>
+              </div>
+
+              <div class="m-row" style="margin-top:24px"><span class="m-h2">경영학과 · 마케팅 직무로 많이 가는 회사</span>
+                <span class="m-sp m-mut">내 프로필 기준 · 워크넷 공고 집계</span></div>
+              <div class="m-grid m-g4" style="margin-top:10px">
+                <div class="m-card" style="padding:13px 14px">
+                  <div class="m-row"><span class="m-av m-av--sm" style="--c:#03c75a">네</span><b>네이버</b></div>
+                  <div class="m-mut" style="margin-top:7px">IT·검색 · 대기업</div>
+                  <div class="m-row" style="gap:5px;margin-top:8px"><span class="m-pill p-info">공고 14</span><span class="m-pill p-mut">비교 담기</span></div>
+                </div>
+                <div class="m-card" style="padding:13px 14px">
+                  <div class="m-row"><span class="m-av m-av--sm" style="--c:#3182f6">토</span><b>토스</b></div>
+                  <div class="m-mut" style="margin-top:7px">핀테크 · 중견기업</div>
+                  <div class="m-row" style="gap:5px;margin-top:8px"><span class="m-pill p-info">공고 8</span><span class="m-pill p-mut">비교 담기</span></div>
+                </div>
+                <div class="m-card" style="padding:13px 14px">
+                  <div class="m-row"><span class="m-av m-av--sm" style="--c:#1e3a8a">현</span><b>현대자동차</b></div>
+                  <div class="m-mut" style="margin-top:7px">자동차 · 대기업</div>
+                  <div class="m-row" style="gap:5px;margin-top:8px"><span class="m-pill p-info">공고 21</span><span class="m-pill p-mut">비교 담기</span></div>
+                </div>
+                <div class="m-card" style="padding:13px 14px">
+                  <div class="m-row"><span class="m-av m-av--sm" style="--c:#a50034">L</span><b>LG생활건강</b></div>
+                  <div class="m-mut" style="margin-top:7px">소비재 · 대기업</div>
+                  <div class="m-row" style="gap:5px;margin-top:8px"><span class="m-pill p-info">공고 5</span><span class="m-pill p-mut">비교 담기</span></div>
+                </div>
+              </div>
+              <div class="m-row" style="justify-content:center;margin-top:14px">
+                <span class="m-btn">담은 2곳 나란히 비교하기</span>
+              </div>
+            </div>
+          </div>
+        </div></div>
+      </figure>
+    </section>
+
+    <section class="g-proto" id="p-a3">
+      <div class="g-meta"><span class="g-code">A-3</span><span class="g-part">PART A · 회사 찾기</span></div>
+      <h3>지원 관리 보드형 — 페이지에 일을 준다</h3>
+      <p class="g-tag">“왜 있는지 궁금한 페이지”를 <b>내 지원 현황판</b>으로 바꿉니다. 회사 검색은 이 보드에 회사를
+        추가하는 수단이 되고, 페이지의 존재 이유가 “지금 어디까지 썼는지”가 됩니다.</p>
+      <div class="g-refs"><b>REF</b><span>Teal Job Tracker</span><span>Huntr</span><span>사람인 입사지원 현황</span><span>LinkedIn My Items</span></div>
+
+      <div class="g-notes">
+        <div class="g-note g-note--bad">
+          <h4>지금</h4>
+          <ul>
+            <li>회사를 골라도 남는 게 없다 — 회사명 한 개만 자소서 코치로 넘어가고 끝</li>
+            <li>어제 어디까지 썼는지 알 방법이 없다. 초안은 localStorage 안에만 있고 목록이 없다</li>
+            <li>마감일 개념이 화면 어디에도 없다</li>
+          </ul>
+        </div>
+        <div class="g-note g-note--good">
+          <h4>이 안</h4>
+          <ul>
+            <li>상단 스트립: <b>이번 주 마감 2건</b> — 페이지를 연 순간 할 일이 보인다</li>
+            <li>단계 필터(관심 / 준비중 / 작성중 / 제출완료)로 왼쪽 사이드바를 대체 — 어두운 패널이 사라진다</li>
+            <li>행마다 자소서 진행률 bar + 근거 확보 뱃지 + 남은 문항 수 → <b>[이어쓰기]</b> 한 번에 그 문항으로</li>
+            <li>회사 검색은 우상단 <b>+ 지원할 회사 추가</b> 안의 모달로 내려간다</li>
+          </ul>
+        </div>
+      </div>
+
+      <figure class="g-frame">
+        <figcaption class="g-frame-bar">
+          <span class="g-dots"><i></i><i></i><i></i></span>
+          <span class="g-url">careerly.app/#company</span>
+          <span class="g-sample">수치는 예시</span>
+        </figcaption>
+        <div class="g-screen"><div class="m">
+          <div class="m-top">
+            <div class="m-logo">careerly</div>
+            <nav><span>커리어 로드맵</span><span class="on">회사·자소서</span><span>멘토링</span><span>인사이트</span></nav>
+            <div class="m-me"><i>조</i> 조영인</div>
+          </div>
+          <div class="m-sub"><span class="on">내 지원 현황</span><span>자소서 코치</span>
+            <span class="m-right"><span class="m-btn m-btn--sm m-btn--br"><svg class="m-ico"><use href="#i-plus"></use></svg> 지원할 회사 추가</span></span></div>
+
+          <div class="m-body">
+            <div class="m-sticky-note">
+              <b>이번 주 마감 2건</b> — 카카오 마케팅(D-3, 문항 3개 중 1개 작성) · SK하이닉스 경영지원(D-6, 아직 시작 전)
+            </div>
+
+            <div class="m-row m-wrap" style="gap:6px;margin-top:16px">
+              <span class="m-chip on">전체 10</span>
+              <span class="m-chip">관심 <b>4</b></span>
+              <span class="m-chip">근거 수집중 <b>2</b></span>
+              <span class="m-chip">자소서 작성중 <b>3</b></span>
+              <span class="m-chip">제출 완료 <b>1</b></span>
+              <span class="m-sp m-srch" style="width:230px">
+                <svg class="m-ico"><use href="#i-search"></use></svg> 회사·직무 검색</span>
+            </div>
+
+            <div class="m-card" style="padding:0;overflow:hidden;margin-top:12px">
+              <table class="m-tbl">
+                <thead><tr>
+                  <th style="width:210px">회사 · 직무</th><th style="width:82px">마감</th>
+                  <th style="width:118px">단계</th><th>자소서 진행</th>
+                  <th style="width:150px">지원동기 근거</th><th style="width:112px"></th>
+                </tr></thead>
+                <tbody>
+                  <tr class="on">
+                    <td><div class="m-row"><span class="m-av m-av--sm" style="--c:#f5c400">카</span>
+                      <span class="m-li-t"><b>카카오</b><small>마케팅 부문</small></span></div></td>
+                    <td><span class="m-pill p-bad">D-3</span></td>
+                    <td><span class="m-pill p-br">자소서 작성중</span></td>
+                    <td>
+                      <div class="m-row" style="gap:8px"><div class="m-prog" style="flex:1"><i style="width:33%"></i></div>
+                        <span class="m-mut" style="flex:none">1 / 3문항</span></div>
+                      <div class="m-mut" style="margin-top:4px">2번 문항 720자 작성중 · 3번 미작성</div>
+                    </td>
+                    <td><span class="m-pill p-warn">2 / 5 확보</span></td>
+                    <td><span class="m-btn m-btn--sm m-btn--p">2번 이어쓰기</span></td>
+                  </tr>
+                  <tr>
+                    <td><div class="m-row"><span class="m-av m-av--sm" style="--c:#ef4444">S</span>
+                      <span class="m-li-t"><b>SK하이닉스</b><small>경영지원</small></span></div></td>
+                    <td><span class="m-pill p-warn">D-6</span></td>
+                    <td><span class="m-pill p-mut">관심</span></td>
+                    <td><div class="m-row" style="gap:8px"><div class="m-prog" style="flex:1"><i style="width:0%"></i></div>
+                      <span class="m-mut" style="flex:none">0 / 4문항</span></div>
+                      <div class="m-mut" style="margin-top:4px">공고를 아직 안 넣었어요</div></td>
+                    <td><span class="m-pill p-bad">0 / 5 확보</span></td>
+                    <td><span class="m-btn m-btn--sm">공고 넣기</span></td>
+                  </tr>
+                  <tr>
+                    <td><div class="m-row"><span class="m-av m-av--sm" style="--c:#2563eb">삼</span>
+                      <span class="m-li-t"><b>삼성전자</b><small>DX 데이터 마케팅</small></span></div></td>
+                    <td><span class="m-pill p-mut">상시</span></td>
+                    <td><span class="m-pill p-br">자소서 작성중</span></td>
+                    <td><div class="m-row" style="gap:8px"><div class="m-prog g" style="flex:1"><i style="width:66%"></i></div>
+                      <span class="m-mut" style="flex:none">2 / 3문항</span></div>
+                      <div class="m-mut" style="margin-top:4px">3번 문항만 남았어요 · 총 2,140자</div></td>
+                    <td><span class="m-pill p-ok">3 / 5 확보</span></td>
+                    <td><span class="m-btn m-btn--sm m-btn--p">3번 이어쓰기</span></td>
+                  </tr>
+                  <tr>
+                    <td><div class="m-row"><span class="m-av m-av--sm" style="--c:#03c75a">네</span>
+                      <span class="m-li-t"><b>네이버</b><small>서비스 기획</small></span></div></td>
+                    <td><span class="m-pill p-mut">D-21</span></td>
+                    <td><span class="m-pill p-info">근거 수집중</span></td>
+                    <td><div class="m-row" style="gap:8px"><div class="m-prog" style="flex:1"><i style="width:0%"></i></div>
+                      <span class="m-mut" style="flex:none">0 / 3문항</span></div>
+                      <div class="m-mut" style="margin-top:4px">역량 분석 완료 · 초안 시작 전</div></td>
+                    <td><span class="m-pill p-warn">1 / 5 확보</span></td>
+                    <td><span class="m-btn m-btn--sm">근거 더 모으기</span></td>
+                  </tr>
+                  <tr>
+                    <td><div class="m-row"><span class="m-av m-av--sm" style="--c:#3182f6">토</span>
+                      <span class="m-li-t"><b>토스</b><small>Product Marketer</small></span></div></td>
+                    <td><span class="m-pill p-mut">마감</span></td>
+                    <td><span class="m-pill p-ok">제출 완료</span></td>
+                    <td><div class="m-row" style="gap:8px"><div class="m-prog g" style="flex:1"><i style="width:100%"></i></div>
+                      <span class="m-mut" style="flex:none">3 / 3문항</span></div>
+                      <div class="m-mut" style="margin-top:4px">2026.07.02 제출 · 결과 대기</div></td>
+                    <td><span class="m-pill p-ok">5 / 5 확보</span></td>
+                    <td><span class="m-btn m-btn--sm">제출본 보기</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="m-grid m-g3" style="margin-top:14px">
+              <div class="m-card">
+                <div class="m-lb">이번 달 지원</div>
+                <div class="k-v" style="font-size:22px;font-weight:800;margin-top:3px">5<span style="font-size:12px">건</span></div>
+                <div class="m-mut">지난달 2건 · 목표 6건</div>
+                <div class="m-prog g" style="margin-top:8px"><i style="width:83%"></i></div>
+              </div>
+              <div class="m-card">
+                <div class="m-lb">가장 자주 요구된 역량</div>
+                <div class="m-row m-wrap" style="gap:5px;margin-top:8px">
+                  <span class="m-pill p-br">데이터 분석 <b>5</b></span><span class="m-pill p-br">협업 <b>4</b></span>
+                  <span class="m-pill p-mut">문제해결 <b>3</b></span></div>
+                <div class="m-mut" style="margin-top:8px">내 활동으로 못 채운 역량: <b style="color:#d61c33">SQL 실무</b></div>
+              </div>
+              <div class="m-card">
+                <div class="m-lb">쓸 수 있는 소재</div>
+                <div class="m-mut" style="margin-top:6px">마이페이지 활동 <b>8건</b> 중 자소서에 한 번도 안 쓴 것 <b>3건</b></div>
+                <div class="m-btn m-btn--sm" style="margin-top:9px">안 쓴 소재 보기</div>
+              </div>
+            </div>
+          </div>
+        </div></div>
+      </figure>
+    </section>
+
+    <!-- ══════════════════════ PART B ══════════════════════ -->
+    <section class="g-proto" id="p-b1">
+      <div class="g-meta"><span class="g-code">B-1</span><span class="g-part">PART B · 입력 4칸</span></div>
+      <h3>문서형 에디터 — 칸을 없애고 문서 하나로</h3>
+      <p class="g-tag">rows 고정 textarea를 <b>내용만큼 자라는 블록</b>으로 바꿉니다. 다 쓴 항목은 접히고,
+        접힌 상태에서도 첫 두 줄과 글자수가 보여서 “내가 뭘 넣었는지”가 항상 확인됩니다.</p>
+      <div class="g-refs"><b>REF</b><span>Notion</span><span>Google Docs 개요</span><span>Linear</span><span>Craft</span></div>
+
+      <div class="g-notes">
+        <div class="g-note g-note--bad">
+          <h4>지금</h4>
+          <ul>
+            <li><code>rows="8"</code> 고정 — 2,000자를 붙여넣어도 보이는 건 8줄, 나머지는 내부 스크롤</li>
+            <li>4칸이 세로로 붙어 있어서 3번을 고치는 동안 2번에 뭘 넣었는지 안 보인다</li>
+            <li>어느 칸이 채워졌는지 한눈에 안 보임 — 다 똑같이 생긴 회색 박스</li>
+          </ul>
+        </div>
+        <div class="g-note g-note--good">
+          <h4>이 안</h4>
+          <ul>
+            <li>입력칸이 내용만큼 자란다(auto-grow). 스크롤 안에 스크롤이 생기지 않는다</li>
+            <li>블록마다 <b>접기 / 전체화면</b>. 접으면 미리보기 2줄 + 글자수만 남아 4칸이 한 화면에</li>
+            <li>왼쪽 개요에 채움 상태(● 채움 / ○ 빈칸)와 글자수 — 클릭하면 그 블록으로</li>
+            <li>상단 고정바에 저장 상태와 <b>분석하기</b>. 어디까지 스크롤해도 버튼이 따라온다</li>
+          </ul>
+        </div>
+      </div>
+
+      <figure class="g-frame">
+        <figcaption class="g-frame-bar">
+          <span class="g-dots"><i></i><i></i><i></i></span>
+          <span class="g-url">careerly.app/#jd</span>
+          <span class="g-sample">내용은 예시</span>
+        </figcaption>
+        <div class="g-screen"><div class="m">
+          <div class="m-top">
+            <div class="m-logo">careerly</div>
+            <nav><span>커리어 로드맵</span><span class="on">회사·자소서</span><span>멘토링</span><span>인사이트</span></nav>
+            <div class="m-me"><i>조</i> 조영인</div>
+          </div>
+          <div class="m-sub" style="position:relative">
+            <span>회사 검색</span><span class="on">자소서 코치</span>
+            <span class="m-right m-row" style="gap:9px">
+              <span class="m-mut">3초 전 저장됨</span>
+              <span class="m-btn m-btn--sm">예시 넣기</span>
+              <span class="m-btn m-btn--sm m-btn--br">역량 분석하기</span>
+            </span>
+          </div>
+
+          <div class="m-2" style="grid-template-columns:216px minmax(0,1fr)">
+            <aside class="m-side" style="padding:20px 14px">
+              <div class="m-lb" style="padding:0 4px 9px">입력 항목</div>
+              <div class="m-list">
+                <div class="m-li" style="padding:8px 10px">
+                  <span style="width:8px;height:8px;border-radius:50%;background:#00873a;flex:none"></span>
+                  <span class="m-li-t"><b>1 지원 회사</b><small>삼성전자</small></span></div>
+                <div class="m-li on" style="padding:8px 10px">
+                  <span style="width:8px;height:8px;border-radius:50%;background:#00873a;flex:none"></span>
+                  <span class="m-li-t"><b>2 채용공고</b><small>1,284자</small></span></div>
+                <div class="m-li" style="padding:8px 10px">
+                  <span style="width:8px;height:8px;border-radius:50%;background:#00873a;flex:none"></span>
+                  <span class="m-li-t"><b>3 직무기술서</b><small>642자</small></span></div>
+                <div class="m-li" style="padding:8px 10px">
+                  <span style="width:8px;height:8px;border-radius:50%;border:1.5px solid #cbcbd2;flex:none"></span>
+                  <span class="m-li-t"><b>4 자소서 문항</b><small style="color:#b45309">비어 있음</small></span></div>
+              </div>
+              <div class="m-divider" style="margin:16px 0"></div>
+              <div class="m-lb" style="padding:0 4px 7px">분석 준비</div>
+              <div class="m-prog g"><i style="width:75%"></i></div>
+              <div class="m-mut" style="margin-top:6px">4개 중 3개 입력됨. 문항까지 넣으면 문항별 배분까지 나와요.</div>
+            </aside>
+
+            <div class="m-body" style="padding:22px 26px 40px">
+              <div style="max-width:760px">
+                <!-- 1 접힘 -->
+                <div class="m-fld" style="margin-bottom:11px">
+                  <div class="m-fld-h">
+                    <span class="n">1</span><b style="font-size:12.5px">지원 회사</b>
+                    <span class="m-pill p-ok">입력됨</span>
+                    <span class="m-sp m-mut">펼치기 ⌄</span>
+                  </div>
+                  <div class="m-fld-b" style="padding:11px 15px;color:var(--ink)">
+                    <b>삼성전자</b> <span class="m-mut">· DX부문 데이터 마케팅 · 기업분석 완료(근거 3/5)</span>
+                  </div>
+                </div>
+
+                <!-- 2 펼침 (편집중) -->
+                <div class="m-fld m-fld--on" style="margin-bottom:11px">
+                  <div class="m-fld-h" style="background:#f7f4ff;border-bottom-color:#e4dbff">
+                    <span class="n" style="background:var(--b)">2</span><b style="font-size:12.5px">채용공고</b>
+                    <span class="m-pill p-br">필수</span>
+                    <span class="m-sp m-row" style="gap:6px">
+                      <span class="m-btn m-btn--sm"><svg class="m-ico"><use href="#i-expand"></use></svg> 전체화면</span>
+                      <span class="m-mut">접기 ⌃</span>
+                    </span>
+                  </div>
+                  <div class="m-fld-b" style="min-height:250px">[모집분야]
+DX부문 · 데이터 기반 마케팅 (신입/경력 무관)
+
+[주요업무]
+- 채널별 마케팅 성과 데이터 수집·분석 및 주간 리포트 작성
+- 유관부서(영업/상품/디자인)와 협업하여 프로모션 기획 및 실행
+- 고객 세그먼트별 캠페인 성과 측정 및 개선안 도출
+
+[자격요건]
+- 데이터를 근거로 문제를 정의하고 개선안을 제안할 수 있는 분
+- 엑셀·SQL 등 데이터 도구를 실무 수준으로 다룰 수 있는 분
+
+[우대사항]
+- 고객 니즈 파악 및 UX 개선 경험이 있는 분
+- 영어 커뮤니케이션이 가능한 분<span class="m-caret"></span></div>
+                  <div class="m-fld-f">
+                    <span><b style="color:var(--ink2)">1,284자</b> · 12줄</span>
+                    <span>문단 5개 인식됨</span>
+                    <span class="m-sp">Ctrl+Enter 로 바로 분석</span>
+                  </div>
+                </div>
+
+                <!-- 3 접힘 -->
+                <div class="m-fld" style="margin-bottom:11px">
+                  <div class="m-fld-h">
+                    <span class="n">3</span><b style="font-size:12.5px">직무기술서 (JD)</b>
+                    <span class="m-pill p-mut">선택</span>
+                    <span class="m-sp m-mut">펼치기 ⌄</span>
+                  </div>
+                  <div class="m-fld-b" style="padding:11px 15px;position:relative">
+                    [Role] 데이터 마케팅 담당자는 캠페인의 성과를 정의하고, 그 지표를 개선하는 실험을 설계합니다.
+                    [Responsibility] 주간 대시보드 운영, A/B 테스트 설계 및 결과 해석, 유관부서 대상 인사이트 공유…
+                    <span style="position:absolute;right:15px;bottom:11px;background:linear-gradient(90deg,transparent,#fff 40%);padding-left:26px" class="m-mut"><b style="color:var(--ink2)">642자</b> 전체 보기</span>
+                  </div>
+                </div>
+
+                <!-- 4 비어있음 -->
+                <div class="m-fld" style="border-style:dashed;border-color:#e0b96a;background:#fffdf6">
+                  <div class="m-fld-h" style="background:#fffbeb;border-bottom-color:#f3e3b8">
+                    <span class="n" style="background:#b45309">4</span><b style="font-size:12.5px">자소서 문항</b>
+                    <span class="m-pill p-warn">아직 비어 있음</span>
+                    <span class="m-sp m-mut">한 줄에 하나씩</span>
+                  </div>
+                  <div class="m-fld-b m-ph" style="min-height:112px">1. 지원 동기와 입사 후 포부를 기술해 주십시오.
+2. 직무 수행에 필요한 역량을 갖추기 위해 노력한 경험을 서술해 주십시오.
+3. 팀으로 일하며 갈등을 해결한 경험을 기술해 주십시오.</div>
+                  <div class="m-fld-f">
+                    <span>문항을 넣으면 <b style="color:var(--ink2)">문항마다</b> 어떤 역량·소재를 쓸지 따로 정리해 드려요</span>
+                    <span class="m-sp m-btn m-btn--sm">예시 문항 넣기</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div></div>
+      </figure>
+    </section>
+
+    <section class="g-proto" id="p-b2">
+      <div class="g-meta"><span class="g-code">B-2</span><span class="g-part">PART B · 입력 4칸</span></div>
+      <h3>단계형 위저드 — 한 번에 하나, 마지막에 전체 검토</h3>
+      <p class="g-tag">한 화면에 입력칸 하나만 두고 <b>화면 높이만큼 크게</b> 씁니다. 대신 마지막에 4개를 카드로
+        모아 보여주는 <b>검토 단계</b>를 넣어, 제출 전에 뭘 넣었는지 반드시 한 번 훑게 만듭니다.</p>
+      <div class="g-refs"><b>REF</b><span>원티드 지원서</span><span>Typeform</span><span>토스 온보딩</span><span>잡코리아 이력서 작성</span></div>
+
+      <div class="g-notes">
+        <div class="g-note g-note--bad">
+          <h4>지금</h4>
+          <ul>
+            <li>네 칸이 동시에 보이지만 각각 작아서, 결국 어느 것도 편하게 못 쓴다</li>
+            <li>어디까지 했는지 알려주는 장치가 없다 — 오른쪽 보라 바로가기는 이동만 시켜준다</li>
+            <li>다 입력하고 나서 전체를 되짚어 보는 지점이 없다</li>
+          </ul>
+        </div>
+        <div class="g-note g-note--good">
+          <h4>이 안</h4>
+          <ul>
+            <li>입력창 하나가 <b>화면 높이의 절반 이상</b>. 긴 공고도 스크롤 없이 한눈에</li>
+            <li>상단 진행바 4칸 — 완료된 단계는 눌러서 바로 되돌아갈 수 있다</li>
+            <li>오른쪽에 <b>붙여넣는 법 예시</b>와 앞 단계 요약. 지금 뭘 넣는지 헷갈릴 일이 없다</li>
+            <li>마지막 <b>검토</b> 단계에서 4개를 카드로 모아 보고, 카드 안에서 바로 수정</li>
+          </ul>
+        </div>
+      </div>
+
+      <figure class="g-frame">
+        <figcaption class="g-frame-bar">
+          <span class="g-dots"><i></i><i></i><i></i></span>
+          <span class="g-url">careerly.app/#jd · 2/4단계</span>
+          <span class="g-sample">내용은 예시</span>
+        </figcaption>
+        <div class="g-screen"><div class="m">
+          <div class="m-top">
+            <div class="m-logo">careerly</div>
+            <nav><span>커리어 로드맵</span><span class="on">회사·자소서</span><span>멘토링</span><span>인사이트</span></nav>
+            <div class="m-me"><i>조</i> 조영인</div>
+          </div>
+
+          <div style="padding:16px 26px 0">
+            <div class="m-row" style="gap:8px">
+              <span class="m-mut" style="flex:none">삼성전자 · DX 데이터 마케팅</span>
+              <div class="m-sp m-row" style="gap:6px;flex:none">
+                <span class="m-mut">2 / 4 단계</span><span class="m-btn m-btn--sm">임시저장</span></div>
+            </div>
+            <div class="m-grid m-g4" style="gap:6px;margin-top:9px">
+              <div>
+                <div class="m-prog g m-prog--thin"><i style="width:100%"></i></div>
+                <div class="m-row" style="gap:5px;margin-top:6px"><svg class="m-ico" style="color:#00873a"><use href="#i-check"></use></svg>
+                  <span style="font-size:11.5px;font-weight:700">지원 회사</span></div>
+              </div>
+              <div>
+                <div class="m-prog m-prog--thin"><i style="width:62%"></i></div>
+                <div class="m-row" style="gap:5px;margin-top:6px"><span style="width:13px;height:13px;border-radius:50%;background:var(--b);color:#fff;font-size:9px;display:grid;place-items:center;font-weight:800">2</span>
+                  <span style="font-size:11.5px;font-weight:800;color:var(--b)">채용공고</span></div>
+              </div>
+              <div>
+                <div class="m-prog m-prog--thin"><i style="width:0%"></i></div>
+                <div class="m-row" style="gap:5px;margin-top:6px"><span style="width:13px;height:13px;border-radius:50%;border:1.5px solid #cbcbd2;font-size:9px"></span>
+                  <span style="font-size:11.5px;color:var(--ink3)">직무기술서</span></div>
+              </div>
+              <div>
+                <div class="m-prog m-prog--thin"><i style="width:0%"></i></div>
+                <div class="m-row" style="gap:5px;margin-top:6px"><span style="width:13px;height:13px;border-radius:50%;border:1.5px solid #cbcbd2;font-size:9px"></span>
+                  <span style="font-size:11.5px;color:var(--ink3)">자소서 문항</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="m-body" style="padding:22px 26px 26px">
+            <div class="m-grid" style="grid-template-columns:minmax(0,1fr) 268px;gap:18px;align-items:start">
+              <div>
+                <div class="m-h1">채용공고를 그대로 붙여넣어 주세요</div>
+                <p class="m-p" style="margin-top:5px">모집분야·근무조건·전형절차가 섞여 있어도 됩니다. 우리가 알아서 걸러요.</p>
+                <div class="m-fld m-fld--on" style="margin-top:13px">
+                  <div class="m-fld-b" style="min-height:330px;font-size:13px">[모집분야]
+DX부문 · 데이터 기반 마케팅 (신입/경력 무관)
+
+[주요업무]
+- 채널별 마케팅 성과 데이터 수집·분석 및 주간 리포트 작성
+- 유관부서(영업/상품/디자인)와 협업하여 프로모션 기획 및 실행
+- 고객 세그먼트별 캠페인 성과 측정 및 개선안 도출
+
+[자격요건]
+- 데이터를 근거로 문제를 정의하고 개선안을 제안할 수 있는 분
+- 엑셀·SQL 등 데이터 도구를 실무 수준으로 다룰 수 있는 분
+
+[우대사항]
+- 고객 니즈 파악 및 UX 개선 경험이 있는 분
+- 영어 커뮤니케이션이 가능한 분
+
+[전형절차] 서류 → 직무적성 → 면접 → 채용검진<span class="m-caret"></span></div>
+                  <div class="m-fld-f">
+                    <span><b style="color:var(--ink2)">1,284자</b></span><span>문단 6개 인식됨</span>
+                    <span class="m-sp">붙여넣기 후 자동 저장됨</span>
+                  </div>
+                </div>
+                <div class="m-row" style="margin-top:14px">
+                  <span class="m-btn">← 이전</span>
+                  <span class="m-sp m-row" style="gap:8px">
+                    <span class="m-btn">이 단계 건너뛰기</span>
+                    <span class="m-btn m-btn--p">다음: 직무기술서 <svg class="m-ico"><use href="#i-arrow"></use></svg></span>
+                  </span>
+                </div>
+              </div>
+
+              <div class="m-stack" style="gap:10px">
+                <div class="m-card m-card--flat">
+                  <div class="m-h3">이렇게 붙여넣으면 잘 읽어요</div>
+                  <div class="m-stack" style="gap:6px;margin-top:9px">
+                    <div class="m-row" style="gap:6px;align-items:flex-start"><svg class="m-ico" style="color:#00873a;margin-top:3px"><use href="#i-check"></use></svg>
+                      <span class="m-mut">공고 페이지 전체를 Ctrl+A → Ctrl+C 해도 됩니다</span></div>
+                    <div class="m-row" style="gap:6px;align-items:flex-start"><svg class="m-ico" style="color:#00873a;margin-top:3px"><use href="#i-check"></use></svg>
+                      <span class="m-mut">[주요업무] [자격요건] 같은 머리말은 <b>남겨 두세요</b> — 역량 추출 정확도가 올라갑니다</span></div>
+                    <div class="m-row" style="gap:6px;align-items:flex-start"><svg class="m-ico" style="color:#00873a;margin-top:3px"><use href="#i-check"></use></svg>
+                      <span class="m-mut">복지·근무지 문단은 지워도 되고 둬도 됩니다</span></div>
+                  </div>
+                </div>
+                <div class="m-card">
+                  <div class="m-row"><span class="m-h3">앞 단계에 넣은 것</span>
+                    <span class="m-sp m-mut">수정</span></div>
+                  <div class="m-row" style="gap:8px;margin-top:10px">
+                    <span class="m-av m-av--sm" style="--c:#2563eb">삼</span>
+                    <span class="m-li-t"><b>삼성전자</b><small>전자·반도체 · 대기업</small></span>
+                  </div>
+                  <div class="m-quote" style="margin-top:9px">담은 지원동기 근거 <b>3건</b> — DX부문 데이터 마케팅 전환, 영업이익 −84.9%, 마케팅 공고 6건</div>
+                </div>
+                <div class="m-card">
+                  <div class="m-h3">다음에 나올 화면</div>
+                  <div class="m-mut" style="margin-top:7px">3단계 직무기술서(선택) → 4단계 자소서 문항 →
+                    <b style="color:var(--ink2)">검토</b> 화면에서 네 항목을 한 번에 확인하고 분석을 돌립니다.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div></div>
+      </figure>
+    </section>
+
+    <section class="g-proto" id="p-b3">
+      <div class="g-meta"><span class="g-code">B-3</span><span class="g-part">PART B · 입력 4칸</span></div>
+      <h3>좌우 분할 — 붙여넣는 즉시 오른쪽에서 구조가 보인다</h3>
+      <p class="g-tag">왼쪽은 탭으로 바뀌는 <b>큰 입력창 하나</b>, 오른쪽은 <b>지금 입력한 게 어떻게 인식됐는지</b>를
+        실시간으로 보여주는 패널. “내가 적은 내용 확인하기 어렵다”를 가장 직접적으로 푸는 안입니다.</p>
+      <div class="g-refs"><b>REF</b><span>Grammarly 에디터</span><span>원티드 JD 파서</span><span>Notion AI 사이드패널</span><span>Linear 이슈 분할뷰</span></div>
+
+      <div class="g-notes">
+        <div class="g-note g-note--bad">
+          <h4>지금</h4>
+          <ul>
+            <li>붙여넣은 텍스트가 제대로 들어갔는지, 문항이 3개로 잘 쪼개졌는지 분석을 돌려야만 안다</li>
+            <li>문항을 “한 줄에 하나씩” 넣어야 하는데 그 규칙이 지켜졌는지 화면이 말해주지 않는다</li>
+            <li>공고에서 어느 문장이 역량 근거로 쓰이는지 나중에야 알게 된다</li>
+          </ul>
+        </div>
+        <div class="g-note g-note--good">
+          <h4>이 안</h4>
+          <ul>
+            <li>왼쪽 탭에 <b>글자수 배지</b> — 어느 칸이 비었는지 탭 줄만 봐도 안다</li>
+            <li>오른쪽에 <b>[주요업무] [자격요건] [우대사항]</b> 자동 분해 카드. 인식 안 된 문단은 회색으로 남는다</li>
+            <li>역량 후보 키워드를 원문에 <span class="m-hl" style="font-size:inherit">노란 하이라이트</span>로 표시 — 분석 전에 오탐을 먼저 걸러낼 수 있다</li>
+            <li>문항 탭에서는 오른쪽이 <b>문항 1·2·3 카드</b>로 바뀌어, 줄바꿈이 잘못됐으면 바로 보인다</li>
+          </ul>
+        </div>
+      </div>
+
+      <figure class="g-frame">
+        <figcaption class="g-frame-bar">
+          <span class="g-dots"><i></i><i></i><i></i></span>
+          <span class="g-url">careerly.app/#jd</span>
+          <span class="g-sample">내용은 예시</span>
+        </figcaption>
+        <div class="g-screen"><div class="m">
+          <div class="m-top">
+            <div class="m-logo">careerly</div>
+            <nav><span>커리어 로드맵</span><span class="on">회사·자소서</span><span>멘토링</span><span>인사이트</span></nav>
+            <div class="m-me"><i>조</i> 조영인</div>
+          </div>
+
+          <div class="m-row" style="padding:10px 22px;border-bottom:1px solid var(--line);gap:10px">
+            <span class="m-av m-av--sm" style="--c:#2563eb">삼</span>
+            <b style="font-size:13px">삼성전자</b><span class="m-mut">DX 데이터 마케팅</span>
+            <span class="m-sp m-row" style="gap:8px">
+              <span class="m-mut">자동 저장됨</span>
+              <span class="m-btn m-btn--sm m-btn--br">역량 분석하기</span></span>
+          </div>
+
+          <div class="m-grid" style="grid-template-columns:minmax(0,1fr) 400px;gap:0">
+            <!-- 왼쪽: 입력 -->
+            <div style="border-right:1px solid var(--line)">
+              <div class="m-tabs" style="padding:0 18px">
+                <span>① 지원 회사 <span class="m-pill p-ok" style="margin-left:4px">완료</span></span>
+                <span class="on">② 채용공고 <span class="m-pill p-br" style="margin-left:4px">1,284자</span></span>
+                <span>③ 직무기술서 <span class="m-pill p-mut" style="margin-left:4px">642자</span></span>
+                <span>④ 문항 <span class="m-pill p-warn" style="margin-left:4px">0</span></span>
+              </div>
+              <div style="padding:16px 18px 22px">
+                <div class="m-row"><span class="m-lb">공고 원문</span>
+                  <span class="m-sp m-row" style="gap:6px">
+                    <span class="m-btn m-btn--sm"><svg class="m-ico"><use href="#i-expand"></use></svg> 넓게 보기</span>
+                    <span class="m-btn m-btn--sm">지우기</span></span></div>
+                <div class="m-fld m-fld--on" style="margin-top:9px">
+                  <div class="m-fld-b" style="min-height:396px;font-size:12.5px;line-height:1.95">[모집분야]
+DX부문 · <span class="m-hl m-hl--b">데이터 기반 마케팅</span> (신입/경력 무관)
+
+[주요업무]
+- 채널별 마케팅 <span class="m-hl">성과 데이터 수집·분석</span> 및 주간 리포트 작성
+- 유관부서(영업/상품/디자인)와 <span class="m-hl">협업</span>하여 프로모션 기획 및 실행
+- 고객 세그먼트별 캠페인 <span class="m-hl">성과 측정 및 개선안 도출</span>
+
+[자격요건]
+- 데이터를 근거로 <span class="m-hl">문제를 정의하고 개선안을 제안</span>할 수 있는 분
+- <span class="m-hl">엑셀·SQL</span> 등 데이터 도구를 실무 수준으로 다룰 수 있는 분
+
+[우대사항]
+- <span class="m-hl">고객 니즈 파악 및 UX 개선</span> 경험이 있는 분
+- <span class="m-hl">영어 커뮤니케이션</span>이 가능한 분
+
+[전형절차] 서류 → 직무적성 → 면접 → 채용검진<span class="m-caret"></span></div>
+                  <div class="m-fld-f">
+                    <span><b style="color:var(--ink2)">1,284자</b> · 20줄</span>
+                    <span class="m-row" style="gap:5px"><span style="width:9px;height:9px;border-radius:2px;background:#fff3bf;box-shadow:0 0 0 1px #f5e08a inset"></span>역량 후보 7곳</span>
+                    <span class="m-sp">Ctrl+Enter 분석</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 오른쪽: 인식 결과 -->
+            <div style="background:#fbfbfc;padding:16px 18px 22px;min-height:560px">
+              <div class="m-row"><span class="m-h2">이렇게 읽었어요</span>
+                <span class="m-sp m-pill p-ok">실시간</span></div>
+              <p class="m-mut" style="margin-top:4px">분석을 돌리기 전에, 붙여넣은 글이 제대로 들어갔는지 여기서 먼저 확인하세요.</p>
+
+              <div class="m-card" style="margin-top:12px;padding:13px 14px">
+                <div class="m-row"><span class="m-lb">모집분야</span><span class="m-sp m-pill p-info">인식됨</span></div>
+                <div class="m-p" style="margin-top:5px">DX부문 · 데이터 기반 마케팅 (신입/경력 무관)</div>
+              </div>
+              <div class="m-card" style="margin-top:8px;padding:13px 14px">
+                <div class="m-row"><span class="m-lb">주요업무</span><span class="m-sp m-pill p-info">3항목</span></div>
+                <ul class="m-stack" style="gap:5px;margin-top:7px">
+                  <li class="m-p">· 성과 데이터 수집·분석, 주간 리포트</li>
+                  <li class="m-p">· 유관부서 협업 프로모션 기획·실행</li>
+                  <li class="m-p">· 세그먼트별 캠페인 성과 측정·개선</li>
+                </ul>
+              </div>
+              <div class="m-card" style="margin-top:8px;padding:13px 14px">
+                <div class="m-row"><span class="m-lb">자격요건</span><span class="m-sp m-pill p-info">2항목</span></div>
+                <ul class="m-stack" style="gap:5px;margin-top:7px">
+                  <li class="m-p">· 데이터 근거 문제정의·개선안 제안</li>
+                  <li class="m-p">· 엑셀·SQL 실무 활용</li>
+                </ul>
+              </div>
+              <div class="m-card" style="margin-top:8px;padding:13px 14px">
+                <div class="m-row"><span class="m-lb">우대사항</span><span class="m-sp m-pill p-info">2항목</span></div>
+                <ul class="m-stack" style="gap:5px;margin-top:7px">
+                  <li class="m-p">· 고객 니즈 파악, UX 개선 경험</li>
+                  <li class="m-p">· 영어 커뮤니케이션</li>
+                </ul>
+              </div>
+              <div class="m-card" style="margin-top:8px;padding:13px 14px;background:#f4f4f6;border-color:transparent">
+                <div class="m-row"><span class="m-lb" style="color:var(--ink3)">인식하지 못한 문단</span>
+                  <span class="m-sp m-pill p-mut">1개</span></div>
+                <div class="m-mut" style="margin-top:5px">[전형절차] 서류 → 직무적성 → 면접 → 채용검진
+                  <br><b>역량 추출에는 쓰이지 않습니다.</b> 그대로 둬도 됩니다.</div>
+              </div>
+
+              <div class="m-divider" style="margin:16px 0 13px"></div>
+              <div class="m-lb">이 공고에서 뽑힐 역량 후보</div>
+              <div class="m-row m-wrap" style="gap:5px;margin-top:8px">
+                <span class="m-pill p-br">데이터 분석</span><span class="m-pill p-br">협업·커뮤니케이션</span>
+                <span class="m-pill p-br">문제해결</span><span class="m-pill p-br">SQL·엑셀</span>
+                <span class="m-pill p-br">고객·UX 이해</span><span class="m-pill p-br">기획·실행력</span>
+                <span class="m-pill p-mut">영어 <span style="opacity:.7">우대</span></span>
+              </div>
+              <div class="m-mut" style="margin-top:8px">아직 확정이 아니에요. 분석을 돌리면 각 역량에 <b>공고 원문 근거 문장</b>이 붙습니다.</div>
+            </div>
+          </div>
+        </div></div>
+      </figure>
+    </section>
+
+    <!-- PART-B-ANCHOR -->
+    <!-- ══════════════════════ PART C ══════════════════════ -->
+    <section class="g-proto" id="p-c1">
+      <div class="g-meta"><span class="g-code">C-1</span><span class="g-part">PART C · AI 답변</span></div>
+      <h3>역량 ↔ 초안 2단 분할</h3>
+      <p class="g-tag">왼쪽에 역량 목록(요구역량 = 직무역량 <b>하나로 통합</b>), 오른쪽에 초안 에디터를 고정합니다.
+        역량을 보면서 그 자리에서 쓰기 — 3번과 4번 요청을 한 화면으로 동시에 푸는 안입니다.</p>
+      <div class="g-refs"><b>REF</b><span>Grammarly 에디터</span><span>Notion AI 사이드패널</span><span>Jasper</span><span>Teal Resume Builder</span></div>
+
+      <div class="g-notes">
+        <div class="g-note g-note--bad">
+          <h4>지금</h4>
+          <ul>
+            <li>역량 카드 7개가 세로로 쌓여 카드 하나가 화면보다 길다. 3번 역량을 보려면 계속 내려야 한다</li>
+            <li>요구역량 카드(#jd-result)와 문항별 직무역량 카드(#jd-questions-result)가 <b>따로</b> 나와 같은 말을 두 번 읽는다</li>
+            <li>초안 작성칸이 카드 맨 아래라, 쓰기 시작하면 가이드가 화면 위로 사라진다</li>
+          </ul>
+        </div>
+        <div class="g-note g-note--good">
+          <h4>이 안</h4>
+          <ul>
+            <li>왼쪽 목록은 한 줄 요약(역량명 · 시장빈도 · 내 근거 유무)으로 압축 — 7개가 <b>한 화면에</b></li>
+            <li>고른 역량만 그 자리에서 펼쳐진다. 근거 문장 → 쓰는 순서 → 숫자 → 감점이 접힌 채로</li>
+            <li>문항별 배분은 <b>역량 줄에 문항 뱃지</b>(①②③)로 흡수 — 카드가 두 벌 나오지 않는다</li>
+            <li>오른쪽 에디터는 스크롤해도 고정. <b>[이 순서 삽입]</b>이 뼈대를 초안에 바로 넣는다</li>
+            <li>에디터 하단에 글자수·빈칸·상투표현 검사가 항상 붙어 있다</li>
+          </ul>
+        </div>
+      </div>
+
+      <figure class="g-frame">
+        <figcaption class="g-frame-bar">
+          <span class="g-dots"><i></i><i></i><i></i></span>
+          <span class="g-url">careerly.app/#jd · 분석 결과</span>
+          <span class="g-sample">내용은 예시</span>
+        </figcaption>
+        <div class="g-screen"><div class="m">
+          <div class="m-top">
+            <div class="m-logo">careerly</div>
+            <nav><span>커리어 로드맵</span><span class="on">회사·자소서</span><span>멘토링</span><span>인사이트</span></nav>
+            <div class="m-me"><i>조</i> 조영인</div>
+          </div>
+
+          <div class="m-row" style="padding:11px 22px;border-bottom:1px solid var(--line);gap:10px">
+            <span class="m-av m-av--sm" style="--c:#2563eb">삼</span>
+            <b style="font-size:13px">삼성전자 · DX 데이터 마케팅</b>
+            <span class="m-pill p-mut">공고 문장 42개 분석</span>
+            <span class="m-sp m-row" style="gap:8px">
+              <span class="m-mut">1분 전 저장됨</span>
+              <span class="m-btn m-btn--sm">입력 다시 보기</span>
+              <span class="m-btn m-btn--sm m-btn--p">제출 전 체크리스트</span></span>
+          </div>
+
+          <div class="m-grid" style="grid-template-columns:398px minmax(0,1fr);gap:0">
+            <!-- 왼쪽: 역량 목록 -->
+            <div style="border-right:1px solid var(--line);background:#fbfbfc;padding:15px 16px 24px">
+              <div class="m-row"><span class="m-h2">요구 역량 7가지</span>
+                <span class="m-sp m-mut">근거 있음 4 · 없음 3</span></div>
+              <div class="m-row m-wrap" style="gap:5px;margin-top:9px">
+                <span class="m-chip on">전체 7</span><span class="m-chip">내 근거 있음 4</span>
+                <span class="m-chip">근거 없음 3</span><span class="m-chip">시장 희소 2</span>
+              </div>
+
+              <div class="m-stack" style="gap:6px;margin-top:12px">
+                <!-- 펼쳐진 항목 -->
+                <div class="m-card" style="padding:0;border-color:var(--b);box-shadow:0 0 0 3px rgba(109,58,255,.08)">
+                  <div style="padding:12px 14px">
+                    <div class="m-row" style="gap:7px">
+                      <span class="m-av m-av--sm" style="--c:#080808;width:20px;height:20px;border-radius:6px;font-size:10px">1</span>
+                      <b style="font-size:13.5px">데이터 분석</b>
+                      <span class="m-pill p-ok">내 근거 2건</span>
+                      <span class="m-sp m-row" style="gap:3px">
+                        <span class="m-pill p-br">①</span><span class="m-pill p-br">②</span></span>
+                    </div>
+                    <div class="m-row" style="gap:8px;margin-top:9px">
+                      <div class="m-prog" style="flex:1;background:#e7e7ec"><i style="width:62%;background:#8a8a8a"></i></div>
+                      <span class="m-mut" style="flex:none">사무·관리 공고 <b>62%</b>가 요구</span>
+                    </div>
+                    <div class="m-mut" style="margin-top:3px">지원자 대부분이 쓰는 역량 — 안 쓰면 감점, 여기서 차별화는 어려움</div>
+                  </div>
+                  <div class="m-divider"></div>
+                  <div style="padding:12px 14px">
+                    <div class="m-lb">공고 근거</div>
+                    <div class="m-quote" style="margin-top:6px">데이터를 근거로 문제를 정의하고 개선안을 제안할 수 있는 분</div>
+                    <div class="m-quote" style="margin-top:5px">채널별 마케팅 성과 데이터 수집·분석 및 주간 리포트 작성</div>
+
+                    <div class="m-lb" style="margin-top:13px">이 순서로 쓰세요</div>
+                    <div class="m-card m-card--flat" style="margin-top:6px;padding:10px 12px;font-size:12px;line-height:1.85">
+                      ① 어떤 데이터를, 왜 봤는지 → ② 무엇이 문제라고 정의했는지 →
+                      ③ 어떤 기준으로 개선안을 골랐는지 → ④ 숫자로 확인된 변화
+                    </div>
+                    <div class="m-row" style="gap:6px;margin-top:9px">
+                      <span class="m-btn m-btn--sm m-btn--br">이 순서 초안에 삽입 →</span>
+                      <span class="m-btn m-btn--sm">첫 문장 틀 보기</span>
+                    </div>
+
+                    <div class="m-lb" style="margin-top:13px">소재로 쓸 내 경험</div>
+                    <div class="m-card m-card--flat" style="margin-top:6px;padding:9px 11px;background:var(--ok-bg)">
+                      <div class="m-row"><b style="font-size:12.5px">교내 마케팅 공모전 데이터 분석</b>
+                        <span class="m-sp m-pill p-ok">1순위</span></div>
+                      <div class="m-mut">대외활동 · 3개월 · 팀장 · 최우수상</div>
+                    </div>
+                    <div class="m-card m-card--flat" style="margin-top:5px;padding:9px 11px">
+                      <div style="font-size:12.5px;font-weight:700">학생회 회계 데이터 정리</div>
+                      <div class="m-mut">교내활동 · 6개월 · 회계</div>
+                    </div>
+
+                    <div class="m-row m-wrap" style="gap:5px;margin-top:12px">
+                      <span class="m-chip" style="font-size:11px">숫자로 바꿀 것 3</span>
+                      <span class="m-chip" style="font-size:11px">감점 표현 2</span>
+                      <span class="m-chip" style="font-size:11px">예상 면접질문 1</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 접힌 항목들 -->
+                <div class="m-card" style="padding:11px 13px">
+                  <div class="m-row" style="gap:7px">
+                    <span class="m-av m-av--sm" style="--c:#e5e5e8;color:#3f3f46;width:20px;height:20px;border-radius:6px;font-size:10px">2</span>
+                    <b style="font-size:13px">문제해결·개선 제안</b>
+                    <span class="m-pill p-ok">내 근거 1건</span>
+                    <span class="m-sp m-row" style="gap:3px"><span class="m-pill p-br">②</span></span>
+                  </div>
+                  <div class="m-row" style="gap:8px;margin-top:8px">
+                    <div class="m-prog" style="flex:1;background:#e7e7ec"><i style="width:38%;background:#146ef5"></i></div>
+                    <span class="m-mut" style="flex:none">38% 요구</span></div>
+                </div>
+                <div class="m-card" style="padding:11px 13px">
+                  <div class="m-row" style="gap:7px">
+                    <span class="m-av m-av--sm" style="--c:#e5e5e8;color:#3f3f46;width:20px;height:20px;border-radius:6px;font-size:10px">3</span>
+                    <b style="font-size:13px">협업·커뮤니케이션</b>
+                    <span class="m-pill p-ok">내 근거 1건</span>
+                    <span class="m-sp m-row" style="gap:3px"><span class="m-pill p-br">③</span></span>
+                  </div>
+                  <div class="m-row" style="gap:8px;margin-top:8px">
+                    <div class="m-prog" style="flex:1;background:#e7e7ec"><i style="width:71%;background:#8a8a8a"></i></div>
+                    <span class="m-mut" style="flex:none">71% 요구</span></div>
+                </div>
+                <div class="m-card" style="padding:11px 13px;border-color:#f3cfd4;background:#fffafa">
+                  <div class="m-row" style="gap:7px">
+                    <span class="m-av m-av--sm" style="--c:#e5e5e8;color:#3f3f46;width:20px;height:20px;border-radius:6px;font-size:10px">4</span>
+                    <b style="font-size:13px">SQL·데이터 도구 실무</b>
+                    <span class="m-pill p-bad">근거 없음</span>
+                    <span class="m-sp m-row" style="gap:3px"><span class="m-pill p-br">②</span></span>
+                  </div>
+                  <div class="m-row" style="gap:8px;margin-top:8px">
+                    <div class="m-prog" style="flex:1;background:#e7e7ec"><i style="width:19%;background:#00873a"></i></div>
+                    <span class="m-mut" style="flex:none">19% 요구 · <b style="color:#00873a">희소</b></span></div>
+                  <div class="m-mut" style="margin-top:5px;color:#d61c33">근거가 있으면 가장 강한 차별점 — 지금은 쓸 소재가 없어요</div>
+                </div>
+                <div class="m-card" style="padding:11px 13px">
+                  <div class="m-row" style="gap:7px">
+                    <span class="m-av m-av--sm" style="--c:#e5e5e8;color:#3f3f46;width:20px;height:20px;border-radius:6px;font-size:10px">5</span>
+                    <b style="font-size:13px">고객·UX 이해</b>
+                    <span class="m-pill p-bad">근거 없음</span>
+                    <span class="m-sp m-mut">우대사항</span>
+                  </div>
+                </div>
+                <div class="m-row" style="justify-content:center;padding-top:4px">
+                  <span class="m-mut">역량 2개 더 보기 ⌄</span></div>
+              </div>
+            </div>
+
+            <!-- 오른쪽: 초안 에디터 -->
+            <div style="padding:15px 20px 24px">
+              <div class="m-row" style="gap:8px">
+                <span class="m-lb" style="flex:none">작성 중인 문항</span>
+                <span class="m-btn m-btn--sm" style="gap:8px">② 직무 수행에 필요한 역량을 갖추기 위해 노력한 경험 ⌄</span>
+                <span class="m-sp m-row" style="gap:5px">
+                  <span class="m-pill p-mut">① 미작성</span><span class="m-pill p-br">② 작성중</span><span class="m-pill p-mut">③ 미작성</span></span>
+              </div>
+
+              <div class="m-card" style="margin-top:11px;padding:12px 14px;background:#fbfaff;border-color:#e2d9ff">
+                <div class="m-row"><span class="m-h3" style="color:var(--bd2)">이 문항에 배치된 역량</span>
+                  <span class="m-sp m-mut">왼쪽에서 순서를 바꿀 수 있어요</span></div>
+                <div class="m-row m-wrap" style="gap:5px;margin-top:8px">
+                  <span class="m-pill p-br">1 데이터 분석</span><span class="m-pill p-br">2 문제해결</span>
+                  <span class="m-pill p-bad">4 SQL 실무 · 근거 없음</span>
+                </div>
+                <div class="m-mut" style="margin-top:7px">한 문항에 역량 3개 이상을 넣으면 소재가 흩어집니다. <b>2개까지</b>가 안전해요.</div>
+              </div>
+
+              <div class="m-fld m-fld--on" style="margin-top:11px">
+                <div class="m-fld-h" style="background:#fff">
+                  <b style="font-size:12.5px">내 자소서 초안</b>
+                  <span class="m-pill p-ok">저장됨</span>
+                  <span class="m-sp m-row" style="gap:6px">
+                    <span class="m-btn m-btn--sm">STAR 뼈대 보기</span>
+                    <span class="m-btn m-btn--sm"><svg class="m-ico"><use href="#i-expand"></use></svg></span></span>
+                </div>
+                <div class="m-fld-b" style="min-height:322px;font-size:13.5px;line-height:2;color:var(--ink)">교내 마케팅 공모전에서 3개월간 팀장을 맡아 SNS 채널 데이터를 분석했습니다. 초기에는 게시물 도달 수만 보고 성과를 판단했는데, 도달이 늘어도 문의 전환은 그대로였습니다.
+
+문제를 <span class="m-hl">[정의한 방식]</span>으로 다시 잡고, 채널별 유입 이후 행동을 나눠 봤습니다. 그 결과 <span class="m-hl">[구체적인 수치]</span>가…<span class="m-caret"></span></div>
+                <div class="m-fld-f" style="gap:14px">
+                  <span><b style="color:var(--ink2)">412자</b> / 권장 700~1,000자</span>
+                  <div class="m-prog" style="width:110px"><i style="width:47%"></i></div>
+                  <span class="m-sp m-row" style="gap:5px">
+                    <span class="m-pill p-info">빈칸 2개</span>
+                    <span class="m-pill p-bad">‘열정을 가지고’</span>
+                    <span class="m-pill p-warn">‘~을 통해’ ×4</span>
+                  </span>
+                </div>
+              </div>
+
+              <div class="m-grid m-g2" style="margin-top:11px">
+                <div class="m-card" style="padding:12px 14px">
+                  <div class="m-h3">반드시 숫자로 바꿀 것</div>
+                  <ul class="m-stack" style="gap:5px;margin-top:8px">
+                    <li class="m-p">· “SNS 채널” → 몇 개 채널, 기간은?</li>
+                    <li class="m-p">· “문의 전환은 그대로” → 몇 %에서 몇 %로?</li>
+                    <li class="m-p">· “팀장” → 팀원 몇 명, 내가 맡은 범위는?</li>
+                  </ul>
+                </div>
+                <div class="m-card" style="padding:12px 14px;background:#fffafa;border-color:#f3cfd4">
+                  <div class="m-h3" style="color:#d61c33">이렇게 쓰면 감점</div>
+                  <ul class="m-stack" style="gap:5px;margin-top:8px">
+                    <li class="m-p" style="color:#b91c2c">· 역량 이름을 그대로 쓰기(“저는 데이터 분석 역량이…”)</li>
+                    <li class="m-p" style="color:#b91c2c">· 결과만 쓰고 판단 근거를 빼기</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div class="m-card" style="margin-top:11px;padding:11px 14px;background:#eef3ff;border-color:#c9dbff">
+                <span class="m-p" style="color:#0b4fbb">이렇게 쓰면 면접에서 이걸 물어봅니다 —
+                  <b>“도달 대신 전환을 보기로 한 판단은 누가 했나요?”</b></span>
+              </div>
+            </div>
+          </div>
+        </div></div>
+      </figure>
+    </section>
+
+    <section class="g-proto" id="p-c2">
+      <div class="g-meta"><span class="g-code">C-2</span><span class="g-part">PART C · AI 답변</span></div>
+      <h3>커버리지 대시보드 — 먼저 전체, 그 다음 하나</h3>
+      <p class="g-tag">스크롤을 없애는 다른 방법: 역량 7개를 <b>카드 그리드</b>로 한 화면에 깔고, 누른 하나만
+        오른쪽 드로어로 펼칩니다. 맨 위 커버리지 요약이 “뭐부터 손대야 하는지”를 먼저 알려줍니다.</p>
+      <div class="g-refs"><b>REF</b><span>Glassdoor 대시보드</span><span>Levels.fyi</span><span>Linear</span><span>사람인 역량진단</span></div>
+
+      <div class="g-notes">
+        <div class="g-note g-note--bad">
+          <h4>지금</h4>
+          <ul>
+            <li>7개 카드를 다 읽어야 “내가 뭘 못 채웠는지” 알 수 있다 — 요약이 없다</li>
+            <li>칩을 눌러 하나만 보는 필터는 있지만, 다시 전체를 볼 때 맥락이 끊긴다</li>
+            <li>시장 빈도·내 근거·문항 배분이 카드마다 흩어져 서로 비교가 안 된다</li>
+          </ul>
+        </div>
+        <div class="g-note g-note--good">
+          <h4>이 안</h4>
+          <ul>
+            <li>상단 요약: <b>7개 중 4개 커버 / 3개 부족</b> + 부족한 역량 이름을 바로 지목</li>
+            <li>카드는 4줄로 압축(역량명 · 빈도 · 커버 상태 색띠 · 내 소재 1줄) — 7개가 두 줄 안에</li>
+            <li>카드를 누르면 오른쪽 드로어. 페이지 위치가 안 바뀌니 <b>다음 카드로 옮겨 다니기</b>가 쉽다</li>
+            <li>드로어 하단이 곧 초안 작성칸 — 가이드와 작성이 같은 패널 안에</li>
+            <li>왼쪽 색띠: <span style="color:var(--g-good)">초록=근거 충분</span> / 노랑=약함 / 빨강=근거 없음</li>
+          </ul>
+        </div>
+      </div>
+
+      <figure class="g-frame">
+        <figcaption class="g-frame-bar">
+          <span class="g-dots"><i></i><i></i><i></i></span>
+          <span class="g-url">careerly.app/#jd · 분석 결과</span>
+          <span class="g-sample">내용은 예시</span>
+        </figcaption>
+        <div class="g-screen"><div class="m">
+          <div class="m-top">
+            <div class="m-logo">careerly</div>
+            <nav><span>커리어 로드맵</span><span class="on">회사·자소서</span><span>멘토링</span><span>인사이트</span></nav>
+            <div class="m-me"><i>조</i> 조영인</div>
+          </div>
+
+          <div class="m-grid" style="grid-template-columns:minmax(0,1fr) 392px;gap:0">
+            <div class="m-body" style="padding:20px 24px 34px">
+              <div class="m-row" style="gap:10px">
+                <span class="m-av m-av--sm" style="--c:#2563eb">삼</span>
+                <div><div class="m-h2">삼성전자 · DX 데이터 마케팅</div>
+                  <div class="m-mut">공고 문장 42개 · 공고 키워드 + AI 보강(llama-3.3-70b)</div></div>
+              </div>
+
+              <!-- 커버리지 요약 -->
+              <div class="m-card" style="margin-top:14px;padding:16px 18px">
+                <div class="m-row" style="gap:20px;align-items:center">
+                  <div style="flex:none;position:relative;width:88px;height:88px">
+                    <svg width="88" height="88" viewBox="0 0 88 88" aria-hidden="true">
+                      <circle cx="44" cy="44" r="36" fill="none" stroke="#eeeef1" stroke-width="12"/>
+                      <circle cx="44" cy="44" r="36" fill="none" stroke="#00873a" stroke-width="12"
+                              stroke-dasharray="129 226" stroke-linecap="round" transform="rotate(-90 44 44)"/>
+                    </svg>
+                    <div style="position:absolute;inset:0;display:grid;place-items:center;line-height:1.1">
+                      <div style="text-align:center"><b style="font-size:19px">57%</b>
+                        <div style="font-size:9.5px;color:var(--ink3)">커버리지</div></div>
+                    </div>
+                  </div>
+                  <div style="min-width:0">
+                    <div class="m-h2">요구 역량 7가지 중 <b style="color:#00873a">4가지</b>는 내 경험으로 쓸 수 있어요</div>
+                    <p class="m-p" style="margin-top:5px">못 채운 3가지 중 <b>SQL·데이터 도구 실무</b>는 이 직군 공고의 19%만 요구하는
+                      희소 역량입니다 — 근거를 만들면 가장 강한 차별점이 됩니다.</p>
+                    <div class="m-row m-wrap" style="gap:5px;margin-top:9px">
+                      <span class="m-pill p-bad">SQL·데이터 도구</span>
+                      <span class="m-pill p-bad">고객·UX 이해</span>
+                      <span class="m-pill p-bad">영어 커뮤니케이션</span>
+                      <span class="m-mut">← 지금 소재가 없는 역량</span>
+                    </div>
+                  </div>
+                  <div class="m-sp m-stack" style="gap:6px;flex:none">
+                    <span class="m-btn m-btn--sm m-btn--p">부족한 역량 채우러 가기</span>
+                    <span class="m-btn m-btn--sm">전체 초안 내려받기</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="m-row m-wrap" style="gap:5px;margin-top:14px">
+                <span class="m-chip on">전체 7</span><span class="m-chip">근거 충분 4</span>
+                <span class="m-chip">근거 없음 3</span><span class="m-chip">시장 희소 2</span>
+                <span class="m-chip">초안 미작성 5</span>
+                <span class="m-sp m-mut">정렬: 공고 비중 높은 순 ⌄</span>
+              </div>
+
+              <div class="m-grid m-g3" style="margin-top:11px">
+                <!-- 선택된 카드 -->
+                <div class="m-card" style="padding:0;overflow:hidden;border-color:var(--b);box-shadow:0 0 0 3px rgba(109,58,255,.09)">
+                  <div style="display:flex"><span style="width:4px;background:#00873a;flex:none"></span>
+                  <div style="padding:13px 14px;min-width:0;flex:1">
+                    <div class="m-row"><b style="font-size:13.5px">데이터 분석</b>
+                      <span class="m-sp m-pill p-mut">62%</span></div>
+                    <div class="m-mut" style="margin-top:4px">지원자 대부분이 쓰는 역량 · 안 쓰면 감점</div>
+                    <div class="m-row" style="gap:5px;margin-top:9px">
+                      <span class="m-pill p-ok">내 소재 2건</span><span class="m-pill p-br">① ②</span></div>
+                    <div class="m-mut" style="margin-top:7px">마케팅 공모전 데이터 분석 <span style="color:#00873a">·1순위</span></div>
+                    <div class="m-row" style="gap:7px;margin-top:9px">
+                      <div class="m-prog g" style="flex:1"><i style="width:47%"></i></div>
+                      <span class="m-mut" style="flex:none">초안 412자</span></div>
+                  </div></div>
+                </div>
+
+                <div class="m-card" style="padding:0;overflow:hidden">
+                  <div style="display:flex"><span style="width:4px;background:#00873a;flex:none"></span>
+                  <div style="padding:13px 14px;min-width:0;flex:1">
+                    <div class="m-row"><b style="font-size:13.5px">협업·커뮤니케이션</b>
+                      <span class="m-sp m-pill p-mut">71%</span></div>
+                    <div class="m-mut" style="margin-top:4px">지원자 대부분이 쓰는 역량 · 안 쓰면 감점</div>
+                    <div class="m-row" style="gap:5px;margin-top:9px">
+                      <span class="m-pill p-ok">내 소재 1건</span><span class="m-pill p-br">③</span></div>
+                    <div class="m-mut" style="margin-top:7px">학생회 학술부 기획단 <span style="color:#00873a">·1순위</span></div>
+                    <div class="m-row" style="gap:7px;margin-top:9px">
+                      <div class="m-prog" style="flex:1"><i style="width:0%"></i></div>
+                      <span class="m-mut" style="flex:none">초안 없음</span></div>
+                  </div></div>
+                </div>
+
+                <div class="m-card" style="padding:0;overflow:hidden">
+                  <div style="display:flex"><span style="width:4px;background:#146ef5;flex:none"></span>
+                  <div style="padding:13px 14px;min-width:0;flex:1">
+                    <div class="m-row"><b style="font-size:13.5px">문제해결·개선 제안</b>
+                      <span class="m-sp m-pill p-info">38%</span></div>
+                    <div class="m-mut" style="margin-top:4px">절반 이하가 요구 · 근거가 있으면 비중 있게</div>
+                    <div class="m-row" style="gap:5px;margin-top:9px">
+                      <span class="m-pill p-ok">내 소재 1건</span><span class="m-pill p-br">②</span></div>
+                    <div class="m-mut" style="margin-top:7px">교내 창업동아리 프로젝트</div>
+                    <div class="m-row" style="gap:7px;margin-top:9px">
+                      <div class="m-prog" style="flex:1"><i style="width:0%"></i></div>
+                      <span class="m-mut" style="flex:none">초안 없음</span></div>
+                  </div></div>
+                </div>
+
+                <div class="m-card" style="padding:0;overflow:hidden">
+                  <div style="display:flex"><span style="width:4px;background:#d61c33;flex:none"></span>
+                  <div style="padding:13px 14px;min-width:0;flex:1">
+                    <div class="m-row"><b style="font-size:13.5px">SQL·데이터 도구 실무</b>
+                      <span class="m-sp m-pill p-ok">19% 희소</span></div>
+                    <div class="m-mut" style="margin-top:4px">요구하는 공고가 드묾 · 가장 강한 차별점</div>
+                    <div class="m-row" style="gap:5px;margin-top:9px">
+                      <span class="m-pill p-bad">소재 없음</span><span class="m-pill p-br">②</span></div>
+                    <div class="m-mut" style="margin-top:7px;color:#d61c33">지금 만들어야 할 경험 →</div>
+                    <div class="m-row" style="gap:7px;margin-top:9px">
+                      <div class="m-prog" style="flex:1"><i style="width:0%"></i></div>
+                      <span class="m-mut" style="flex:none">초안 없음</span></div>
+                  </div></div>
+                </div>
+
+                <div class="m-card" style="padding:0;overflow:hidden">
+                  <div style="display:flex"><span style="width:4px;background:#d61c33;flex:none"></span>
+                  <div style="padding:13px 14px;min-width:0;flex:1">
+                    <div class="m-row"><b style="font-size:13.5px">고객·UX 이해</b>
+                      <span class="m-sp m-pill p-info">27%</span></div>
+                    <div class="m-mut" style="margin-top:4px">우대사항에서 추출 · 있으면 가산</div>
+                    <div class="m-row" style="gap:5px;margin-top:9px"><span class="m-pill p-bad">소재 없음</span></div>
+                    <div class="m-mut" style="margin-top:7px;color:#d61c33">지금 만들어야 할 경험 →</div>
+                    <div class="m-row" style="gap:7px;margin-top:9px">
+                      <div class="m-prog" style="flex:1"><i style="width:0%"></i></div>
+                      <span class="m-mut" style="flex:none">초안 없음</span></div>
+                  </div></div>
+                </div>
+
+                <div class="m-card" style="padding:0;overflow:hidden">
+                  <div style="display:flex"><span style="width:4px;background:#f0a72a;flex:none"></span>
+                  <div style="padding:13px 14px;min-width:0;flex:1">
+                    <div class="m-row"><b style="font-size:13.5px">기획·실행력</b>
+                      <span class="m-sp m-pill p-mut">54%</span></div>
+                    <div class="m-mut" style="margin-top:4px">절반 이상이 요구 · 반드시 넣기</div>
+                    <div class="m-row" style="gap:5px;margin-top:9px">
+                      <span class="m-pill p-warn">소재 약함</span><span class="m-pill p-br">①</span></div>
+                    <div class="m-mut" style="margin-top:7px">기간 3주 · 결과물 기록 없음</div>
+                    <div class="m-row" style="gap:7px;margin-top:9px">
+                      <div class="m-prog" style="flex:1"><i style="width:0%"></i></div>
+                      <span class="m-mut" style="flex:none">초안 없음</span></div>
+                  </div></div>
+                </div>
+              </div>
+              <div class="m-row" style="justify-content:center;margin-top:11px">
+                <span class="m-btn m-btn--sm">역량 1개 더 보기 (영어 커뮤니케이션 · 우대)</span></div>
+            </div>
+
+            <!-- 드로어 -->
+            <div style="border-left:1px solid var(--line);background:#fbfbfc;padding:18px 20px 28px;min-height:660px">
+              <div class="m-row"><span class="m-mut">역량 1 / 7</span>
+                <span class="m-sp m-row" style="gap:5px"><span class="m-btn m-btn--sm">←</span>
+                  <span class="m-btn m-btn--sm">→</span><span class="m-btn m-btn--sm">✕</span></span></div>
+              <div class="m-h1" style="font-size:18px;margin-top:9px">데이터 분석</div>
+              <div class="m-row m-wrap" style="gap:5px;margin-top:7px">
+                <span class="m-pill p-mut">사무·관리 공고 62% 요구</span>
+                <span class="m-pill p-ok">내 소재 2건</span>
+                <span class="m-pill p-br">문항 ① ②</span>
+              </div>
+
+              <div class="m-card" style="margin-top:13px;padding:12px 14px">
+                <div class="m-lb">기업이 보는 것</div>
+                <p class="m-p" style="margin-top:4px">숫자를 다룰 줄 아는지가 아니라, <b>무엇을 문제로 봤는지</b>를 봅니다.</p>
+                <div class="m-lb" style="margin-top:11px">공고 근거</div>
+                <div class="m-quote" style="margin-top:6px">데이터를 근거로 문제를 정의하고 개선안을 제안할 수 있는 분</div>
+              </div>
+
+              <div class="m-card" style="margin-top:9px;padding:12px 14px;background:var(--ok-bg);border-color:#bce7cc">
+                <div class="m-lb" style="color:#046b33">이 순서로 쓰세요</div>
+                <p class="m-p" style="margin-top:5px;line-height:1.85">① 어떤 데이터를 왜 봤는지 → ② 무엇을 문제로 정의했는지 →
+                  ③ 개선안을 고른 기준 → ④ 숫자로 확인된 변화</p>
+              </div>
+
+              <div class="m-fld" style="margin-top:11px">
+                <div class="m-fld-h" style="background:#fff">
+                  <b style="font-size:12.5px">이 역량으로 쓰는 초안</b>
+                  <span class="m-pill p-ok">저장됨</span>
+                  <span class="m-sp m-mut">① 문항에 삽입</span>
+                </div>
+                <div class="m-fld-b" style="min-height:180px;font-size:12.5px;line-height:1.95;color:var(--ink)">교내 마케팅 공모전에서 3개월간 팀장을 맡아 SNS 채널 데이터를 분석했습니다. 도달 수만 보고 성과를 판단했는데, 도달이 늘어도 문의 전환은 <span class="m-hl">[수치]</span> 그대로였습니다.<span class="m-caret"></span></div>
+                <div class="m-fld-f">
+                  <span><b style="color:var(--ink2)">412자</b></span>
+                  <span class="m-sp m-row" style="gap:4px">
+                    <span class="m-pill p-info">빈칸 1</span><span class="m-pill p-bad">‘열정을 가지고’</span></span>
+                </div>
+              </div>
+
+              <div class="m-row" style="gap:6px;margin-top:11px">
+                <span class="m-btn m-btn--sm">첫 문장 틀</span><span class="m-btn m-btn--sm">숫자로 바꿀 것 3</span>
+                <span class="m-btn m-btn--sm">감점 표현 2</span>
+              </div>
+              <div class="m-btn m-btn--p" style="width:100%;justify-content:center;margin-top:11px">
+                다음 역량으로 <svg class="m-ico"><use href="#i-arrow"></use></svg></div>
+            </div>
+          </div>
+        </div></div>
+      </figure>
+    </section>
+
+    <section class="g-proto" id="p-c3">
+      <div class="g-meta"><span class="g-code">C-3</span><span class="g-part">PART C · AI 답변</span></div>
+      <h3>문항 중심 워크스페이스 — 결국 제출하는 건 문항이니까</h3>
+      <p class="g-tag">화면의 최상위 단위를 <b>자소서 문항</b>으로 바꿉니다. 탭 하나 = 문항 하나이고,
+        그 안에서 에디터가 주인공, 역량은 오른쪽 <b>팔레트</b>가 되어 클릭하면 초안에 뼈대가 들어갑니다.</p>
+      <div class="g-refs"><b>REF</b><span>자소설닷컴</span><span>Teal AI Resume</span><span>Notion 데이터베이스 탭</span><span>Grammarly Goals</span></div>
+
+      <div class="g-notes">
+        <div class="g-note g-note--bad">
+          <h4>지금</h4>
+          <ul>
+            <li>문항 카드와 역량 카드가 서로 다른 블록에 있어서, 2번 문항을 쓰는 동안 필요한 역량 가이드가 다른 곳에 있다</li>
+            <li>같은 역량을 여러 문항에 중복해서 쓰고 있는지 확인할 방법이 없다</li>
+            <li>글자수 제한(회사가 지정하는 700자/1,000자)을 다루는 UI가 없다</li>
+          </ul>
+        </div>
+        <div class="g-note g-note--good">
+          <h4>이 안</h4>
+          <ul>
+            <li>탭 = 문항. 탭에 <b>글자수 / 제한 / 완료 여부</b>가 붙어 제출 상태가 항상 보인다</li>
+            <li>문항 전문이 에디터 위에 고정 — 쓰다가 질문을 잊지 않는다</li>
+            <li>오른쪽 <b>역량 팔레트</b>: 이 문항에 배정된 역량 + 내 경험 카드. 누르면 뼈대가 커서 위치에 삽입</li>
+            <li><b>이미 다른 문항에 쓴 소재</b>는 회색으로 잠긴다 — 중복 소재를 구조적으로 막는다</li>
+            <li>하단 고정바에 글자수·검사·저장. 아래로 스크롤해도 제출 상태가 사라지지 않는다</li>
+          </ul>
+        </div>
+      </div>
+
+      <figure class="g-frame">
+        <figcaption class="g-frame-bar">
+          <span class="g-dots"><i></i><i></i><i></i></span>
+          <span class="g-url">careerly.app/#jd · 문항 2</span>
+          <span class="g-sample">내용은 예시</span>
+        </figcaption>
+        <div class="g-screen"><div class="m">
+          <div class="m-top">
+            <div class="m-logo">careerly</div>
+            <nav><span>커리어 로드맵</span><span class="on">회사·자소서</span><span>멘토링</span><span>인사이트</span></nav>
+            <div class="m-me"><i>조</i> 조영인</div>
+          </div>
+
+          <div class="m-row" style="padding:10px 22px;border-bottom:1px solid var(--line);gap:10px">
+            <span class="m-av m-av--sm" style="--c:#2563eb">삼</span>
+            <b style="font-size:13px">삼성전자 · DX 데이터 마케팅</b>
+            <span class="m-pill p-warn">마감 D-6</span>
+            <span class="m-sp m-row" style="gap:8px">
+              <span class="m-btn m-btn--sm">공고·역량 다시 보기</span>
+              <span class="m-btn m-btn--sm m-btn--p">제출용으로 내보내기</span></span>
+          </div>
+
+          <div class="m-tabs" style="padding:0 22px;background:#fafafb">
+            <span>① 지원 동기와 입사 후 포부
+              <span class="m-pill p-mut" style="margin-left:5px">0 / 700자</span></span>
+            <span class="on">② 직무 역량을 갖추기 위한 노력
+              <span class="m-pill p-br" style="margin-left:5px">412 / 1,000자</span></span>
+            <span>③ 팀 갈등을 해결한 경험
+              <span class="m-pill p-mut" style="margin-left:5px">0 / 700자</span></span>
+            <span style="margin-left:auto;color:var(--ink3);font-weight:400">+ 문항 추가</span>
+          </div>
+
+          <div class="m-grid" style="grid-template-columns:minmax(0,1fr) 348px;gap:0">
+            <div style="padding:16px 22px 20px">
+              <div class="m-card m-card--flat" style="padding:12px 14px">
+                <div class="m-row"><span class="m-lb">문항 2</span>
+                  <span class="m-sp m-pill p-br">유형: 직무역량</span></div>
+                <p style="font-size:13.5px;font-weight:700;margin-top:5px;line-height:1.6">
+                  직무 수행에 필요한 역량을 갖추기 위해 노력한 경험을 서술해 주십시오. (1,000자 이내)</p>
+                <p class="m-p" style="margin-top:6px">공고가 가장 많이 요구하는 역량부터 씁니다.
+                  역량 이름을 쓰지 말고 <b>그 역량을 쓴 상황</b>을 쓰세요.</p>
+              </div>
+
+              <div class="m-fld m-fld--on" style="margin-top:12px">
+                <div class="m-fld-h" style="background:#fff">
+                  <b style="font-size:12.5px">내 초안</b>
+                  <span class="m-sp m-row" style="gap:6px">
+                    <span class="m-btn m-btn--sm">STAR 뼈대</span>
+                    <span class="m-btn m-btn--sm">맞춤법</span>
+                    <span class="m-btn m-btn--sm"><svg class="m-ico"><use href="#i-expand"></use></svg></span></span>
+                </div>
+                <div class="m-fld-b" style="min-height:346px;font-size:13.5px;line-height:2.05;color:var(--ink)">교내 마케팅 공모전에서 3개월간 팀장을 맡아 SNS 채널 데이터를 분석했습니다. 초기에는 게시물 도달 수만 보고 성과를 판단했는데, 도달이 늘어도 문의 전환은 그대로였습니다.
+
+문제를 “도달”이 아니라 “전환”으로 다시 정의하고, 채널별 유입 이후 행동을 나눠 봤습니다. 그 결과 <span class="m-hl">[구체적인 수치]</span>가 특정 시간대에만 몰린다는 것을 확인했고, 게시 시간을 조정하는 실험을 <span class="m-hl">[기간]</span> 동안 진행했습니다.<span class="m-caret"></span></div>
+              </div>
+
+              <!-- 하단 고정바 -->
+              <div class="m-card" style="margin-top:10px;padding:10px 14px;border-color:#d9d9df">
+                <div class="m-row" style="gap:14px">
+                  <span class="m-row" style="gap:8px;flex:none">
+                    <b style="font-size:13px">412</b><span class="m-mut">/ 1,000자</span>
+                    <div class="m-prog" style="width:96px"><i style="width:41%"></i></div></span>
+                  <span class="m-row" style="gap:4px">
+                    <span class="m-pill p-info">빈칸 2개</span>
+                    <span class="m-pill p-bad">‘열정을 가지고’</span>
+                    <span class="m-pill p-warn">‘~을 통해’ ×4</span></span>
+                  <span class="m-sp m-row" style="gap:8px;flex:none">
+                    <span class="m-mut">3초 전 저장됨</span>
+                    <span class="m-btn m-btn--sm">③ 문항으로 →</span></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 역량 팔레트 -->
+            <div style="border-left:1px solid var(--line);background:#fbfbfc;padding:16px 18px 24px">
+              <div class="m-row"><span class="m-h2">이 문항에 쓸 역량</span>
+                <span class="m-sp m-mut">공고 기준</span></div>
+              <p class="m-mut" style="margin-top:4px">누르면 그 역량의 <b>쓰는 순서</b>가 커서 자리에 들어갑니다.</p>
+
+              <div class="m-stack" style="gap:7px;margin-top:11px">
+                <div class="m-card" style="padding:11px 13px;border-color:var(--b);background:#fbfaff">
+                  <div class="m-row"><b style="font-size:13px">데이터 분석</b>
+                    <span class="m-sp m-pill p-mut">62%</span></div>
+                  <div class="m-mut" style="margin-top:4px">① 어떤 데이터를 왜 → ② 문제 정의 → ③ 개선안 기준 → ④ 숫자</div>
+                  <div class="m-row" style="gap:5px;margin-top:8px">
+                    <span class="m-pill p-ok">초안에 반영됨</span>
+                    <span class="m-sp m-btn m-btn--sm">다시 삽입</span></div>
+                </div>
+                <div class="m-card" style="padding:11px 13px">
+                  <div class="m-row"><b style="font-size:13px">문제해결·개선 제안</b>
+                    <span class="m-sp m-pill p-info">38%</span></div>
+                  <div class="m-mut" style="margin-top:4px">① 무엇이 왜 어려웠는지 → ② 시도했지만 안 된 것 → ③ 바꾼 방법 → ④ 결과</div>
+                  <div class="m-row" style="gap:5px;margin-top:8px">
+                    <span class="m-pill p-warn">아직 안 씀</span>
+                    <span class="m-sp m-btn m-btn--sm m-btn--br">뼈대 삽입 →</span></div>
+                </div>
+                <div class="m-card" style="padding:11px 13px;border-color:#f3cfd4;background:#fffafa">
+                  <div class="m-row"><b style="font-size:13px">SQL·데이터 도구 실무</b>
+                    <span class="m-sp m-pill p-ok">19% 희소</span></div>
+                  <div class="m-mut" style="margin-top:4px;color:#d61c33">쓸 소재가 없어요. 억지로 넣으면 면접에서 무너집니다 — 이번 자소서에서는 빼세요.</div>
+                  <div class="m-row" style="gap:5px;margin-top:8px">
+                    <span class="m-btn m-btn--sm">이 문항에서 빼기</span>
+                    <span class="m-btn m-btn--sm">경험 만들 방법 보기</span></div>
+                </div>
+              </div>
+
+              <div class="m-divider" style="margin:16px 0 12px"></div>
+              <div class="m-row"><span class="m-h2">쓸 수 있는 내 경험</span>
+                <span class="m-sp m-mut">마이페이지 활동</span></div>
+              <div class="m-stack" style="gap:6px;margin-top:10px">
+                <div class="m-card" style="padding:10px 12px;background:var(--ok-bg);border-color:#bce7cc">
+                  <div class="m-row"><b style="font-size:12.5px">교내 마케팅 공모전 데이터 분석</b>
+                    <span class="m-sp m-pill p-ok">사용중</span></div>
+                  <div class="m-mut">대외활동 · 3개월 · 팀장 · 최우수상</div>
+                </div>
+                <div class="m-card" style="padding:10px 12px">
+                  <div class="m-row"><b style="font-size:12.5px">교내 창업동아리 프로젝트</b>
+                    <span class="m-sp m-btn m-btn--sm">소재로 쓰기</span></div>
+                  <div class="m-mut">동아리 · 5개월 · 기획 담당</div>
+                </div>
+                <div class="m-card" style="padding:10px 12px;background:#f4f4f6;border-color:transparent;opacity:.72">
+                  <div class="m-row"><b style="font-size:12.5px;color:var(--ink3)">학생회 학술부 기획단</b>
+                    <span class="m-sp m-pill p-mut">③ 문항에서 사용중</span></div>
+                  <div class="m-mut">같은 소재를 두 문항에 쓰면 읽는 사람에게는 하나로 보입니다</div>
+                </div>
+              </div>
+
+              <div class="m-card" style="margin-top:14px;padding:11px 13px;background:#eef3ff;border-color:#c9dbff">
+                <div class="m-lb" style="color:#0b4fbb">제출 전 확인</div>
+                <div class="m-stack" style="gap:5px;margin-top:7px">
+                  <div class="m-row" style="gap:6px"><svg class="m-ico" style="color:#00873a"><use href="#i-check"></use></svg>
+                    <span class="m-mut">문항마다 다른 소재를 썼는가</span></div>
+                  <div class="m-row" style="gap:6px"><span style="width:14px;height:14px;border-radius:50%;border:1.5px solid #b6c6e8;flex:none"></span>
+                    <span class="m-mut">대괄호 빈칸을 모두 채웠는가 <b style="color:#d61c33">(2개 남음)</b></span></div>
+                  <div class="m-row" style="gap:6px"><span style="width:14px;height:14px;border-radius:50%;border:1.5px solid #b6c6e8;flex:none"></span>
+                    <span class="m-mut">결과를 숫자로 썼는가</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div></div>
+      </figure>
+    </section>
+
+    <!-- PART-C-ANCHOR -->
+  </main>
+</div>
+
+<script>
+  (function () {
+    var btns = Array.prototype.slice.call(document.querySelectorAll('.g-nav button'));
+    var secs = Array.prototype.slice.call(document.querySelectorAll('.g-proto'));
+    function show(id) {
+      secs.forEach(function (s) { s.hidden = (s.id !== 'p-' + id); });
+      btns.forEach(function (b) { b.classList.toggle('is-on', b.dataset.go === id); });
+      if (location.hash.slice(1) !== id) history.replaceState(null, '', '#' + id);
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    }
+    btns.forEach(function (b) { b.addEventListener('click', function () { show(b.dataset.go); }); });
+    var start = location.hash.slice(1);
+    show(btns.some(function (b) { return b.dataset.go === start; }) ? start : 'a1');
+  })();
+</script>

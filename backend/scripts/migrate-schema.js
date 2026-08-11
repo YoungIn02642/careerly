@@ -42,10 +42,12 @@ const COLUMNS = [
   ['profiles',   'specialties', `JSON NULL COMMENT '전문 분야'`],
   ['profiles',   'timeline',    `JSON NULL COMMENT '경력 타임라인'`],
   ['profiles',   'modes',       `JSON NULL COMMENT '멘토링 가능 형식'`],
+  ['insight_posts', 'is_notice', `BOOLEAN NOT NULL DEFAULT FALSE COMMENT '공지글 — 관리자만, 목록 최상단 고정'`],
 ];
 
 const INDEXES = [
   ['user_specs', 'idx_specs_job_major', '(job_major)'],
+  ['insight_posts', 'idx_ipost_notice', '(is_notice, created_at)'],
 ];
 
 /* UNIQUE 는 따로 둔다. 이미 중복 값이 들어 있으면 ALTER 가 실패하는데,
