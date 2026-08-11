@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>CAREERLY · 대학생 커리어 빌딩 플랫폼</title>
+<title>C:road · 대학생 커리어 빌딩 플랫폼</title>
 <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
@@ -19,11 +19,11 @@
     <!-- soft brand blob -->
     <circle cx="940" cy="180" r="240" fill="#c7bff5" opacity="0.55"/>
     <circle cx="240" cy="700" r="180" fill="#ffe1b3" opacity="0.55"/>
-    <!-- CAREERLY wordmark -->
+    <!-- C:road wordmark -->
     <text x="600" y="380" text-anchor="middle"
           font-family="-apple-system, system-ui, sans-serif"
           font-size="120" font-weight="800" fill="#534AB7"
-          letter-spacing="-3">CAREERLY</text>
+          letter-spacing="-2">C:road</text>
     <text x="600" y="450" text-anchor="middle"
           font-family="-apple-system, system-ui, sans-serif"
           font-size="28" font-weight="500" fill="#5f5e5a"
@@ -43,7 +43,7 @@
 
 <!-- ══ NAVBAR ══ -->
 <header class="navbar" id="global-navbar">
-  <span class="logo-area" onclick="navigate('main')">CAREERLY</span>
+  <span class="logo-area" onclick="navigate('main')">C:road</span>
   <nav class="nav-links">
     <span class="nav-link" data-nav="career" onclick="navigate('career')">커리어 로드맵</span>
     <span class="nav-link" data-nav="dashboard" onclick="navigate('dashboard')">CAS</span>
@@ -135,7 +135,7 @@
         <h1>당신의 커리어를<br><em>데이터</em>로 설계하세요</h1>
         <p>회원이 직접 입력한 스펙을 학과·직무별로 집계해, 합격자의 학점·자격증·활동 분포를 투명하게 보여줍니다.</p>
         <div class="home-hero-cta">
-          <button class="btn-primary" onclick="navigate('career')">커리어 로드맵 탐색</button>
+          <button class="btn-primary" onclick="navigate('career')">커리어 로드맵 시작</button>
           <button class="btn-outline js-start-free" onclick="startFree()">무료로 시작하기</button>
         </div>
       </div>
@@ -175,7 +175,7 @@
       <h1>데이터로 설계하는<br>대학생 커리어</h1>
       <p>합격한 선배들의 실제 스펙을 학과·직무별 통계로. 막연한 준비 대신, 근거 있는 로드맵을 시작하세요.</p>
       <div class="home-hero-cta">
-        <button class="btn-on-dark" onclick="navigate('career')">커리어 로드맵 탐색</button>
+        <button class="btn-on-dark" onclick="navigate('career')">커리어 로드맵 시작</button>
         <button class="btn-on-dark-ghost js-start-free" onclick="startFree()">무료로 시작하기</button>
       </div>
       <div class="home-dark-stats">
@@ -337,8 +337,8 @@
     </section>
 
     <footer class="home-footer">
-      <span class="fl">CAREERLY</span>
-      <span class="fr">© 2025 CAREERLY · 대학생 커리어 빌딩 플랫폼</span>
+      <span class="fl">C:road</span>
+      <span class="fr">© 2025 C:road · 대학생 커리어 빌딩 플랫폼</span>
     </footer>
   </div>
 </div>
@@ -347,7 +347,7 @@
 <div class="page" id="page-login">
   <div class="auth-page">
     <div class="auth-card" style="max-width:380px">
-      <span class="auth-logo" onclick="navigate('main')">CAREERLY</span>
+      <span class="auth-logo" onclick="navigate('main')">C:road</span>
       <p class="auth-page-title">로그인</p>
       <div class="error-box" id="login-error"></div>
       <div class="form-group">
@@ -382,7 +382,7 @@
 <div class="page" id="page-signup">
   <div class="auth-page" style="align-items:flex-start;padding-top:40px">
     <div class="auth-card auth-card--wide">
-      <span class="auth-logo" onclick="navigate('main')">CAREERLY</span>
+      <span class="auth-logo" onclick="navigate('main')">C:road</span>
       <p class="auth-page-title">회원가입</p>
       <p class="auth-page-desc">데이터로 설계하는 커리어, 지금 시작하세요</p>
       <div class="error-box" id="signup-server-error"></div>
@@ -489,7 +489,7 @@
 <div class="page" id="page-onboarding">
   <div class="auth-page">
     <div class="auth-card auth-card--wide">
-      <span class="auth-logo">CAREERLY</span>
+      <span class="auth-logo">C:road</span>
       <p class="auth-page-title">거의 다 됐어요</p>
       <p class="auth-page-sub" id="ob-greeting">회원 유형만 골라주시면 시작할 수 있어요.</p>
       <div class="error-box" id="ob-error"></div>
@@ -1066,7 +1066,7 @@
         </div>
       </div>
 
-      <div class="sidebar-section">1차 분류</div>
+      <div class="sidebar-section">직무 분야</div>
       <!-- 목록은 CareerPage.paintSidebar() 가 KECO(임금직업정보) 분류로부터 렌더한다 -->
       <div class="dept-list" id="job-major-list"></div>
       <div class="sidebar-empty" id="job-major-list-empty">검색 결과가 없습니다</div>

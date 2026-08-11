@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════
-//  CAREERLY — Backoffice (관리자용 데이터베이스 뷰)
+//  C:road — Backoffice (관리자용 데이터베이스 뷰)
 //   • 회원 목록 + 스펙 제출 현황
 //   • 학과별 집계 통계
 //   • 데모 시드 / 전체 초기화
@@ -28,7 +28,7 @@ window.Backoffice = (() => {
         <div class="bo-head-row">
           <div>
             <h1>백오피스 · 회원 데이터베이스</h1>
-            <p class="bo-sub">CAREERLY 의 회원 정보 · 스펙 입력 데이터를 관리합니다.</p>
+            <p class="bo-sub">C:road 의 회원 정보 · 스펙 입력 데이터를 관리합니다.</p>
           </div>
           <div class="bo-actions">
             <button class="bo-btn-ghost" id="bo-seed">데모 데이터 시드</button>

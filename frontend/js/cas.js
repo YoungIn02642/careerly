@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════
-//  CAREERLY — CAS (Career Asset Score) 점수 엔진 · 정량 파트
+//  C:road — CAS (Career Asset Score) 점수 엔진 · 정량 파트
 //
 //  설계 근거: docs/notes/2026.06.23 아이디어 회의(CAS점수내는법 개발).docx
 //             docs/notes/2026년 7월 5일 회의.docx

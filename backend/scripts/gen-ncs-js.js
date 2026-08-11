@@ -59,7 +59,7 @@ const majors = tree.map(L => {
 });
 
 const banner = `// ════════════════════════════════════════════════════════════
-//  CAREERLY — NCS 직업 분류 카탈로그  (자동 생성 · 손수정 금지)
+//  C:road — NCS 직업 분류 카탈로그  (자동 생성 · 손수정 금지)
 //   출처: 공공데이터포털 15128213 NCS 기준정보 조회 (한국산업인력공단)
 //   생성: backend/scripts/gen-ncs-js.js  (원본: backend/data/ncs-taxonomy.json)
 //

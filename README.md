@@ -46,7 +46,7 @@ clone 부터 첫 PR 까지의 전체 절차는 [docs/팀-개발환경.md](docs/�
 ## 프로젝트 구조
 
 ```text
-careerly
+C:road
 ├─ frontend                 # careerly.html 단일 문서 SPA (해시 라우팅), 빌드 없음
 │  ├─ careerly.html         # 페이지 11개가 이 한 파일에 들어 있다
 │  ├─ css                   # main.css · home.css · mentoring.css · jd-coach.css
