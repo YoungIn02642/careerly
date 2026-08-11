@@ -20,6 +20,7 @@
    ════════════════════════════════════════════════════════════ */
 const fs = require('fs');
 const path = require('path');
+const DART = require('./dart');
 
 const DATA = path.join(__dirname, '..', 'data');
 
@@ -65,7 +66,10 @@ let _cache = null;
 /* 캐시를 한 번 만들고 재사용한다. 파일 셋을 매 요청마다 읽고 785곳을 다시 묶을 이유가
    없다(수집 스크립트를 돌리기 전에는 내용도 안 바뀐다). */
 function build() {
-  const corps = (readJson('dart-corps.json') || {}).corps || [];
+  /* 파일을 직접 읽지 않는다 — 업종코드는 다른 파일(dart-industry.json)에 있고
+     그걸 붙이는 일은 dart.js 가 한다. 예전에는 여기서 dart-corps.json 을 직접 읽었는데,
+     색인을 깃에서 빼면서 업종코드가 사라진 것을 이쪽만 모르고 0곳을 냈다. */
+  const corps = DART.allCorps();
   if (!corps.length) return { sectors: [], total: 0, reason: 'DART 기업 색인이 없습니다. 저장소 루트에서 npm run build 를 실행하세요(깃에 넣지 않는 파일입니다).' };
 
   const known = new Set([

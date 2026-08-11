@@ -35,6 +35,12 @@ const API_KEY = (process.env.DART_API_KEY || '').trim();
 const TIMEOUT_MS = Number(process.env.DART_TIMEOUT_MS || 8000);
 const BASE = 'https://opendart.fss.or.kr/api';
 const CORPS_PATH = path.join(__dirname, '..', 'data', 'dart-corps.json');
+/* 업종코드는 이름 색인과 **다른 파일**에 있다. 만드는 값이 다르기 때문이다.
+     이름 색인(6MB) — DART 가 통째로 주는 원본. 받으면 그만이라 깃에 안 넣고 빌드에서 받는다
+     업종코드(72KB) — 회사마다 기업개황을 한 번씩 불러 채운 값(호출 3,981번). 깃에 넣는다
+   한 파일에 뒀다가 색인을 깃에서 빼면서 업종코드가 같이 사라졌다. 배포에서
+   계열별 둘러보기가 0곳이 되고 경쟁사가 빈 채로 나갔다 — 그래서 갈랐다. */
+const INDUSTRY_PATH = path.join(__dirname, '..', 'data', 'dart-industry.json');
 
 /* 사업보고서. 분기·반기(11012·11013·11014)를 섞으면 연도별 비교가 깨진다
    — 3년 매출 추이를 보려면 같은 종류의 보고서만 써야 한다. */
@@ -46,19 +52,37 @@ const FS_DIVS = ['CFS', 'OFS'];
 
 const isConfigured = () => Boolean(API_KEY);
 
-/* ── 고유번호·업종 캐시 ─────────────────────────────────────── */
+/* ── 고유번호·업종 캐시 ───────────────────────────────────────
+   두 파일을 읽어 하나로 합친다. 색인이 없으면 업종코드만 있어도 소용없다(false). */
+function readJson(file, what) {
+  try {
+    return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
+  } catch (e) {
+    console.warn(`[dart] ${what} 를 읽지 못했습니다:`, e.message);
+    return null;
+  }
+}
+
 let _corps = null;
 function corps() {
   if (_corps !== null) return _corps;
-  try {
-    _corps = fs.existsSync(CORPS_PATH)
-      ? JSON.parse(fs.readFileSync(CORPS_PATH, 'utf8'))
-      : false;
-  } catch (e) {
-    console.warn('[dart] 기업 캐시를 읽지 못했습니다:', e.message);
-    _corps = false;
+  const file = readJson(CORPS_PATH, '기업 색인');
+  if (!file || !Array.isArray(file.corps)) { _corps = false; return _corps; }
+
+  const industry = (readJson(INDUSTRY_PATH, '업종코드') || {}).byCode || {};
+  for (const corp of file.corps) {
+    const code = industry[corp.code];
+    if (code) corp.industry = code;
   }
+  _corps = file;
   return _corps;
+}
+
+/* 계열별 목록(company-sectors)도 같은 것을 본다 — 업종코드를 붙이는 규칙이
+   두 벌이 되면 한쪽만 고쳐진다. */
+function allCorps() {
+  const c = corps();
+  return (c && Array.isArray(c.corps)) ? c.corps : [];
 }
 
 /* 회사명 → 고유번호. 정규화는 company-classify 의 것을 그대로 쓴다
@@ -426,6 +450,6 @@ function reloadCache() { _corps = null; _byName = null; return status(); }
 
 module.exports = {
   isConfigured, analyze, findCorp, profile, financials, competitors, employees,
-  status, reloadCache, callDart, toNumber, CORPS_PATH,
+  status, reloadCache, callDart, toNumber, allCorps, CORPS_PATH, INDUSTRY_PATH,
   SIZE_LOW, SIZE_HIGH,        // 경쟁사 규모 배수 — 테스트가 대칭인지 확인한다
 };
