@@ -1578,6 +1578,31 @@ window.SpecForm = (() => {
       </button>`).join('');
   }
 
+  /* ── 검증 실패를 '보이게' 알린다 ────────────────────────────
+     예전에는 오류 문구를 폼 맨 위 빨간 상자에만 띄웠다. 그런데 저장 버튼은 폼
+     **맨 아래**에 있다 — 실측으로 둘 사이가 1,639px 이고 화면 높이는 720px 이라,
+     버튼을 누른 자리에서는 오류가 화면 밖이라 **아무 일도 안 일어난 것처럼 보였다.**
+     "저장하기가 작동하지 않는다"는 신고가 이것이었다.
+
+     성공 안내는 같은 이유로 이미 토스트로 옮겼는데(아래 주석), 오류만 위에 남아 있었다.
+     이제 셋을 같이 한다: 토스트로 알리고, 문제가 된 칸으로 스크롤해 커서를 두고,
+     상자도 그대로 채운다(그 자리까지 올라온 사람에게는 그게 더 자세하다).
+
+     토스트에 체크 아이콘이 붙으면 저장된 것처럼 읽히므로 icon:false 로 끈다. */
+  function failValidation(error, msg, fieldId) {
+    error.textContent = msg;
+    error.style.display = 'block';
+    if (typeof toast === 'function') toast(msg, { icon: false });
+
+    const field = fieldId && document.getElementById(fieldId);
+    if (field) {
+      field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      /* 스크롤이 끝나기 전에 focus 를 주면 브라우저가 그 자리로 한 번 더 튄다.
+         부드러운 이동이 끝날 즈음에 커서를 둔다. */
+      setTimeout(() => field.focus({ preventScroll: true }), 320);
+    }
+  }
+
   async function handleSave(user) {
     const success = document.getElementById('sf-success');
     const error   = document.getElementById('sf-error');
@@ -1600,13 +1625,11 @@ window.SpecForm = (() => {
     /* 학과는 여전히 필수다 — 없으면 어느 계열 통계에도 못 넣고, 학과별 자격증
        추천도 못 한다. 다만 **분류(dept) 실패는 막지 않는다**(위 주석 참고). */
     if (!major) {
-      error.textContent = '학과를 입력해주세요.';
-      error.style.display = 'block';
+      failValidation(error, '학과를 입력해주세요.', 'sf-major');
       return;
     }
     if (gpa != null && (isNaN(gpa) || gpa < 0 || gpa > gpaMax)) {
-      error.textContent = `학점은 0 ~ ${gpaMax} 사이여야 합니다.`;
-      error.style.display = 'block';
+      failValidation(error, `학점은 0 ~ ${gpaMax} 사이여야 합니다.`, 'sf-gpa');
       return;
     }
 
@@ -1614,8 +1637,7 @@ window.SpecForm = (() => {
 
     const scoreErr = validateScores();
     if (scoreErr) {
-      error.textContent = scoreErr;
-      error.style.display = 'block';
+      failValidation(error, scoreErr, 'sf-lang-list');
       return;
     }
     const scores = collectScores();
@@ -1641,7 +1663,9 @@ window.SpecForm = (() => {
           : { interestCompanies: [...interestState] }),
       });
     } catch (e) {
-      alert('저장에 실패했습니다. ' + e.message);
+      /* 서버가 거절한 경우다. 검증 실패와 같은 자리(토스트 + 상자)로 알린다 —
+         alert 창은 확인을 눌러야 사라지는데다, 어느 칸이 문제인지도 못 알려준다. */
+      failValidation(error, `저장하지 못했어요 — ${e.message}`);
       return;
     } finally {
       saveBtn.disabled = false;

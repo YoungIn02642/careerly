@@ -11,9 +11,11 @@
    화면에서 카드만 빠진다. 자소서 코치의 본체(역량 카드)는 DART 와 무관하게
    완성되므로, 키 하나 때문에 기능 전체가 멈추면 안 된다.
 
-   ── 상장사만 된다 (한계를 숨기지 않는다) ──
-   DART 는 공시 대상 법인의 자료다. 비상장사·스타트업·공공기관은 재무가 없다.
-   그 경우 null 을 주고 화면이 "비상장이라 공시 자료가 없다"고 밝힌다.
+   ── 비상장사는 '개황까지' 된다 (한계를 숨기지 않는다) ──
+   재무(사업보고서)는 상장사만 있다. 하지만 **기업개황은 비상장 공시대상 법인도
+   전부 열려 있다** — 업종·설립연도·대표·본사·홈페이지. 예전에는 캐시를 상장사로만
+   만들어 놓아서 캐논코리아 같은 비상장 자회사가 통째로 "공시 자료 없음" 이었다.
+   지금은 공시대상 전체를 캐시하고, 재무가 없는 회사는 note 로 그 사실을 밝힌다.
    없는 것을 추정해서 채우면 학생이 그 숫자를 자소서에 쓴다.
 
    ── 경쟁사는 왜 캐시가 필요한가 ──
@@ -60,7 +62,14 @@ function corps() {
 }
 
 /* 회사명 → 고유번호. 정규화는 company-classify 의 것을 그대로 쓴다
-   (표기 흔들림 규칙이 두 벌이 되면 한쪽만 고쳐지는 일이 생긴다 — 단일 출처). */
+   (표기 흔들림 규칙이 두 벌이 되면 한쪽만 고쳐지는 일이 생긴다 — 단일 출처).
+
+   ── 동명이인은 상장사가 이긴다 ──
+   캐시가 공시대상 전체로 바뀌면서(비상장 대기업 자회사를 넣기 위해) 이름이 겹치는
+   회사가 7,957쌍 생겼다. 그중 419건은 **상장사와 같은 이름의 비상장 법인**이다
+   ('신한'·'하나은행'·'쇼박스'…). 먼저 들어온 것을 쓰면 학생이 아는 회사 대신
+   이름만 같은 소규모 법인의 개황이 뜬다 — 자소서에 남의 회사 재무를 쓰게 된다.
+   상장사를 우선한다(그쪽이 학생이 검색하는 회사일 확률이 압도적으로 높다). */
 let _byName = null;
 function nameIndex() {
   if (_byName) return _byName;
@@ -68,16 +77,62 @@ function nameIndex() {
   _byName = new Map();
   for (const corp of (c && c.corps) || []) {
     const key = normalize(corp.name);
-    if (key && !_byName.has(key)) _byName.set(key, corp);
+    if (!key) continue;
+    const prev = _byName.get(key);
+    if (!prev || (!prev.stock && corp.stock)) _byName.set(key, corp);
   }
   return _byName;
 }
+
+/* ── 사람이 쓰는 이름 → DART 등록명 ──────────────────────────
+   DART 는 법인 등기명으로 등록돼 있어서, 학생이 아는 이름과 다른 회사가 꽤 있다.
+   실측(흔한 회사 29곳 중 9곳이 조회 실패):
+     네이버 → NAVER · 포스코 → POSCO홀딩스 · KT → 케이티 · 엔씨소프트 → NC
+   이 회사들은 캐시에 **있는데도** 이름이 달라서 못 찾았고, 화면에는 "공시 대상
+   기업 목록에서 찾지 못했습니다" 가 떴다. 첫 화면 추천 목록에 네이버가 있으니
+   눌러 보면 바로 깨진다.
+
+   기계적으로 풀 방법이 없다(등기명은 규칙이 아니라 회사가 정한 이름이다).
+   자주 쓰는 것만 손으로 적어 둔다 — 여기 없는 회사는 지금처럼 검색으로 찾는다.
+
+   normalize() 는 대소문자를 건드리지 않으므로(company-classify.js) 여기서는
+   소문자 키로 적고 찾을 때도 소문자로 맞춘다 — 'KT' 와 'kt' 가 갈리면 안 된다.
+
+   캐시를 공시대상 전체로 넓히면서 비상장사(쿠팡·우아한형제들·컬리…)는 대부분
+   저절로 잡히게 됐다. 남는 것은 **브랜드 이름과 법인명이 다른 회사**뿐이라
+   여기 적는다 — 학생은 '토스'로 검색하지 '비바리퍼블리카'로 검색하지 않는다. */
+const ALIASES = {
+  '네이버': 'NAVER',
+  '포스코': 'POSCO홀딩스',
+  'kt': '케이티',
+  '엔씨소프트': 'NC',
+  '엔씨': 'NC',
+  '기아자동차': '기아',
+  '현대차': '현대자동차',
+  '카카오톡': '카카오',
+  '토스': '비바리퍼블리카',
+  '배달의민족': '우아한형제들',
+  '배민': '우아한형제들',
+  '당근': '당근마켓',
+  '한국타이어': '한국타이어앤테크놀로지',
+  '마켓컬리': '컬리',
+  '오늘의집': '버킷플레이스',
+  '삼성sds': '삼성에스디에스',
+  '올리브영': '씨제이올리브영',
+  'cj올리브영': '씨제이올리브영',
+  '스타벅스': '에스씨케이컴퍼니',
+  '스타벅스코리아': '에스씨케이컴퍼니',
+  '현대오일뱅크': '에이치디현대오일뱅크',
+};
 
 function findCorp(name) {
   const key = normalize(name);
   if (!key) return null;
   const idx = nameIndex();
-  return idx.get(key) || null;
+  if (idx.has(key)) return idx.get(key);
+
+  const alias = ALIASES[key.toLowerCase()];
+  return (alias && idx.get(normalize(alias))) || null;
 }
 
 /* ── HTTP ────────────────────────────────────────────────────
@@ -109,13 +164,23 @@ async function callDart(endpoint, params) {
 async function profile(corpCode) {
   const d = await callDart('company.json', { corp_code: corpCode });
   if (!d) return null;
+  /* 기업개황이 주는 값 중 예전에는 6개만 썼다. 나머지도 학생이 실제로 쓰는 정보라
+     같이 올린다 — 특히 **IR 홈페이지**가 중요하다. 부문별 매출 비중은 오픈API 에
+     없고(companyAnalysis.js 조사 주석) 사업보고서 본문에만 글로 있는데, IR 자료에는
+     그 표가 거의 항상 있다. 우리가 못 채우는 칸을 "여기서 보라"로 연결할 수 있다. */
+  const cls = { Y: '유가증권', K: '코스닥', N: '코넥스', E: '기타법인' };
   return {
     name: d.corp_name || null,
+    nameEng: d.corp_name_eng || null,
     industryCode: d.induty_code || null,
     established: d.est_dt || null,          // YYYYMMDD
     stockCode: (d.stock_code || '').trim() || null,
+    market: cls[d.corp_cls] || null,        // 유가/코스닥/코넥스/기타
     ceo: d.ceo_nm || null,
+    address: d.adres || null,               // 본사 위치 — 근무지를 가늠하는 값
     homepage: d.hm_url || null,
+    irUrl: d.ir_url || null,                // 사업부문별 매출·전략이 여기 있다
+    settlementMonth: d.acc_mt || null,      // 결산월 — 채용 시기와 실적 발표 시기의 기준
     listed: Boolean((d.stock_code || '').trim()),
   };
 }
@@ -310,7 +375,7 @@ async function analyze(name) {
     return {
       available: false,
       reason: corps() ? '공시 대상 기업 목록에서 찾지 못했습니다(비상장이거나 표기가 다를 수 있습니다).'
-                      : '기업 캐시가 없습니다. scripts/fetch-dart-corps.js 를 먼저 실행하세요.',
+                      : '기업 색인이 없습니다. 저장소 루트에서 npm run build 를 실행하세요(깃에 넣지 않는 파일입니다).',
       profile: null, financials: null, competitors: [],
     };
   }

@@ -12,6 +12,7 @@ const { CORP_TYPE_ID } = require('./company-classify');
 /* 카탈로그 조회는 DB 에서 한다. 파일 기반 모듈(cert-catalog·major-catalog·
    company-classify·wage-jobs)은 수집·이관 전용으로 남는다 — catalog-db.js 머리주석 참고. */
 const catalog = require('./catalog-db');
+const sectors = require('./company-sectors');
 const OAuth = require('./oauth');
 const NiceAuth = require('./nice-auth');
 const recommendationsRouter = require("./routes/recommendations");
@@ -831,6 +832,13 @@ app.get('/api/company/suggest', ah(async (req, res) => {
 // 분류 캐시 상태 — 배치를 돌렸는지 확인용
 app.get('/api/company/stats', ah(async (req, res) => res.json(await catalog.companyStats())));
 
+/* 계열별 기업 목록 — 회사 찾기 첫 화면. 캐시 파일만 읽으므로 빠르다.
+   내용이 하루에 바뀌는 자료가 아니라 ETag 재검증에 맡긴다(/api/jobs 와 같은 규약). */
+app.get('/api/company/sectors', (req, res) => {
+  res.set('Cache-Control', 'no-cache');
+  res.json(sectors.sectors());
+});
+
 /* ── 자격증 카탈로그 ────────────────────────────────────────────
    스펙 입력 화면의 자격증 선택 목록. 국가자격(큐넷 API 캐시) + 민간자격(수기).
    650종 남짓 · 60KB 정도라 페이징 없이 통째로 준다 — 프론트가 한 번 받아
@@ -1068,7 +1076,14 @@ assertConnection()
         + `네이버로그인 ${on(process.env.NAVER_LOGIN_CLIENT_ID)} · `
         + `카카오로그인 ${on(process.env.KAKAO_REST_API_KEY)} · `
         + `AI ${on(process.env.GROQ_API_KEY)} · `
-        + `뉴스 ${require('./news').provider()}`);
+        + `뉴스 ${require('./news').provider()} · `
+        /* 기업 색인(dart-corps.json)은 깃에 없다 — 빌드에서 받는다(.gitignore 참고).
+           클론만 하고 npm run build 를 안 돌리면 기업분석이 통째로 빈 채로 뜨는데,
+           화면만 봐서는 "DART 가 자료를 안 준다"로 보인다. 그래서 여기서 밝힌다.
+           파일을 읽지는 않는다 — 6MB 를 부팅에 파싱할 이유가 없다(첫 요청 때 읽는다). */
+        + `기업분석 ${!process.env.DART_API_KEY ? '꺼짐(키 없음)'
+            : require('fs').existsSync(require('./dart').CORPS_PATH) ? '켜짐'
+            : '색인 없음 — npm run build'}`);
     });
   })
   .catch((e) => {

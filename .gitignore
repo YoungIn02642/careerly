@@ -4,8 +4,20 @@ backend/node_modules/
 .env
 backend/.env
 
+# Claude Code 개인 설정. 허용 명령 목록에 접속 문자열이 그대로 들어가는 일이 있어
+# (실제로 운영 MYSQL_URL 이 들어 있었다) 절대 커밋하지 않는다.
+# .claude/launch.json 은 팀이 공유하는 실행 설정이라 커밋한다.
+.claude/settings.local.json
+
 data/db.json
 backend/data/db.json
+
+# DART 고유번호 색인. 커밋하지 않는다 — 공시대상 전체 11만여 건이라 6MB 이고,
+# 다시 받을 때마다 그 크기가 히스토리에 통째로 쌓인다. 우리가 만든 자료가 아니라
+# DART 가 매일 주는 원본이라 받아 오면 그만이다.
+#   배포: 빌드 단계에서 자동 (루트 package.json 의 build)
+#   로컬: npm run build   (키가 없으면 건너뛴다 — 기업분석만 빈다)
+backend/data/dart-corps.json
 
 backend/data/users.json
 backend/data/profiles.json

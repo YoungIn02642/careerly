@@ -182,8 +182,20 @@ router.post('/draft', async (req, res) => {
   try {
     /* num_predict 를 넉넉히 준다 — 문단 + 빈칸 안내 + 검토까지 한 응답에 담기므로
        기본값(512)이면 JSON 이 중간에 잘려서 파싱이 통째로 실패한다. */
-    const raw = await callModel(prompt, DRAFT.SYSTEM, { num_ctx: 8192, num_predict: 1100 });
-    const out = DRAFT.parseDraft(raw);
+    const ask = async () => DRAFT.parseDraft(
+      await callModel(prompt, DRAFT.SYSTEM, { num_ctx: 8192, num_predict: 1100 }));
+
+    let out = await ask();
+    /* 한국어가 아닌 글자가 섞이면 한 번만 다시 부른다. 실측으로 8회 중 1회꼴이라
+       (일본어·중국어·베트남어) 한 번 더 부르면 사실상 사라진다. Groq 는 1초대라
+       재시도 비용이 사용자가 느낄 정도가 아니다. 두 번째도 섞이면 그대로 내보내되,
+       화면의 검사기가 잡을 수 있게 flag 를 함께 준다. */
+    if (DRAFT.hasForeign(out)) {
+      const retry = await ask().catch(() => null);
+      if (retry && !DRAFT.hasForeign(retry)) out = retry;
+      else if (retry) out = { ...retry, foreignWarning: true };
+      else out = { ...out, foreignWarning: true };
+    }
     res.json({ ...out, model: modelLabel(), provider: PROVIDER });
   } catch (e) {
     const status = e?.status || 502;

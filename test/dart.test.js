@@ -56,6 +56,35 @@ function finish() {
        Math.abs(DART.SIZE_LOW * DART.SIZE_HIGH - 0.9) < 1e-9,
        `→ ${DART.SIZE_LOW}~${DART.SIZE_HIGH}배`);
 
+    /* 캐시가 상장사(3,981건)에서 공시대상 전체(118,000여 건)로 넓어졌다.
+       비상장 자회사(캐논코리아)가 "공시 자료 없음"으로 뜨던 문제 때문인데,
+       대신 이름이 겹치는 회사가 생겼다 — 그 두 가지를 같이 지킨다.
+       네트워크는 타지 않는다(캐시 파일만 읽는다). */
+    console.log('\n── 6. 이름 색인 — 비상장사도 찾고, 동명이인은 상장사가 이긴다 ──');
+    const st2 = DART.status();
+    if (st2.cached > 10000) {
+      const canon = DART.findCorp('캐논코리아');
+      ok('비상장 자회사를 찾는다 (캐논코리아)', canon && canon.code === '00120580');
+      for (const [n, code] of [['쿠팡', '01019166'], ['우아한형제들', '01063273']]) {
+        const c = DART.findCorp(n);
+        ok(`비상장 ${n}`, c && c.code === code, c ? `→ ${c.name}` : '→ 못 찾음');
+      }
+      /* 이름이 같은 비상장 법인이 상장사를 가리면 남의 회사 재무를 자소서에 쓰게 된다. */
+      for (const n of ['신한', '하나은행', '쇼박스', '삼성전자']) {
+        const c = DART.findCorp(n);
+        ok(`동명이인이 있어도 상장사로 잡힌다: ${n}`, Boolean(c && c.stock), c ? `→ ${c.name}` : '→ 못 찾음');
+      }
+      console.log('\n── 7. 브랜드 이름 → 법인명 ──');
+      for (const [brand, legal] of [['토스', '비바리퍼블리카'], ['배달의민족', '우아한형제들'],
+                                    ['삼성SDS', '삼성에스디에스'], ['한국타이어', '한국타이어앤테크놀로지'],
+                                    ['네이버', 'NAVER']]) {
+        const c = DART.findCorp(brand);
+        ok(`${brand} → ${legal}`, Boolean(c && c.name === legal), c ? `→ ${c.name}` : '→ 못 찾음');
+      }
+    } else {
+      console.log(`  SKIP  전체 캐시가 없습니다(${st2.cached}건). scripts/fetch-dart-corps.js 를 실행하세요.`);
+    }
+
     console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
     process.exit(fail ? 1 : 0);
   });

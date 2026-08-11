@@ -142,7 +142,7 @@ if (!KEY) throw new Error('DATA_GO_KR_SERVICE_KEY 가 .env 에 없습니다.');
    ▼  POST /api/cas/analyze  { text }
 서버    src/routes/casAnalyze.js
    │      .env 의 CAS_AI_PROVIDER 설정을 보고 어디로 보낼지 정함
-   │        ├─ ollama (기본) → 내 컴퓨터에 깔린 AI
+   │        └─ groq → Groq 클라우드 (유일한 경로)
    │        └─ groq          → 인터넷 AI
    │
    ▼  AI 가 답을 반드시 JSON 형식으로 주도록 강제
@@ -232,8 +232,8 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 |---|---|---|
 | `DATA_GO_KR_SERVICE_KEY` | 방식 A 에 필요 | 공공데이터포털. 계정당 하나로 승인된 API 전부 사용 |
 | `WORK24_API_KEY` | 선택 | 고용24. 비워두면 중견기업 자동판정만 빠지고 나머지는 정상 |
-| `CAS_AI_PROVIDER` | 선택 | `ollama`(기본) 또는 `groq` |
-| `OLLAMA_HOST` / `OLLAMA_MODEL` | 선택 | 기본값 `http://127.0.0.1:11434` / `qwen3:8b` |
+| ~~`CAS_AI_PROVIDER`~~ | 폐지 | 2026-08 부터 Groq 전용이라 쓰지 않는다 |
+| ~~`OLLAMA_HOST` / `OLLAMA_MODEL`~~ | 폐지 | Ollama 경로 제거 |
 | `CAS_AI_TIMEOUT_MS` | 선택 | AI 대기 상한. 기본 4분 |
 | `NODE_ENV` / `ALLOWED_ORIGINS` | 배포할 때 | 아래 "배포 시 주의" 참고 |
 
