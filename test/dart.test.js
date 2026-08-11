@@ -74,6 +74,16 @@ function finish() {
         const c = DART.findCorp(n);
         ok(`동명이인이 있어도 상장사로 잡힌다: ${n}`, Boolean(c && c.stock), c ? `→ ${c.name}` : '→ 못 찾음');
       }
+      /* 업종코드는 이름 색인과 다른 파일(dart-industry.json)에 있고, 그쪽만 깃에 들어간다.
+         한 파일에 같이 뒀을 때 색인을 .gitignore 에 넣자 업종코드가 같이 사라져서
+         **배포에서** 계열별 둘러보기가 0곳, 경쟁사가 0곳으로 나갔다(로컬은 멀쩡했다 —
+         로컬 파일에는 남아 있었으니까). 파일이 갈라져 있는지, 합쳐서 읽는지를 지킨다. */
+      ok('업종코드가 이름 색인 밖에서 붙는다', st2.withIndustry > 3000,
+         `→ ${st2.withIndustry.toLocaleString()}건`);
+      const listedNoIndustry = DART.allCorps().filter(c => c.stock && !c.industry).length;
+      ok('상장사는 대부분 업종코드가 있다', listedNoIndustry < 200,
+         `→ 없는 상장사 ${listedNoIndustry}곳`);
+
       console.log('\n── 7. 브랜드 이름 → 법인명 ──');
       for (const [brand, legal] of [['토스', '비바리퍼블리카'], ['배달의민족', '우아한형제들'],
                                     ['삼성SDS', '삼성에스디에스'], ['한국타이어', '한국타이어앤테크놀로지'],

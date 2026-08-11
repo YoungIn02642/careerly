@@ -23,10 +23,11 @@
    전체 118,000여 건 = 약 6MB. 자주 바뀌는 파일이 아니라 캐시로 들고 있어도 된다.
    상장사만 받고 싶으면 --listed-only.
 
-   ── 업종코드는 지우지 않는다 ──
-   업종코드(build-dart-industry.js)는 회사마다 API 를 한 번씩 불러 채운 값이라
-   3,981번의 호출이 들어 있다. 다시 받을 때 통째로 덮어쓰면 그게 날아간다 —
-   기존 파일의 industry 를 고유번호로 물려받는다.
+   ── 업종코드는 여기 없다 ──
+   업종코드는 `data/dart-industry.json` 에 따로 있다(build-dart-industry.js).
+   회사마다 API 를 한 번씩 불러 만든 값이라 다시 만드는 비용이 크고, 그래서
+   **깃에 넣는다.** 이 파일이 몇 번 다시 받히든 그쪽은 건드리지 않는다 —
+   예전에 한 파일에 같이 뒀다가 이 파일을 깃에서 빼면서 업종코드가 같이 사라졌다.
 
    ── 결과 파일은 깃에 없다 ──
    `backend/data/dart-corps.json` 은 .gitignore 에 있다. 6MB 짜리가 받을 때마다
@@ -147,21 +148,6 @@ async function main() {
   const all = parseCorps(unzipFirstFile(buf).toString('utf8'));
   const corps = ALL ? all : all.filter(c => c.stock);
 
-  /* 이전 파일의 업종코드를 물려받는다 — 다시 채우려면 회사마다 API 를 한 번씩 부른다. */
-  let inherited = 0;
-  if (fs.existsSync(OUT_PATH)) {
-    try {
-      const prev = JSON.parse(fs.readFileSync(OUT_PATH, 'utf8'));
-      const byCode = new Map(((prev && prev.corps) || []).map(c => [c.code, c.industry]));
-      for (const c of corps) {
-        const ind = byCode.get(c.code);
-        if (ind) { c.industry = ind; inherited++; }
-      }
-    } catch (e) {
-      console.warn(`  이전 캐시를 읽지 못해 업종코드를 물려받지 못했습니다: ${e.message}`);
-    }
-  }
-
   /* 상장사를 앞에 둔다. 이름이 겹치는 회사가 7,957쌍이나 되는데(비상장 동명이인),
      이름 색인은 먼저 나온 것을 쓴다 — 순서를 안 정하면 '신한'·'하나은행' 같은 이름이
      이름만 같은 소규모 법인으로 잡힌다. dart.js 도 색인을 만들 때 한 번 더 거른다. */
@@ -178,9 +164,19 @@ async function main() {
   }, null, ALL ? 0 : 2));
 
   console.log(`\n공시대상 전체 ${all.length.toLocaleString()}건 중 ${ALL ? '전부' : '상장사'} ${corps.length.toLocaleString()}건 저장`);
-  if (inherited) console.log(`  업종코드 ${inherited.toLocaleString()}건은 이전 캐시에서 물려받았습니다.`);
   console.log(`→ ${OUT_PATH}`);
-  console.log('\n다음: node scripts/build-dart-industry.js   (업종코드를 채워야 경쟁사 비교가 동작합니다)');
+
+  /* 업종코드는 별도 파일이고 깃에 들어 있다. 이미 있으면 아무것도 더 할 게 없다 —
+     예전 안내("다음: build-dart-industry.js")를 그대로 두면 매번 8분짜리 작업을
+     다시 돌리게 된다. */
+  const industryPath = path.join(__dirname, '..', 'data', 'dart-industry.json');
+  if (fs.existsSync(industryPath)) {
+    const n = (JSON.parse(fs.readFileSync(industryPath, 'utf8')) || {}).total || 0;
+    console.log(`업종코드 ${n.toLocaleString()}건은 dart-industry.json 에 이미 있습니다(깃에 포함).`);
+  } else {
+    console.log('\n업종코드가 없습니다 — node scripts/build-dart-industry.js 를 실행하세요.');
+    console.log('  (없으면 경쟁사 목록과 계열별 둘러보기가 빕니다)');
+  }
 }
 
 main().catch(e => {
