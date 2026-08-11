@@ -17,7 +17,6 @@
 const { query, queryOne } = require('./mysql');
 const { normalize, CORP_TYPE_ID, DEFAULT_TYPE } = require('./company-classify');
 const { RULES } = require('./major-catalog');
-const jobFilter = require('./job-filter');
 
 /* LIKE 특수문자 무력화. 백슬래시도 함께 막아야 '\%' 같은 입력이 새지 않는다. */
 const esc = s => String(s || '').replace(/[\\%_]/g, c => '\\' + c);
@@ -200,11 +199,21 @@ async function jobCatalog() {
     });
   });
 
-  /* 대학생 취업 선택지가 아닌 분류·직업을 걸러낸다(job-filter.js).
-     DB 에는 공식 분류 원본을 그대로 두고 **내보낼 때만** 거른다 — 기준이 바뀌면
-     그 파일의 목록만 고치면 되고, 다시 수집할 필요가 없다.
-     커리어 로드맵과 스펙 입력이 둘 다 이 응답을 쓰므로 여기 한 곳이면 양쪽이 같아진다. */
-  _jobTree = jobFilter.filterTree({
+  /* ── 분류를 거르지 않고 그대로 내보낸다 (2026-08-11, 사용자 결정) ──
+     한동안 job-filter.js 로 '대학생 취업 선택지가 아닌' 분류를 빼고 내보냈다
+     (10·35·461 → 7·19·282). 임원·청소·단순생산·농림어업 같은 칸이다.
+     되돌린 이유는 그 판단이 careerly 가 대신할 일이 아니어서다 — 임금직업정보시스템이
+     공식 분류로 주는 목록을 우리가 줄이면, 특성화고 출신·전과 준비생처럼 그 칸을
+     실제로 고르는 사람이 **자기 직업이 목록에 없는** 화면을 보게 된다.
+
+     거르는 판단은 job-filter.js 에 그대로 남겨 뒀다(지우지 않았다) — 다시 켜려면
+     이 아래 객체를 jobFilter.filterTree(…) 로 감싸면 된다. 그 파일이 무엇을 왜
+     뺐는지가 되살릴 때 필요한 기록이다.
+
+     **여기 한 곳이 로드맵과 스펙 입력을 동시에 정한다.** 화면만 늘리고 저장 검증
+     (server.js 의 jobMajor·jobMiddles 확인)이 예전 목록을 보면, 학생이 고를 수는
+     있는데 저장은 400 으로 떨어진다. */
+  _jobTree = {
     empty: false,
     counts: { majors: majors.length, middles: middles.length, jobs: jobs.length },
     wageUnit: '만원',
@@ -212,7 +221,7 @@ async function jobCatalog() {
       code: M.code, no: M.no, name: M.name, emoji: M.emoji, desc: M.descr,
       middles: midsByMajor.get(M.code) || [],
     })),
-  });
+  };
   return _jobTree;
 }
 
