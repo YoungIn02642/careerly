@@ -8,13 +8,18 @@
     "  - routes/casAnalyze.js 가 frontend/js/cas.js 를 읽는다 (배점 상수의 단일 출처)",
     "  - server.js 가 express.static 으로 frontend/ 를 통째로 서빙한다",
     "backend 만 올렸다가 'Cannot find module ../../../frontend/js/cas.js' 로 죽었다.",
-    "workspaces 를 쓰면 루트에서 npm ci 한 번으로 backend 의존성까지 깔린다."
+    "workspaces 를 쓰면 루트에서 npm ci 한 번으로 backend 의존성까지 깔린다.",
+    "",
+    "build 는 DART 기업 색인(6MB)을 받는 단계다. 깃에 넣지 않고 배포 때마다 받는다",
+    "(.gitignore 참고). 키가 없거나 DART 가 죽어 있으면 건너뛰고 배포는 계속된다 —",
+    "그때는 기업분석의 개요·재무·경쟁사 칸만 비고 나머지 기능은 멀쩡하다."
   ],
   "workspaces": [
     "backend"
   ],
   "scripts": {
     "start": "node backend/src/server.js",
+    "build": "node backend/scripts/fetch-dart-corps.js --if-possible",
     "dev": "npm --workspace backend run dev",
     "test": "for f in test/*.test.js; do node \"$f\" | tail -1; done"
   },

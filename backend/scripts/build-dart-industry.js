@@ -48,14 +48,21 @@ async function main() {
 
   const file = JSON.parse(fs.readFileSync(DART.CORPS_PATH, 'utf8'));
   const corps = file.corps || [];
-  const todo = corps.filter(c => FORCE || !c.industry).slice(0, LIMIT);
+  /* 상장사만 채운다. 캐시가 공시대상 전체(11만여 건)로 바뀌면서 전부 돌리면
+     DART 일일 한도(20,000건)로 엿새가 걸린다. 업종코드를 쓰는 곳은 경쟁사 목록
+     하나뿐이고, 경쟁사 후보는 어차피 상장사다(비상장은 매출 비교가 불가능하다).
+     비상장사도 채우려면 --unlisted. */
+  const scope = process.argv.includes('--unlisted') ? corps : corps.filter(c => c.stock);
+  const todo = scope.filter(c => FORCE || !c.industry).slice(0, LIMIT);
 
-  console.log(`대상 ${todo.length.toLocaleString()}건 / 전체 ${corps.length.toLocaleString()}건`);
+  console.log(`대상 ${todo.length.toLocaleString()}건 / 상장사 ${corps.filter(c => c.stock).length.toLocaleString()}건 / 전체 ${corps.length.toLocaleString()}건`);
   if (!todo.length) { console.log('채울 것이 없습니다. --force 로 다시 받을 수 있습니다.'); return; }
 
+  /* 들여쓰기는 상장사 캐시(작다)일 때만. 전체 캐시를 들여쓰면 6MB 가 10MB 가 된다. */
+  const indent = file.scope === 'all' ? 0 : 2;
   const save = () => {
     file.industryBuiltAt = new Date().toISOString();
-    fs.writeFileSync(DART.CORPS_PATH, JSON.stringify(file, null, 2));
+    fs.writeFileSync(DART.CORPS_PATH, JSON.stringify(file, null, indent));
   };
 
   let done = 0, filled = 0, missing = 0;

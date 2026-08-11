@@ -66,7 +66,7 @@ let _cache = null;
    없다(수집 스크립트를 돌리기 전에는 내용도 안 바뀐다). */
 function build() {
   const corps = (readJson('dart-corps.json') || {}).corps || [];
-  if (!corps.length) return { sectors: [], total: 0, reason: 'DART 기업 캐시가 없습니다. scripts/fetch-dart-corps.js 를 먼저 실행하세요.' };
+  if (!corps.length) return { sectors: [], total: 0, reason: 'DART 기업 색인이 없습니다. 저장소 루트에서 npm run build 를 실행하세요(깃에 넣지 않는 파일입니다).' };
 
   const known = new Set([
     ...asArray(readJson('ftc-large-groups.json')).map(x => norm(x.name)),
