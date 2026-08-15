@@ -2061,3 +2061,132 @@ body.nav-drawer-open { overflow: hidden; }
 .auth-page-sub {
   margin: -6px 0 18px; font-size: 13px; color: var(--text-s); line-height: 1.6; text-align: center;
 }
+
+/* ════════════════════════════════════════════════════════════
+   커리어 로드맵 — 네 화면 공통 스텝바 + 단계 전환 블록
+
+   직무 찾기 · CAS · 회사 찾기 · 자소서 코치는 각자 다른 레이아웃(사이드바형 ·
+   문서형 · 검색형)이라, 공통 요소는 **폭을 자기가 정하지 않는다.** 부모의 폭을
+   그대로 받아 가로줄만 긋는다 — 그래야 네 화면에서 같은 줄로 보인다.
+   ════════════════════════════════════════════════════════════ */
+.rm-bar {
+  width: 100%;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.rm-bar-inner {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 10px clamp(16px, 4vw, 32px);
+}
+.rm-bar-title {
+  flex: none; font-size: 12px; font-weight: 800; letter-spacing: .02em;
+  color: var(--text-m); text-transform: none;
+}
+.rm-steps { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+
+.rm-step {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 11px; border: 0; border-radius: 999px;
+  background: transparent; color: var(--text-m);
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  white-space: nowrap;
+}
+.rm-step:hover { background: var(--surface-2); color: var(--ink); }
+.rm-step-no {
+  display: grid; place-items: center; flex: none;
+  width: 19px; height: 19px; border-radius: 999px;
+  background: var(--border); color: var(--text-s);
+  font-family: var(--font-num); font-size: 11px; font-weight: 800;
+}
+.rm-step.is-active { background: var(--ink); color: #fff; }
+.rm-step.is-active .rm-step-no { background: rgba(255,255,255,.24); color: #fff; }
+.rm-step.is-done { color: var(--ink); }
+.rm-step.is-done .rm-step-no { background: var(--acc-green); color: #fff; }
+/* 아직 직무를 안 고른 상태 — 막지는 않고 흐리게만 둔다(roadmap.js stepBar 주석) */
+.rm-step.is-waiting { opacity: .45; }
+.rm-step.is-waiting:hover { opacity: 1; }
+.rm-step-sep {
+  width: 14px; height: 1px; flex: none; background: var(--hairline);
+}
+
+.rm-goal {
+  display: inline-flex; align-items: center; gap: 6px; margin-left: auto;
+  padding: 5px 10px 5px 9px; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--surface-2); font-size: 12.5px; color: var(--text-s);
+  max-width: 100%; overflow: hidden;
+}
+.rm-goal i { color: var(--brand); font-size: 14px; }
+.rm-goal b { color: var(--ink); font-weight: 700; }
+.rm-goal-sub, .rm-goal-co { color: var(--text-m); }
+.rm-goal a {
+  margin-left: 2px; padding-left: 8px; border-left: 1px solid var(--hairline);
+  color: var(--blue-info); font-weight: 600; cursor: pointer; text-decoration: none;
+}
+.rm-goal a:hover { text-decoration: underline; }
+.rm-goal--empty i { color: var(--text-m); }
+
+/* ── 다음 단계 블록 ────────────────────────────────────────
+   1단계 끝(직무 찾기)과 2단계 끝(CAS)에 붙는다. 흐름이 여기서 끊기지 않도록
+   "다음에 무엇을 하는지"를 문장으로 적고 버튼을 하나 준다. */
+.rm-next {
+  display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+  margin-top: 28px; padding: 22px 24px;
+  border: 1px solid var(--border); border-radius: 16px;
+  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
+}
+.rm-next-body { flex: 1 1 320px; min-width: 0; }
+.rm-next-eyebrow {
+  font-size: 11.5px; font-weight: 800; letter-spacing: .02em; color: var(--brand);
+  margin-bottom: 6px;
+}
+.rm-next h3 { font-size: 18px; font-weight: 800; color: var(--ink); margin-bottom: 6px; }
+.rm-next p { font-size: 13.5px; line-height: 1.65; color: var(--text-s); }
+.rm-next p b { color: var(--ink); font-weight: 700; }
+.rm-next-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.rm-next-btn {
+  display: inline-flex; align-items: center; gap: 7px; flex: none;
+  padding: 12px 18px; border: 1px solid var(--cta); border-radius: 10px;
+  background: var(--cta); color: #fff;
+  font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+}
+.rm-next-btn:hover { background: var(--cta-hover); border-color: var(--cta-hover); }
+.rm-next-btn--ghost {
+  background: transparent; color: var(--ink); border-color: var(--hairline);
+}
+.rm-next-btn--ghost:hover { background: var(--surface-2); border-color: var(--text-m); }
+.rm-next--muted { background: var(--surface-2); }
+.rm-next--fork { margin-top: 20px; }
+
+/* ── GAP 빈 상태 ───────────────────────────────────────────
+   '부족한 게 없다'와 '판정할 수 없다'는 전혀 다른 뜻이라 색으로도 가른다
+   (mentoring.js gapContext 주석). */
+.gap-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 32px 20px; text-align: center;
+}
+.gap-empty-ic { font-size: 30px; }
+.gap-empty-title { font-size: 15px; font-weight: 700; color: var(--ink); }
+.gap-empty-desc {
+  font-size: 13px; line-height: 1.65; color: var(--text-s); max-width: 460px;
+}
+.gap-empty--ok .gap-empty-title { color: var(--acc-green); }
+
+/* 직무 찾기(#career)만 레이아웃이 다르다 — 스텝바가 페이지 맨 위가 아니라
+   본문(.content, padding 28px) 안에 들어간다. 가로줄로 두면 안쪽에 파묻힌
+   짧은 선이 되므로 여기서만 카드로 앉힌다. 바로 아래 .phase-bar 와 같은 결. */
+.content > .rm-bar {
+  border: 1px solid var(--border); border-radius: 12px;
+  margin-bottom: 14px;
+}
+.content > .rm-bar .rm-bar-inner { padding: 8px 14px; }
+
+@media (max-width: 720px) {
+  .rm-bar-inner { gap: 10px; padding: 9px 16px; }
+  .rm-bar-title { width: 100%; }
+  .rm-steps { width: 100%; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
+  .rm-steps::-webkit-scrollbar { display: none; }
+  .rm-goal { margin-left: 0; }
+  .rm-next { padding: 18px; }
+  .rm-next-actions { width: 100%; }
+  .rm-next-btn { flex: 1 1 auto; justify-content: center; }
+}

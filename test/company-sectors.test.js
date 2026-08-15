@@ -50,5 +50,38 @@ if (!r.total) {
   ok('두 번째 호출이 같은 객체를 준다(캐시)', S.sectors() === r);
 }
 
+console.log('\n── 3. 직무(KECO 2차) → 계열 초점 ──');
+/* 커리어 로드맵 4단계가 쓴다. 이 매핑이 틀리면 "이 직무를 주로 뽑는 계열" 이
+   엉뚱한 곳을 가리키는데, 에러는 안 나고 목록만 이상해진다. */
+
+/* 오타 하나가 '해당 계열 0곳' 으로만 보이므로 이름을 전수 대조한다. */
+const names = new Set(S.SECTORS.map(([n]) => n));
+const typos = Object.entries(S.SECTORS_BY_MIDDLE)
+  .flatMap(([mid, list]) => list.filter(n => !names.has(n)).map(n => `${mid}:${n}`));
+ok('매핑에 적힌 계열 이름이 전부 SECTORS 에 있다', typos.length === 0, `→ ${typos.join(', ') || '오타 없음'}`);
+
+ok('정보통신 연구개발직(13) → IT·소프트웨어를 포함',
+   S.sectorFocus('13').sectors.includes('IT·소프트웨어'));
+ok('제조 연구개발직(15) → 자동차·반도체를 포함',
+   S.sectorFocus('15').sectors.includes('자동차·운송장비') && S.sectorFocus('15').sectors.includes('반도체·디스플레이'));
+ok('금융·보험직(03) → 금융·보험 한 곳', S.sectorFocus('03').sectors.join() === '금융·보험');
+ok('건설·채굴직(70) → 건설·부동산', S.sectorFocus('70').sectors.join() === '건설·부동산');
+
+/* universal 과 '모르는 직무' 를 구분하지 못하면 화면이 같은 빈 목록을 두 가지
+   다른 뜻으로 쓰게 된다 — 하나는 "전 업종", 하나는 "우리가 모른다". */
+ok('경영·사무직(02)은 universal — 억지로 좁히지 않는다',
+   S.sectorFocus('02').universal === true && S.sectorFocus('02').sectors.length === 0);
+ok('영업·판매직(61)도 universal', S.sectorFocus('61').universal === true);
+ok('군인(25)은 아는 직무지만 민간 계열이 없다',
+   S.sectorFocus('25').matched === true && S.sectorFocus('25').universal === false
+   && S.sectorFocus('25').sectors.length === 0);
+ok('모르는 코드는 matched:false', S.sectorFocus('99').matched === false);
+ok('빈 값도 matched:false', S.sectorFocus('').matched === false && S.sectorFocus(null).matched === false);
+
+/* 2차 분류는 34개(제조 단순직 89 포함 35개 중 직업 0개인 것 제외)다. 새 분류가
+   들어왔는데 매핑을 안 채우면 그 직무만 조용히 '모르는 직무' 가 된다. */
+ok('2차 분류를 빠짐없이 담았다', Object.keys(S.SECTORS_BY_MIDDLE).length >= 34,
+   `→ ${Object.keys(S.SECTORS_BY_MIDDLE).length}개`);
+
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
 process.exit(fail ? 1 : 0);

@@ -305,6 +305,11 @@ function onEnterMentoringPage(page){
   // #profile 로 직접 진입/새로고침하면 그릴 멘토가 없다 → 목록으로 되돌린다.
   if (page==='profile' && !currentMentor) { navigate('search'); return; }
   if (page==='dashboard') {
+    /* 스텝바는 로그인 게이트보다 먼저 건다. 게이트는 .wrap 만 가리므로 그 위의
+       스텝바는 그대로 보이는데, CASHero.render() 안에서만 그리면 로그아웃 상태에서
+       2단계 화면만 스텝바가 없는 화면이 된다. (CASHero 쪽 mount 는 직무를 바꿀 때
+       목표 칩을 다시 그리기 위한 것이라 둘 다 필요하다 — 통째로 교체라 겹쳐도 된다.) */
+    Roadmap.mount('rm-bar-dashboard', 'me');
     // 내 CAS 점수·비교·부족항목은 전부 '내 스펙' 기반이라 로그인이 없으면 보여줄 게 없다.
     if (!ensureLoginGate('page-dashboard', {
       title: '로그인하고 내 CAS 점수를 확인하세요',
@@ -411,39 +416,270 @@ function animateDashboard(){
   });
 }
 
-const GAP_DATA = {
-  cert: [
-    { ic:'📜', name:'정보처리기사', pill:'high', pillT:'필수', desc:'선배 92%가 보유 · 나는 미취득', pct:'미보유', lack:true },
-    { ic:'🗄️', name:'SQLD', pill:'mid', pillT:'권장', desc:'선배 74%가 보유 · 데이터 직무 가산점', pct:'미보유', lack:true },
-    { ic:'☁️', name:'AWS SAA', pill:'mid', pillT:'권장', desc:'선배 41%가 보유 · 클라우드 역량 입증', pct:'미보유', lack:true },
-  ],
-  activity: [
-    { ic:'💼', name:'현업 인턴십 경험', pill:'high', pillT:'중요', desc:'선배 71% 보유 · 나는 1회 (평균 2.1회)', pct:'-1회', lack:true },
-    { ic:'🌍', name:'교환학생·글로벌', pill:'mid', pillT:'선택', desc:'선배 28% 보유 · 어학+글로벌 경험 부족', pct:'미보유', lack:true },
-    { ic:'🤝', name:'장기 대외활동', pill:'mid', pillT:'권장', desc:'선배 평균 5건 · 나는 3건', pct:'-2건', lack:true },
-  ],
-  award: [
-    { ic:'🏆', name:'공모전·해커톤 수상', pill:'high', pillT:'중요', desc:'선배 평균 2.3회 · 나는 0회', pct:'-2.3회', lack:true },
-    { ic:'🎓', name:'성적 우수 장학', pill:'mid', pillT:'선택', desc:'선배 38% 보유 · 학업 성취 입증', pct:'미보유', lack:true },
-    { ic:'📈', name:'직무 프로젝트 성과', pill:'mid', pillT:'권장', desc:'정량 성과 지표가 있는 수상 1건 권장', pct:'미보유', lack:true },
-  ],
-};
-function renderGap(type){
-  $$('.gap-tab').forEach(t=>t.classList.toggle('on', t.dataset.gap===type));
-  const list = GAP_DATA[type];
-  $('#gap-list').innerHTML = list.map(g=>`
+/* ════════════════════════════════════════════════════════════
+   GAP — 목표 직무까지 나에게 부족한 항목
+
+   ── 목업이었다 ──
+   여기는 원래 하드코딩 배열이라 **누가 로그인하든 정보처리기사·SQLD·AWS SAA** 가
+   떴다. 취업 준비 순서를 이 목록을 보고 정하는 학생에게는 단순 미완성이 아니라
+   틀린 정보였다(8장 CEO 공개 선행조건 1번 · B4).
+
+   ── 무엇을 '부족' 이라 부르는가 (사용자 결정) ──
+   선배 데이터로만 판정한다. 우리가 중요하다고 생각하는 것이 아니라
+   **같은 직무로 간 선배들이 실제로 갖고 있는 것** 중 내게 없는 것이다.
+
+   | 탭 | 부족 판정 |
+   |---|---|
+   | 자격증 | 선배 보유율 ≥ 40% 인데 내 목록에 없다 |
+   | 활동·경험 | 선배 보유율 ≥ 40% 인 활동 유형인데 내 활동에 한 건도 없다 |
+   | 수상 경력 | 선배 보유율 ≥ 25% 인 성과 종류인데 내 활동 어디에도 그 성과가 없다 |
+
+   ── 표본이 적으면 판정하지 않는다 ──
+   3명 중 2명이 가졌다고 '67% 필수' 라고 적으면 실제보다 단단한 숫자로 읽힌다.
+   CAS 백분위(5명)·직무 트렌드(30건) 와 같은 원칙으로 **5명 미만이면 판정을 접고
+   왜 접었는지 적는다.** 성과는 문턱을 25% 로 낮추는데, 수상은 보유율 자체가
+   낮아서 40% 를 걸면 어느 직무에서도 아무것도 안 뜬다(그러면 '부족 없음' 으로
+   잘못 읽힌다).
+   ════════════════════════════════════════════════════════════ */
+const GAP_MIN_PEERS = 5;
+const GAP_RATE = { cert: 40, activity: 40, award: 25 };
+const GAP_MAX_ROWS = 6;
+
+/* 성과(outcome)는 활동에 붙는 배수라 유형별 보유율과 축이 다르다 — 따로 센다.
+   라벨은 CAS.OUTCOME_MULT 의 키와 1:1 이어야 한다(설문 선택지와 같은 말). */
+const GAP_OUTCOMES = [
+  { ic: '🏆', name: '공모전·대회 수상',      match: ['수상'],                                       help: '수상 이력은 CAS 성과 배수 ×1.3' },
+  { ic: '📄', name: '논문·연구 성과',        match: ['논문'],                                       help: '연구 경험의 결과물' },
+  { ic: '💼', name: '인턴 정규직 전환',      match: ['전환, 정규직 합격'],                          help: '가장 강한 성과 배수 ×1.4' },
+  { ic: '📦', name: '산출물 공개(깃헙 등)',  match: ['발표 또는 산출물 공개(깃헙 등)', '산출물 공개(깃헙 등)'], help: '결과를 남긴 활동' },
+];
+
+let currentGapType = 'cert';
+window.currentGapType = currentGapType;
+
+const gapEsc = s => String(s ?? '').replace(/[&<>"']/g,
+  c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/* 내 활동 목록 — 옛 boolean qual 스펙도 CAS 가 환산해 준다(단일 출처). */
+const myActivities = spec => (typeof CAS !== 'undefined' ? CAS.normalizeActivities(spec) : (spec?.activities || []));
+
+/* 한 스펙이 그 성과를 하나라도 가졌는가 */
+const hasOutcome = (spec, labels) =>
+  myActivities(spec).some(a => labels.includes(a.outcome));
+
+/* 중요도 칩 — 선배 보유율이 곧 중요도다. 우리가 '필수' 라고 정하는 게 아니라
+   "선배 몇 %가 갖고 있는가" 를 말로 바꾼 것뿐이다. */
+function gapPill(pct) {
+  if (pct >= 70) return { cls: 'high', text: '대부분 보유' };
+  if (pct >= 40) return { cls: 'mid',  text: '절반 이상' };
+  return { cls: 'mid', text: '일부 보유' };
+}
+
+/* ── 탭별 부족 항목 계산 ────────────────────────────────────── */
+function computeGaps(type, ctx) {
+  const { spec, agg } = ctx;
+  const min = GAP_RATE[type] ?? 40;
+
+  if (type === 'cert') {
+    const mine = new Set(spec?.certs || []);
+    return (agg.certs || [])
+      .filter(c => c.pct >= min && !mine.has(c.id))
+      .sort((a, b) => b.pct - a.pct)
+      .slice(0, GAP_MAX_ROWS)
+      .map(c => ({
+        ic: '📜', name: c.name, pct: c.pct,
+        desc: `선배 ${c.pct}%가 보유 (${c.n}명)${c.desc ? ` · ${c.desc}` : ''} · 나는 미보유`,
+        stat: '미보유',
+      }));
+  }
+
+  if (type === 'activity') {
+    const mineCount = {};
+    myActivities(spec).forEach(a => { mineCount[a.type] = (mineCount[a.type] || 0) + 1; });
+    return (agg.qual || [])
+      .filter(q => q.pct >= min && !mineCount[q.id])
+      .sort((a, b) => (a.tier ?? 9) - (b.tier ?? 9) || b.pct - a.pct)
+      .slice(0, GAP_MAX_ROWS)
+      .map(q => ({
+        ic: q.icon || '✨', name: q.label, pct: q.pct,
+        desc: `선배 ${q.pct}%가 경험 (${q.n}명) · ${q.help || ''} · 나는 없음`,
+        stat: '없음',
+      }));
+  }
+
+  // award — 성과 종류별
+  const peers = agg.specs || [];
+  return GAP_OUTCOMES
+    .map(o => {
+      const have = peers.filter(s => hasOutcome(s, o.match)).length;
+      return { ...o, pct: Math.round((have / peers.length) * 100), n: have };
+    })
+    .filter(o => o.pct >= min && !hasOutcome(spec, o.match))
+    .sort((a, b) => b.pct - a.pct)
+    .slice(0, GAP_MAX_ROWS)
+    .map(o => ({
+      ic: o.ic, name: o.name, pct: o.pct,
+      desc: `선배 ${o.pct}%가 보유 (${o.n}명) · ${o.help} · 나는 없음`,
+      stat: '없음',
+    }));
+}
+
+/* 판정을 할 수 있는 상태인가. 못 하면 '왜 못 하는지' 를 돌려준다 —
+   빈 목록만 보여주면 '부족한 게 없다' 로 읽힌다(정반대 뜻이다). */
+function gapContext() {
+  const ctx = window.CASDashboardContext;
+  if (!ctx || !ctx.agg) {
+    return { ok: false, icon: '🔒', title: '아직 판정할 수 없어요',
+             desc: DB.currentUser()
+               ? '스펙을 입력하면 같은 직무 선배와 비교해 부족한 항목을 찾아드려요.'
+               : '로그인하고 스펙을 입력하면 부족한 항목을 찾아드려요.' };
+  }
+  if (ctx.agg.count < GAP_MIN_PEERS) {
+    return { ok: false, icon: '📉', title: `선배 표본이 ${ctx.agg.count}명뿐이에요`,
+             desc: `${GAP_MIN_PEERS}명은 모여야 '몇 %가 갖고 있다'가 뜻을 가집니다. `
+                 + '표본이 적을 때 비율을 보여주면 실제보다 단단한 숫자로 읽혀서, 판정을 접어 뒀어요.' };
+  }
+  return { ok: true, ctx };
+}
+
+function renderGap(type) {
+  currentGapType = type;
+  window.currentGapType = type;
+  $$('.gap-tab').forEach(t => t.classList.toggle('on', t.dataset.gap === type));
+
+  const host = $('#gap-list');
+  const summary = $('#gap-summary');
+  if (!host) return;
+
+  const state = gapContext();
+  if (!state.ok) {
+    if (summary) summary.textContent = state.desc;
+    host.innerHTML = `
+      <div class="gap-empty">
+        <div class="gap-empty-ic">${state.icon}</div>
+        <div class="gap-empty-title">${gapEsc(state.title)}</div>
+        <div class="gap-empty-desc">${gapEsc(state.desc)}</div>
+      </div>`;
+    return;
+  }
+
+  const { ctx } = state;
+  const scope = ctx.scopeLabel || '내 직무';
+  const rows = computeGaps(type, ctx);
+
+  if (summary) {
+    summary.innerHTML = `<b>${gapEsc(scope)}</b> 선배 ${ctx.agg.count}명과 비교했어요. `
+      + `선배 보유율 ${GAP_RATE[type]}% 이상인 항목 중 내게 없는 것만 보여드립니다.`;
+  }
+
+  if (!rows.length) {
+    host.innerHTML = `
+      <div class="gap-empty gap-empty--ok">
+        <div class="gap-empty-ic">✅</div>
+        <div class="gap-empty-title">이 항목은 선배 평균만큼 채웠어요</div>
+        <div class="gap-empty-desc">${gapEsc(scope)} 선배 ${ctx.agg.count}명 중
+          ${GAP_RATE[type]}% 이상이 가진 것 가운데 빠진 게 없습니다.</div>
+      </div>`;
+    return;
+  }
+
+  host.innerHTML = rows.map(g => {
+    const p = gapPill(g.pct);
+    return `
     <div class="gap-item">
       <div class="gap-item-ic">${g.ic}</div>
       <div class="gap-item-body">
-        <div class="gap-item-name">${g.name} <span class="gap-pill ${g.pill}">${g.pillT}</span></div>
-        <div class="gap-item-desc">${g.desc}</div>
+        <div class="gap-item-name">${gapEsc(g.name)} <span class="gap-pill ${p.cls}">${p.text}</span></div>
+        <div class="gap-item-desc">${gapEsc(g.desc)}</div>
       </div>
       <div class="gap-item-stat">
-        <div class="pct ${g.lack?'lack':''}">${g.pct}</div>
-        <div class="lab">선배 평균 대비</div>
+        <div class="pct lack">${gapEsc(g.stat)}</div>
+        <div class="lab">선배 ${g.pct}%</div>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
+
+/* 세 탭을 통틀어 부족한 항목이 몇 개인지 — 아래 갈림길이 어느 쪽을 권할지 정한다. */
+function totalGapCount() {
+  const state = gapContext();
+  if (!state.ok) return null;                       // 판정 불가 — '없다'와 구분한다
+  return ['cert', 'activity', 'award']
+    .reduce((n, t) => n + computeGaps(t, state.ctx).length, 0);
+}
+
+/* ════════════════════════════════════════════════════════════
+   로드맵 2단계의 갈림길 — 스펙을 더 채울까, 지원할 회사를 찾을까
+
+   ── 어느 쪽도 막지 않는다 ──
+   부족한 항목이 있으면 '스펙 채우기' 를 주 버튼으로 두지만, '지원할 회사' 도
+   같이 보여준다. 스펙이 완벽해질 때까지 지원하지 말라는 말이 되면 안 된다 —
+   공고에는 마감일이 있고, 그 판단은 학생이 한다.
+   ════════════════════════════════════════════════════════════ */
+function renderRoadmapNext(mine, pct) {
+  const host = $('#cas-next');
+  if (!host) return;
+
+  const rm = Roadmap.get();
+  if (!rm) {
+    host.innerHTML = `
+      <div class="rm-next rm-next--muted">
+        <div class="rm-next-body">
+          <div class="rm-next-eyebrow">커리어 로드맵 1단계</div>
+          <h3>목표 직무를 먼저 골라 주세요</h3>
+          <p>직무를 고르면 그 직무 선배와 비교해 점수를 다시 계산하고,
+             부족한 항목과 지원할 회사까지 이어서 안내해 드려요.</p>
+        </div>
+        <button type="button" class="rm-next-btn" onclick="navigate('career')">
+          직무 찾기 <i class="ti ti-arrow-right"></i>
+        </button>
+      </div>`;
+    return;
+  }
+
+  const gaps = totalGapCount();
+  const goal = rm.jobName || rm.middleName;
+
+  /* 판정 불가(로그인 전·스펙 없음·표본 부족)는 '부족 없음'과 다르다.
+     그때는 무엇을 하면 판정이 되는지를 말하고, 지원 쪽 길도 열어 둔다. */
+  const lacking = gaps == null ? null : gaps > 0;
+
+  const headline = lacking === null
+    ? '스펙을 입력하면 부족한 항목을 짚어드려요'
+    : lacking
+      ? `채우면 좋을 항목이 ${gaps}개 있어요`
+      : '선배 평균만큼 채웠어요 — 지원해 볼 때예요';
+
+  const desc = lacking === null
+    ? `${gapEsc(goal)} 기준으로 무엇이 부족한지 알려면 내 스펙이 필요해요. 지금 바로 지원 준비로 넘어가도 됩니다.`
+    : lacking
+      ? `${gapEsc(goal)} 선배들이 갖고 있는데 내게 없는 항목이에요. 다만 준비가 끝나야 지원할 수 있는 건 아니니, 공고를 먼저 봐도 좋아요.`
+      : `${gapEsc(goal)} 선배들이 가진 것 중 빠진 게 없어요. 이제 어느 회사에 쓸지 정할 차례입니다.`;
+
+  const fillBtn = `
+    <button type="button" class="rm-next-btn ${lacking ? '' : 'rm-next-btn--ghost'}"
+            onclick="navigateTo('mypage','spec')">
+      <i class="ti ti-pencil-plus"></i> 스펙 채우기
+    </button>`;
+  const applyBtn = `
+    <button type="button" class="rm-next-btn ${lacking ? 'rm-next-btn--ghost' : ''}"
+            onclick="Roadmap.goNext('me')">
+      ${Roadmap.withJosa(goal, '로')} 지원하기 <i class="ti ti-arrow-right"></i>
+    </button>`;
+
+  host.innerHTML = `
+    <div class="rm-next rm-next--fork">
+      <div class="rm-next-body">
+        <div class="rm-next-eyebrow">커리어 로드맵 · 다음 단계</div>
+        <h3>${gapEsc(headline)}</h3>
+        <p>${desc}</p>
+      </div>
+      <div class="rm-next-actions">
+        ${lacking ? fillBtn + applyBtn : applyBtn + fillBtn}
+      </div>
+    </div>`;
+}
+window.renderRoadmapNext = renderRoadmapNext;
 
 /* ════════════ MENTOR SEARCH ════════════ */
 let searchFilter = '전체';

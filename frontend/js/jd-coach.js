@@ -522,13 +522,17 @@
   /* 페이지에 들어올 때마다 — 지난번 분석 결과를 지우고 들어온다. 안 지우면 다른 회사를
      보러 다시 들어와도 이전 회사의 역량·문항이 그대로 남아 새 결과인 줄 알고 읽게 된다. */
   function onEnter() {
+    Roadmap.mount('rm-bar-jd', 'cover');
     const result = $('#jd-result');
     if (result) { result.hidden = true; result.innerHTML = ''; }
     const status = $('#jd-status');
     if (status) status.textContent = '';
     closeFull();
 
-    const picked = localStorage.getItem('careerly_selected_company');
+    /* 3단계에서 회사를 골라 왔으면 그것을 쓰고, 아니면 로드맵에 남아 있는 회사를
+       되살린다 — 자소서를 며칠에 걸쳐 쓰는 동안 회사 칸이 매번 비어 있으면
+       흐름이 화면을 나갈 때마다 끊긴다. */
+    const picked = localStorage.getItem('careerly_selected_company') || Roadmap.company();
     let applied = false;
     if (picked && $('#jd-company')) {
       $('#jd-company').value = picked;
