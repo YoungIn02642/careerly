@@ -1,5 +1,5 @@
 /* ════════════════════════════════════════════════════════════
-   CAREERLY · Home interactions + Tweaks (Wanted-style landing)
+   C:road · Home interactions + Tweaks (Wanted-style landing)
    ════════════════════════════════════════════════════════════ */
 
 /* ── 멘토링 계열 화면도 이제 같은 라우터를 쓴다. 기존 호출부 호환용 별칭. ── */

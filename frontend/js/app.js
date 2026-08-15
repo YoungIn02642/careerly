@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════
-//  CAREERLY — App Bootstrap (라우터 + 인증)
+//  C:road — App Bootstrap (라우터 + 인증)
 // ════════════════════════════════════════════════════════════
 const PAGES = [
   'main', 'login', 'signup', 'onboarding', 'mypage', 'career', 'backoffice',

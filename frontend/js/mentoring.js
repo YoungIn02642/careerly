@@ -1,5 +1,5 @@
 /* ════════════════════════════════════════════════════════════
-   CAREERLY · Mentoring app — data + interactions
+   C:road · Mentoring app — data + interactions
    ════════════════════════════════════════════════════════════ */
 
 /* ── avatar palette ─────────────────────────────────────── */
