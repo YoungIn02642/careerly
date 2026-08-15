@@ -24,32 +24,59 @@
 .insight-tab.on { background: var(--brand); border-color: var(--brand); color: #fff; }
 .insight-login-hint { font-size: 12.5px; color: var(--text-s); }
 
-/* ── 검색 ─────────────────────────────────────────────────── */
+/* ── 검색 ─────────────────────────────────────────────────────
+   [범위 ▾] [   검색어   ] [검색]  — 게시판에서 흔히 쓰는 배치다.
+   세 칸의 높이(40px)를 맞춰야 한 줄로 읽힌다. 셋 다 padding 이 제각각이면
+   미세하게 어긋나 보이므로 높이를 직접 잡는다. */
 .insight-search {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px;
+  display: flex; align-items: center; gap: 8px; margin-bottom: 14px;
 }
+
+/* 범위 선택 — 기본 select 의 화살표를 지우고 직접 그린다. 브라우저마다 모양이
+   달라서 그대로 두면 크롬·사파리에서 다른 화면이 된다. */
+.insight-scope-wrap { position: relative; flex: none; display: block; }
+.insight-scope-wrap::after {
+  content: ''; position: absolute; right: 14px; top: 50%; pointer-events: none;
+  width: 8px; height: 8px; margin-top: -6px;
+  border-right: 1.5px solid var(--text-m); border-bottom: 1.5px solid var(--text-m);
+  transform: rotate(45deg);
+}
+.insight-scope-select {
+  height: 40px; padding: 0 34px 0 14px;
+  border: 1px solid var(--border); border-radius: 8px; background: #fff;
+  font: inherit; font-size: 13.5px; color: var(--text-p); cursor: pointer;
+  appearance: none; -webkit-appearance: none;
+}
+.insight-scope-select:focus { outline: 0; border-color: var(--brand); }
+
 .insight-search-box {
-  display: flex; align-items: center; gap: 8px; flex: 1 1 260px; min-width: 0;
-  padding: 9px 13px; border: 1px solid var(--border); border-radius: 999px; background: #fff;
+  display: flex; align-items: center; flex: 1 1 auto; min-width: 0; height: 40px;
+  padding: 0 14px; border: 1px solid var(--border); border-radius: 8px; background: #fff;
 }
 .insight-search-box:focus-within { border-color: var(--brand); }
-.insight-search-box i { color: var(--text-m); font-size: 16px; flex: none; }
+/* padding 을 0 으로 되돌린다 — main.css 의 전역 `input { padding: 12px 14px }` 이
+   그대로 먹으면 입력칸이 45.6px 가 돼 40px 짜리 테두리를 넘는다(실측).
+   세로 여백은 바깥 상자가 이미 잡고 있다. */
 .insight-search-box input {
-  flex: 1; min-width: 0; border: 0; outline: 0; background: transparent;
+  flex: 1; min-width: 0; height: 100%; padding: 0;
+  border: 0; outline: 0; background: transparent;
   font: inherit; font-size: 13.5px; color: var(--text-p);
 }
-.insight-scope { display: flex; gap: 4px; flex: none; }
-.insight-scope-btn {
-  padding: 8px 13px; border: 1px solid var(--border); border-radius: 999px;
-  background: #fff; color: var(--text-s); font: inherit; font-size: 12.5px; font-weight: 600;
-  cursor: pointer;
+/* 검색 아이콘을 없앴다 — 오른쪽에 '검색' 버튼이 있어 같은 말을 두 번 하는 꼴이다 */
+
+.insight-search-btn {
+  flex: none; height: 40px; padding: 0 22px;
+  border: 1px solid var(--brand); border-radius: 8px;
+  background: var(--brand); color: #fff;
+  font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
 }
-.insight-scope-btn:hover { border-color: var(--brand); color: var(--brand); }
-.insight-scope-btn.on { background: var(--brand-soft); border-color: var(--brand); color: var(--brand-dark); }
-.insight-search-btn { flex: none; padding: 9px 20px; }
+.insight-search-btn:hover { background: var(--brand-dark); border-color: var(--brand-dark); }
+
+/* 검색 해제는 결과 안내 줄에 붙는다 — 검색 중일 때만 나타나는 것이라
+   입력 줄에 두면 있을 때와 없을 때 줄 길이가 흔들린다. */
 .insight-search-clear {
-  display: inline-flex; align-items: center; gap: 5px; flex: none;
-  padding: 8px 12px; border: 0; border-radius: 999px; background: none;
+  display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;
+  padding: 2px 8px; border: 0; border-radius: 999px; background: none;
   color: var(--text-s); font: inherit; font-size: 12.5px; cursor: pointer;
 }
 .insight-search-clear:hover { color: var(--text-p); text-decoration: underline; }
@@ -57,6 +84,14 @@
   margin-bottom: 12px; font-size: 13px; color: var(--text-s);
 }
 .insight-search-note b { color: var(--text-p); }
+
+/* 좁은 화면 — 범위와 버튼이 먼저 찌그러지므로 검색어 칸에 줄을 내준다 */
+@media (max-width: 560px) {
+  .insight-search { flex-wrap: wrap; }
+  .insight-search-box { flex: 1 1 100%; order: 3; }
+  .insight-scope-wrap { flex: 1 1 auto; }
+  .insight-scope-select { width: 100%; }
+}
 
 /* ── 목록 ─────────────────────────────────────────────────── */
 .insight-list { display: flex; flex-direction: column; border-top: 1px solid var(--border); }
@@ -181,3 +216,11 @@
   outline: none; border-color: var(--brand);
 }
 .insight-write-actions { display: flex; gap: 10px; }
+
+/* 화면에는 안 보이고 스크린리더에만 읽히는 라벨. select 에 라벨이 없으면
+   보조기술이 "무엇을 고르는 칸인지" 를 말해 주지 못한다(눈으로는 고른 값이
+   보이니 시각 사용자에게는 필요 없다). */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}

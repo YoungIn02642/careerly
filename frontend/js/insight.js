@@ -12,10 +12,27 @@ window.Insight = (() => {
   let page = 1;
   const LIMIT = 20;
   let listData = { posts: [], total: 0 };
-  /* 검색 — q 가 비면 평소 목록이다. scope 는 '제목만' | '제목+내용'.
-     검색 중에는 서버가 공지를 위로 고정하지 않는다(routes/insight.js 주석). */
+  /* 검색 — q 가 비면 평소 목록이다.
+     검색 중에는 서버가 공지를 위로 고정하지 않는다(routes/insight.js 주석).
+
+     ── 범위 목록은 서버와 짝이다 ──
+     id 는 `routes/insight.js` 의 SEARCH_SCOPES 와 정확히 같아야 한다. 한쪽만
+     늘리면 모르는 값이 들어와 **조용히 기본값으로 떨어진다** — 사용자는 범위를
+     골랐는데 결과가 안 바뀌는 것으로 보인다.
+
+     기본값이 'all'(제목+내용)인 이유: 처음 온 사람은 범위를 고를 생각을 안 하므로
+     가장 넓게 잡아 두는 편이 "왜 안 나오지" 를 줄인다. */
+  const SCOPES = [
+    ['all',     '제목+내용'],
+    ['title',   '제목'],
+    ['body',    '내용'],
+    ['author',  '글쓴이'],
+    ['comment', '댓글'],
+  ];
+  const scopeLabel = id => (SCOPES.find(([s]) => s === id) || SCOPES[0])[1];
+
   let q = '';
-  let scope = 'title';
+  let scope = 'all';
   let currentPostId = null;
   let detailData = null;    // { post, comments }
   let writeError = '';
@@ -31,7 +48,7 @@ window.Insight = (() => {
       try { categories = (await DB.insightCategories()).categories; }
       catch { categories = []; }
     }
-    view = 'list'; page = 1; category = ''; q = ''; scope = 'title';
+    view = 'list'; page = 1; category = ''; q = ''; scope = 'all';
     await loadList();
   }
 
@@ -86,26 +103,32 @@ window.Insight = (() => {
           : `<span class="insight-login-hint">로그인하면 글을 쓸 수 있어요</span>`}
       </div>
 
-      <!-- 검색 — 범위를 사용자가 고른다. 제목만 보면 정확하고, 본문까지 보면
-           더 많이 걸린다. 어느 쪽이 나은지는 찾는 사람이 안다. -->
+      <!-- 검색 — 범위 · 검색어 · 버튼 순서다. 게시판에서 흔히 쓰는 배치라
+           설명 없이도 어디를 고르고 어디에 치는지 바로 읽힌다.
+
+           범위를 버튼 두 개(제목만 / 제목+내용)로 두었었는데, 늘려야 할 범위가
+           다섯이라 버튼으로는 줄이 넘친다. 목록에서 하나를 고르는 일이므로
+           <select> 가 맞다 — 모바일에서 기본 선택기가 뜨는 이점도 있다. -->
       <div class="insight-search">
-        <label class="insight-search-box">
-          <i class="ti ti-search"></i>
-          <input type="search" id="insight-q" value="${esc(q)}"
-                 placeholder="검색어를 입력하세요" aria-label="게시글 검색" />
+        <label class="insight-scope-wrap">
+          <span class="sr-only">검색 범위</span>
+          <select id="insight-scope" class="insight-scope-select">
+            ${SCOPES.map(([id, label]) =>
+              `<option value="${id}" ${scope === id ? 'selected' : ''}>${label}</option>`).join('')}
+          </select>
         </label>
-        <div class="insight-scope" role="group" aria-label="검색 범위">
-          <button class="insight-scope-btn ${scope === 'title' ? 'on' : ''}" data-scope="title">제목만</button>
-          <button class="insight-scope-btn ${scope === 'all' ? 'on' : ''}" data-scope="all">제목+내용</button>
-        </div>
-        <button class="btn-save insight-search-btn" id="insight-search-go">검색</button>
-        ${q ? `<button class="insight-search-clear" id="insight-search-clear">
-                 <i class="ti ti-x"></i> 검색 해제</button>` : ''}
+        <label class="insight-search-box">
+          <input type="search" id="insight-q" value="${esc(q)}"
+                 placeholder="검색어를 입력해주세요" aria-label="게시글 검색" />
+        </label>
+        <button class="insight-search-btn" id="insight-search-go">검색</button>
       </div>
 
       ${q ? `<div class="insight-search-note">
-          <b>‘${esc(q)}’</b> ${scope === 'all' ? '제목+내용' : '제목'} 검색 결과 ${listData.total}건
+          <b>‘${esc(q)}’</b> ${esc(scopeLabel(scope))} 검색 결과 ${listData.total}건
           ${listData.total ? ' · 검색 중에는 공지를 위로 고정하지 않아요' : ''}
+          <button class="insight-search-clear" id="insight-search-clear">
+            <i class="ti ti-x"></i> 검색 해제</button>
         </div>` : ''}
 
       <div class="insight-list">
@@ -143,9 +166,10 @@ window.Insight = (() => {
     if (q) {
       return `<div class="empty-block"><div class="empty-icon">🔍</div>
         <div class="empty-title">‘${esc(q)}’ 검색 결과가 없어요</div>
-        <div class="empty-desc">${scope === 'title'
-          ? '제목만 찾고 있어요. <b>제목+내용</b>으로 넓혀 보세요.'
-          : '다른 낱말로 찾아보거나 검색을 해제해 보세요.'}</div></div>`;
+        <div class="empty-desc">${scope === 'all'
+          ? '다른 낱말로 찾아보거나 검색을 해제해 보세요.'
+          : `지금은 <b>${esc(scopeLabel(scope))}</b>만 찾고 있어요. <b>제목+내용</b>으로 넓혀 보세요.`}
+        </div></div>`;
     }
     return `<div class="empty-block"><div class="empty-icon">📭</div>
       <div class="empty-title">아직 글이 없어요</div>
@@ -283,7 +307,13 @@ window.Insight = (() => {
 
     // ── 검색 ──
     const qInput = box.querySelector('#insight-q');
+    const scopeSel = box.querySelector('#insight-scope');
+    /* 범위는 **검색을 누를 때 함께 읽는다.** 고르자마자 다시 찾으면, 검색어를
+       치기도 전에 범위만 바꾼 사용자에게 같은 목록을 다시 받아오게 된다.
+       고른 값은 화면을 다시 그려도 남아야 하므로 state 에도 즉시 반영한다. */
+    scopeSel?.addEventListener('change', () => { scope = scopeSel.value; });
     const runSearch = () => {
+      if (scopeSel) scope = scopeSel.value;
       q = (qInput?.value || '').trim();
       page = 1;
       loadList();
@@ -294,15 +324,11 @@ window.Insight = (() => {
       if (e.key === 'Enter' && !e.isComposing) runSearch();
     });
     box.querySelector('#insight-search-go')?.addEventListener('click', runSearch);
+    /* 검색 해제는 검색어만 지운다 — 고른 범위는 남긴다. 같은 범위로 다른 낱말을
+       찾는 흐름이 흔한데, 범위까지 되돌리면 매번 다시 골라야 한다. */
     box.querySelector('#insight-search-clear')?.addEventListener('click', () => {
       q = ''; page = 1; loadList();
     });
-    /* 범위를 바꾸면 곧바로 다시 찾는다 — 이미 검색 중일 때만.
-       검색어가 없는데 다시 부르면 같은 목록을 또 받아온다. */
-    box.querySelectorAll('[data-scope]').forEach(btn => btn.addEventListener('click', () => {
-      scope = btn.dataset.scope;
-      if (q) { page = 1; loadList(); } else { render(); }
-    }));
     box.querySelectorAll('[data-page]').forEach(btn => btn.addEventListener('click', () => {
       const n = Number(btn.dataset.page);
       if (n >= 1) { page = n; loadList(); }

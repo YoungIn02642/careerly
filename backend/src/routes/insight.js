@@ -74,7 +74,17 @@ router.get('/categories', (req, res) => res.json({ categories: CATEGORIES }));
 /* 검색 범위. 제목만 볼지, 본문까지 볼지 사용자가 고른다.
    본문까지 뒤지면 원하는 글이 더 잘 걸리지만 엉뚱한 글도 같이 걸린다 —
    어느 쪽이 나은지는 찾는 사람이 안다. */
-const SEARCH_SCOPES = new Set(['title', 'all']);
+/* ── 검색 범위 ──────────────────────────────────────────────────
+   게시판 검색은 "어디를 뒤질지" 를 사용자가 고르는 게 기본이다. 제목만 보면
+   정확하고, 본문까지 보면 놓치지 않는다. 글쓴이·댓글은 찾는 방식 자체가 다르다
+   ("그 사람 글 모아 보기" · "댓글에서 언급된 글 찾기").
+
+   기본값은 `all`(제목+내용)이다 — 처음 온 사람은 범위를 고를 생각을 안 하므로,
+   가장 넓게 잡아 두는 편이 "왜 안 나오지" 를 줄인다. 예전 기본값은 `title` 이었다.
+
+   값을 바꾸면 화면(insight.js SCOPES)과 반드시 같이 고쳐야 한다 — 한쪽만 고치면
+   모르는 값이 들어와 조용히 기본값으로 떨어진다. */
+const SEARCH_SCOPES = new Set(['all', 'title', 'body', 'author', 'comment']);
 
 /* LIKE 검색이라 % 와 _ 를 그대로 넣으면 와일드카드가 된다. '100%' 를 검색하면
    '100' 으로 시작하는 글이 전부 걸리는 식이라, 사용자가 친 글자는 글자로만 쓴다. */
@@ -94,7 +104,7 @@ router.get('/', ah(async (req, res) => {
     return res.status(400).json({ error: '올바르지 않은 카테고리입니다.' });
   }
   const q = String(req.query.q || '').trim().slice(0, 100);
-  const scope = SEARCH_SCOPES.has(req.query.scope) ? req.query.scope : 'title';
+  const scope = SEARCH_SCOPES.has(req.query.scope) ? req.query.scope : 'all';
 
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 50);
@@ -105,14 +115,34 @@ router.get('/', ah(async (req, res) => {
   if (category) { conds.push('p.category=?'); params.push(category); }
   if (q) {
     const like = `%${escapeLike(q)}%`;
-    if (scope === 'all') { conds.push('(p.title LIKE ? OR p.body LIKE ?)'); params.push(like, like); }
-    else { conds.push('p.title LIKE ?'); params.push(like); }
+    /* 글쓴이는 닉네임과 이름을 둘 다 본다 — 목록에 보이는 것은 닉네임이지만,
+       닉네임을 안 정한 회원은 이름이 표시된다(toPostSummary 와 같은 규칙).
+       한쪽만 뒤지면 화면에 보이는 이름으로 찾았는데 안 나오는 일이 생긴다.
+
+       댓글은 EXISTS 로 본다 — JOIN 하면 댓글이 여러 개 걸린 글이 그만큼 중복돼
+       total 과 목록이 어긋난다. */
+    switch (scope) {
+      case 'title':
+        conds.push('p.title LIKE ?'); params.push(like); break;
+      case 'body':
+        conds.push('p.body LIKE ?'); params.push(like); break;
+      case 'author':
+        conds.push('(u.nickname LIKE ? OR u.name LIKE ?)'); params.push(like, like); break;
+      case 'comment':
+        conds.push('EXISTS (SELECT 1 FROM insight_comments c2 WHERE c2.post_id = p.id AND c2.body LIKE ?)');
+        params.push(like); break;
+      default:      // all — 제목+내용
+        conds.push('(p.title LIKE ? OR p.body LIKE ?)'); params.push(like, like);
+    }
   }
   const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
   const order = q ? 'p.created_at DESC' : 'p.is_notice DESC, p.created_at DESC';
 
+  /* 목록과 **같은 JOIN** 을 쓴다. 글쓴이 검색이 u.nickname 을 보는데 여기에만
+     JOIN 이 없으면 그 조건에서 쿼리가 깨진다. users 는 FK 라 INNER JOIN 이어도
+     건수가 달라지지 않는다(작성자가 없는 글은 존재할 수 없다). */
   const [{ n: total }] = await query(
-    `SELECT COUNT(*) AS n FROM insight_posts p ${where}`, params);
+    `SELECT COUNT(*) AS n FROM insight_posts p JOIN users u ON u.id = p.user_id ${where}`, params);
 
   const rows = await query(
     `SELECT p.*, u.nickname AS author_nickname, u.name AS author_name,
