@@ -64,6 +64,15 @@ function navigate(page) {
 }
 window.navigate = navigate;
 
+/* 페이지 + 탭으로 한 번에 보낸다. 로드맵의 '스펙 채우기' 가지처럼 특정 탭이
+   목적지인 이동이 있는데, navigate('mypage') 만 하면 initMypage() 가 직전에
+   보던 탭을 열어서 엉뚱한 칸이 나온다. */
+function navigateTo(page, tab) {
+  navigate(page);
+  if (tab && page === 'mypage') selectMypageTab(tab);
+}
+window.navigateTo = navigateTo;
+
 // ── 더보기 드로어 (좁은 화면에서 nav-links 를 대체) ───────────
 function setNavDrawer(open) {
   const drawer  = document.getElementById('nav-drawer');

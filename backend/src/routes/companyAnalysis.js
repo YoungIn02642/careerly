@@ -21,6 +21,7 @@ const DART = require('../dart');
 const GUIDE = require('../cover-guide');
 const SARAMIN = require('../saramin-jobs');
 const WORKNET = require('../worknet-jobs');
+const ALIO = require('../alio-jobs');
 const SECTORS = require('../company-sectors');
 
 const router = express.Router();
@@ -148,28 +149,38 @@ function motiveFormula({ news, dart }) {
   ];
 }
 
-/* ── 채용공고: 사람인 우선, 워크넷 보조 ────────────────────────
-   사람인이 주 경로다. 대기업·중견 공고가 실제로 여기 올라오고, 워크넷은 발급 키가
-   개인회원이면 목록 API 자체가 막힌다. 사람인이 0건이거나 키가 없을 때만 워크넷을
-   시도한다 — 둘 다 부르면 느려지기만 하고, 같은 공고가 두 번 나올 수도 있다.
-   둘 다 못 주면 **왜 못 줬는지**를 합쳐서 내려보낸다(화면이 그대로 보여준다). */
+/* ── 채용공고: 사람인 → 잡알리오 → 워크넷 ──────────────────────
+   셋 다 companyJobs(회사명) 한 가지 모양이라 순서대로 부르고 **처음 잡히는 것**을 쓴다.
+   전부 부르면 느려지기만 하고 같은 공고가 두 번 나올 수도 있다.
+
+   ── 이 순서인 이유 ──
+   · 사람인  : 민간 공고가 실제로 여기 올라온다. 다만 **승인이 심사**라 키가 없을 수 있다
+   · 잡알리오: 공공데이터포털 **자동승인**이라 키가 이미 있다. 대신 **공공기관 공고만** 담는다
+   · 워크넷  : 발급 키가 개인회원이면 목록 API 자체가 막힌다(10-7). 열리면 보조로 산다
+
+   민간 회사를 넣으면 잡알리오는 당연히 0건인데, 그게 "채용을 안 한다"로 읽히면 안 된다.
+   그래서 사유를 합쳐 내려보내고 화면이 그대로 보여준다(alio-jobs.js 머리주석). */
+const SOURCES = [
+  ['사람인', 'saramin', SARAMIN],
+  ['공공기관(잡알리오)', 'alio', ALIO],
+  ['워크넷', 'worknet', WORKNET],
+];
+
 async function fetchJobs(name) {
-  const first = await SARAMIN.companyJobs(name).catch(e => ({
-    items: [], configured: SARAMIN.isConfigured(), source: 'saramin', reason: e.message,
-  }));
-  if (first.items.length) return first;
+  const tried = [];
+  for (const [label, id, mod] of SOURCES) {
+    const r = await mod.companyJobs(name).catch(e => ({
+      items: [], configured: mod.isConfigured(), source: id, reason: e.message,
+    }));
+    if (r.items.length) return { ...r, source: id };
+    tried.push({ label, ...r });
+  }
 
-  const second = await WORKNET.companyJobs(name).catch(e => ({
-    items: [], configured: WORKNET.isConfigured(), source: 'worknet', reason: e.message,
-  }));
-  if (second.items.length) return { ...second, source: 'worknet' };
-
-  /* 둘 다 빈손 — 사유를 합쳐 준다. 한쪽만 보여주면 "키를 넣었는데 왜 안 되지" 가 된다. */
-  const reasons = [first.reason && `사람인: ${first.reason}`, second.reason && `워크넷: ${second.reason}`]
-    .filter(Boolean);
+  /* 전부 빈손 — 사유를 합쳐 준다. 한쪽만 보여주면 "키를 넣었는데 왜 안 되지" 가 된다. */
+  const reasons = tried.filter(t => t.reason).map(t => `${t.label}: ${t.reason}`);
   return {
     items: [], source: null,
-    configured: first.configured || second.configured,
+    configured: tried.some(t => t.configured),
     reason: reasons.join(' · ') || null,
   };
 }

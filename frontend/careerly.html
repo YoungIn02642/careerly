@@ -602,6 +602,7 @@
 <!-- ══ CAS · 멘토 찾기 · 멘토 프로필 · 내 멘토링 (구 mentoring.html) ══ -->
 <!-- ══════════ DASHBOARD ══════════ -->
 <main class="page page--doc" id="page-dashboard">
+  <div class="rm-bar-host" id="rm-bar-dashboard"></div>
   <div class="wrap">
     <div class="page-head">
       <div class="page-eyebrow">CAS · Career Asset Score</div>
@@ -699,6 +700,11 @@
         <button class="btn-brand" onclick="navigate('search')"><i class="ti ti-users"></i>동문 멘토 찾기</button>
       </div>
     </div>
+
+    <!-- 로드맵 2단계의 갈림길 — '스펙 채우기' 로 되돌아갈지, 3단계(지원할 회사)로
+         나아갈지. 어느 쪽을 권하는지는 위 GAP 계산 결과가 정한다.
+         내용은 js/mentoring.js 의 renderRoadmapNext() 가 만든다. -->
+    <div id="cas-next"></div>
   </div>
 </main>
 
@@ -871,19 +877,15 @@
 <!-- 회사 찾기 — 화면 전체를 js/company-cover.js 가 그린다.
      상태가 둘이고(검색 전 = 가운데 검색 / 회사 선택 후 = 목록 + 기업 리포트) 레이아웃
      자체가 달라서, 빈 껍데기를 두고 JS 가 통째로 만드는 편이 정직하다. -->
+<!-- 옛 '회사 검색 / 자소서 코치' 2칸 서브네비를 로드맵 스텝바로 바꿨다. 그 둘이
+     로드맵의 3·4단계 그 자체라, 같은 이동을 두 줄로 두면 어느 쪽이 흐름인지 흐려진다. -->
 <main class="page company-page" id="page-company" data-screen-label="회사 검색과 자소서">
-  <nav class="cover-subnav" aria-label="자소서 소분류">
-    <button class="is-active" type="button" onclick="navigate('company')">회사 검색</button>
-    <button type="button" onclick="navigate('jd')">자소서 코치</button>
-  </nav>
+  <div class="rm-bar-host" id="rm-bar-company"></div>
   <div id="company-root"></div>
 </main>
 
 <main class="page page--doc" id="page-jd" data-screen-label="자소서 코치">
-  <nav class="cover-subnav" aria-label="자소서 소분류">
-    <button type="button" onclick="navigate('company')">회사 검색</button>
-    <button class="is-active" type="button" onclick="navigate('jd')">자소서 코치</button>
-  </nav>
+  <div class="rm-bar-host" id="rm-bar-jd"></div>
   <div class="jd-shell">
     <div class="jd-head">
       <div class="wf-eyebrow wf-eyebrow--lg">Cover letter coach</div>
@@ -1082,6 +1084,9 @@
 <!-- ncs.js: 커리어 로드맵은 keco.js 로 옮겼지만, job-trends 집계가 아직 NCS 분류를 쓴다 -->
 <script src="js/ncs.js"></script>
 <script src="js/keco.js"></script>
+<!-- 로드맵 흐름 상태(고른 직무·회사) + 네 화면이 공유하는 스텝바.
+     keco.js 뒤 · 화면 모듈 앞. career/cas-hero/company-cover/jd-coach 가 전부 읽는다 -->
+<script src="js/roadmap.js"></script>
 <script src="js/aggregation.js"></script>
 <script src="js/cas.js"></script>
 <!-- 활동 분류·복합 어학 계산의 단일 출처. cas-radar/cas-compare 보다 앞에 와야 한다 -->

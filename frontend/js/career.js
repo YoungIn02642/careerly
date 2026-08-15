@@ -95,17 +95,30 @@ window.CareerPage = (() => {
     const main = document.getElementById('career-main');
     if (!main) return;
 
+    /* 스텝바는 어느 상태에서든 맨 위에 있어야 한다 — 직무를 고르기 전에도
+       "여기가 4단계 중 1단계" 라는 것이 보여야 흐름으로 읽힌다. */
+    const shell = inner => `${Roadmap.stepBar('job')}${inner}`;
+
     // 분류가 아직 없으면 받아오고, 그동안은 상태를 보여준다
     if (!KECO.ready()) {
       ensureLoaded();
-      main.innerHTML = loadError ? loadErrorBlock() : loadingBlock();
+      main.innerHTML = shell(loadError ? loadErrorBlock() : loadingBlock());
       return;
     }
-    if (!document.querySelector('#job-major-list .job-major-item'))
-      paintSidebar();
+    /* 지난번에 고른 직무가 있으면 그 자리에서 다시 시작한다. 로드맵은 하루에
+       끝나는 일이 아니라, 다시 들어올 때마다 1차 분류부터 고르게 하면 흐름이
+       매번 처음으로 되감긴다. */
+    restoreFromRoadmap();
+
+    /* 사이드바는 아직 안 그렸거나, 강조된 분야가 지금 분야와 다를 때 다시 그린다.
+       복원으로 currentMajor 가 바뀌었는데 안 그리면 **본문은 새 분야인데 왼쪽은
+       옛 분야가 강조된** 상태가 된다. */
+    const painted = document.querySelector('#job-major-list .job-major-item');
+    const activeId = document.querySelector('#job-major-list .job-major-item.active')?.dataset.id ?? null;
+    if (!painted || activeId !== (currentMajor ?? null)) paintSidebar();
 
     if (!currentMajor) {
-      main.innerHTML = welcomeBlock();
+      main.innerHTML = shell(welcomeBlock());
       return;
     }
 
@@ -134,6 +147,7 @@ window.CareerPage = (() => {
         </div>
       </div>
       <div class="content">
+        ${Roadmap.stepBar('job')}
         ${phaseBar()}
         ${majorHero(major)}
         ${middleSelect(major)}
@@ -144,6 +158,33 @@ window.CareerPage = (() => {
     animateBars();
     syncTopbarCompact(main);
     bindTopbarScroll(main);
+  }
+
+  /* 저장된 로드맵 직무를 화면 상태로 되돌린다.
+
+     ── '한 번만' 이 아니라 '바뀌었을 때만' ──
+     처음에는 한 번만 복원하게 뒀는데 그러면 **CAS 에서 비교 직무를 바꾸고 돌아왔을
+     때 이 화면만 옛 직무를 계속 보여준다.** 로드맵 직무는 CAS 의 셀렉트에서도
+     바뀌므로(Roadmap.switchMiddle), 이 화면이 그 변경을 모르면 같은 흐름 안에서
+     두 화면이 다른 직무를 말하게 된다 — 이 작업이 없애려던 바로 그 상태다.
+
+     그렇다고 매번 되돌리면 사용자가 여기서 다른 분류를 눌러 둘러보는 것을 방해한다
+     (누르는 족족 저장된 직무로 튕겨 나간다). 그래서 **마지막으로 반영한 로드맵 값과
+     달라졌을 때만** 손댄다. 화면 안에서의 둘러보기는 로드맵 값을 바꾸지 않으므로
+     (2차 분류 선택·단계 이동) 방해받지 않는다. */
+  let appliedRm = null;
+  function restoreFromRoadmap() {
+    const rm = Roadmap.get();
+    const sig = rm ? `${rm.major}/${rm.middle}/${rm.job || ''}` : '';
+    if (sig === appliedRm) return;
+    appliedRm = sig;
+    if (!rm || !KECO.byId(rm.major)) return;
+    currentMajor = rm.major;
+    currentMiddle = KECO.middleById(rm.major, rm.middle) ? rm.middle : null;
+    currentJob = currentMiddle && rm.job && KECO.jobById(rm.major, rm.middle, rm.job) ? rm.job : null;
+    /* 고른 직업이 목록 첫 페이지에 없을 수 있지만, 이미 고른 상태라 목록을 다시
+       뒤질 일이 없다. 페이지는 1로 둔다. */
+    jobPage = 1;
   }
 
   /* 스크롤해서 breadcrumb 가 상단에 붙어 있을 때는 작게 접는다 — 맨 위에 있을 때와
@@ -163,17 +204,23 @@ window.CareerPage = (() => {
     main.addEventListener('scroll', () => syncTopbarCompact(main));
   }
 
+  /* ── 이 화면 안의 작은 단계 ──────────────────────────────────
+     위에 로드맵 전체 스텝바(Roadmap.stepBar)가 있으므로, 여기는 **1단계 안의
+     세 칸**이라는 것이 보여야 한다. 예전 라벨은 'STEP 01 직무 찾기 / STEP 03
+     내 로드맵' 이었는데, 바깥 스텝바가 생기면서 같은 말이 두 줄에서 서로 다른
+     범위를 가리키게 됐다 — 바깥의 '직무 찾기'는 이 화면 전체이고 바깥의
+     '커리어 로드맵'은 네 화면 전부다. 안쪽은 안쪽 일만 말하게 바꿨다. */
   function phaseBar() {
     return `
       <div class="phase-bar">
         <div class="phase-tab ${!currentMiddle ? 'active' : ''}" onclick="CareerPage.gotoPhase(1)">
-          <div class="pt-num">STEP 01</div><div class="pt-label">직무 찾기</div>
+          <div class="pt-num">01</div><div class="pt-label">세부 분야 고르기</div>
         </div>
         <div class="phase-tab ${currentMiddle && !currentJob ? 'active' : ''}" onclick="CareerPage.gotoPhase(2)">
-          <div class="pt-num">STEP 02</div><div class="pt-label">직무 고르기</div>
+          <div class="pt-num">02</div><div class="pt-label">직무 고르기</div>
         </div>
         <div class="phase-tab ${currentJob ? 'active' : ''}" onclick="CareerPage.gotoPhase(3)">
-          <div class="pt-num">STEP 03</div><div class="pt-label">내 로드맵</div>
+          <div class="pt-num">03</div><div class="pt-label">필요한 스펙 보기</div>
         </div>
       </div>`;
   }
@@ -383,7 +430,9 @@ window.CareerPage = (() => {
         </div>
       </div>`;
 
-    if (agg.empty) return `<div class="roadmap-section">${head}${emptySpecBlock(middle)}</div>`;
+    if (agg.empty) {
+      return `<div class="roadmap-section">${head}${emptySpecBlock(middle)}${nextStepBlock(middle, job, agg)}</div>`;
+    }
 
     return `
       <div class="roadmap-section">
@@ -391,8 +440,35 @@ window.CareerPage = (() => {
         ${tabBar()}
         <div id="spec-quant" class="spec-tab-content ${specTab === 'quant' ? 'active' : ''}">${renderQuant(agg)}</div>
         <div id="spec-qual"  class="spec-tab-content ${specTab === 'qual' ? 'active' : ''}">${renderQual(agg)}</div>
+        ${nextStepBlock(middle, job, agg)}
       </div>
     `;
+  }
+
+  /* ── 1단계의 결론 → 2단계로 ──────────────────────────────────
+     위에서 본 정량·정성은 **선배들의 평균**이다. 학생이 다음에 알고 싶은 것은
+     하나뿐이다 — "그래서 나는 지금 어디쯤인가". 그 질문을 화면에 그대로 적고
+     누르면 CAS 로 넘긴다.
+
+     선배 표본이 없으면(agg.empty) 비교 자체가 성립하지 않으므로 그렇게 적는다.
+     '계산해 준다' 고 해 놓고 빈 화면을 주는 것이 이 프로젝트가 피해 온 실패다. */
+  function nextStepBlock(middle, job, agg) {
+    const comparable = !agg.empty && agg.count > 0;
+    return `
+      <div class="rm-next">
+        <div class="rm-next-body">
+          <div class="rm-next-eyebrow">커리어 로드맵 2단계</div>
+          <h3>현재 나의 위치는?</h3>
+          <p>${comparable
+            ? `${esc(middle.name)} 직무군 선배 <b>${agg.count}명</b>과 같은 기준으로 채점해
+               내 CAS 점수와 부족한 항목을 보여드려요.`
+            : `아직 이 직무군의 선배 데이터가 없어 비교는 못 해요.
+               그래도 내 스펙만으로 계산한 CAS 점수는 볼 수 있어요.`}</p>
+        </div>
+        <button type="button" class="rm-next-btn" onclick="CareerPage.goToCas()">
+          내 위치 확인하기 <i class="ti ti-arrow-right"></i>
+        </button>
+      </div>`;
   }
 
   function emptySpecBlock(middle) {
@@ -682,11 +758,28 @@ window.CareerPage = (() => {
       specTab = 'quant';
       render();
     },
+    /* 직업을 고르는 순간이 로드맵 1단계의 결론이다. 여기서 흐름 상태에 심어 두면
+       CAS·회사 찾기·자소서 코치가 같은 직무를 본다(roadmap.js 머리주석). */
     selectJob(code) {
       currentJob = code;
       specTab = 'quant';
+      const major = KECO.byId(currentMajor);
+      const middle = KECO.middleById(currentMajor, currentMiddle);
+      const job = KECO.jobById(currentMajor, currentMiddle, code);
+      if (major && middle) {
+        Roadmap.setJob({
+          major: major.code, middle: middle.code, job: job?.code || null,
+          majorName: major.name, middleName: middle.name, jobName: job?.name || '',
+          avgWage: job?.avgWage ?? null,
+        });
+        /* 방금 이 화면이 만든 변경이라 되돌릴 것이 없다. 표시해 두지 않으면
+           restoreFromRoadmap 이 '바뀌었다'고 보고 페이지 번호를 1로 되감는다 —
+           3페이지에서 고른 직업 목록이 눈앞에서 1페이지로 튄다. */
+        appliedRm = `${major.code}/${middle.code}/${job?.code || ''}`;
+      }
       render();
     },
+    goToCas() { navigate('dashboard'); },
     goJobPage(n) {
       jobPage = Math.max(1, n);
       render();

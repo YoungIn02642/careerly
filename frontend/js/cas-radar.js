@@ -135,9 +135,13 @@ window.CASRadar = (() => {
 
     const values = buildValues(spec, agg);
 
+    /* 어느 집단의 요구 수준인지는 히어로가 정한 것과 같은 말로 적는다. 로드맵에서
+       넘어오면 '○○ 직무군', 아니면 저장된 스펙 기준이다 — 두 화면이 같은 모집단을
+       쓰면서 이름만 다르게 부르면 학생은 서로 다른 통계로 읽는다. */
+    const scope = window.CASDashboardContext?.scopeLabel;
     card.innerHTML = `
       ${head}
-      <div class="radar-scope">같은 직무 합격자 <b>${agg.count}명</b> 기준${agg.count < CAS.MIN_N_FOR_RATE ? ' · <span class="radar-warn">표본이 적어 참고용</span>' : ''}</div>
+      <div class="radar-scope">${scope ? `${scope} ` : '같은 직무 '}합격자 <b>${agg.count}명</b> 기준${agg.count < CAS.MIN_N_FOR_RATE ? ' · <span class="radar-warn">표본이 적어 참고용</span>' : ''}</div>
       ${svg(values)}
       ${legendAndGaps(values)}`;
   }

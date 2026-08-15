@@ -924,3 +924,13 @@ a.wf-btn { text-decoration: none; }
 }
 .co-chip:hover { border-color: var(--wf-ink); color: var(--wf-ink); }
 .co-chip--more { color: var(--wf-mute); border-style: dashed; }
+
+/* ── 로드맵 3단계 · 이 직무를 주로 뽑는 계열 ────────────────
+   아래 '계열로 둘러보기'(전체 목록)와 같은 부품을 쓰되, 초점이라는 것이 보여야
+   한다. 다른 카드를 만들지 않고 테두리와 배경만 바꾼다 — 두 벌을 만들면 계열
+   목록을 고칠 때 한쪽만 고쳐진다. */
+.co-focus .co-sector.is-focus {
+  border-color: var(--wf-purple, #7a3dff);
+  background: color-mix(in srgb, var(--wf-purple, #7a3dff) 4%, transparent);
+}
+.co-note--tight { margin: 0 0 12px; }
