@@ -651,6 +651,39 @@ window.CompanyCover = (() => {
   /* 채용공고 — 우리가 회사별 공고를 들고 있지 않다. 있는 척하지 않고 찾는 경로를 준다.
      예전 '인재상' 칸을 이걸로 바꿨다: 인재상은 회사마다 비슷한 캐치프레이즈라
      자소서에 쓸 게 못 되고, 실제로 필요한 건 지금 열려 있는 공고의 자격요건이다. */
+  /* ── 안내 문구는 소스마다 다르다 ────────────────────────────
+     사람인·워크넷은 목록 API 가 **제목·조건만** 준다.
+     잡알리오는 `aplyQlfcCn`(지원자격)·`prefCn`(우대사항)을 같이 준다.
+
+     ── 다만 그것이 '역량'은 아니다 (실측) ──
+     처음에는 "이제 복붙 없이 역량 분석이 된다"고 안내하려 했다. 532건에 돌려 보고
+     접었다 — 공공기관 공고의 저 필드는 **응시 요건**이지 직무 역량 서술이 아니다.
+     연령·학력·전공 제한, 마감일 기준, 법정 가점이 대부분이고, 정형문구를 걷어내도
+     **절반은 역량이 하나도 안 잡힌다.** 민간 공고의 [자격요건]/[우대사항]과 성격이
+     다르다.
+
+     그래도 담는 값어치는 있다 — 학생이 **지원할 수 있는 공고인지**(연령·학력·자격증)
+     판단하는 정보다. 그러니 있는 그대로 말한다: 자격 정보는 채워지고, 역량까지
+     원하면 원문을 이어붙이라고. 되는 것처럼 말해 놓고 안 되면 그게 더 나쁘다. */
+  const SOURCE_LABEL = { saramin: '사람인', worknet: '워크넷', alio: '공공기관 채용정보(잡알리오)' };
+
+  function jobsHint(jobs) {
+    const label = SOURCE_LABEL[jobs.source] || '채용 API';
+    const withBody = (jobs.items || []).filter(j => j.qualification || j.preference).length;
+
+    if (withBody) {
+      return `<p class="jd-hint">${esc(label)} 기준입니다.
+        이 공고들은 <b>지원자격·우대사항이 함께</b> 담겨요 — 연령·학력·자격증 요건을
+        여기서 바로 확인할 수 있습니다.
+        다만 공공기관 공고는 <b>응시 요건 위주</b>라 요구 역량은 잘 드러나지 않아요.
+        역량까지 뽑으려면 공고를 열어 <b>본문을 이어붙이는 편</b>이 정확합니다.</p>`;
+    }
+    return `<p class="jd-hint">${esc(label)} 기준입니다.
+      공고를 <b>담으면</b> 자소서 코치로 그대로 넘어가요. 요구 역량까지 뽑으려면
+      공고를 열어 <b>본문을 복사해 붙여넣어야</b> 합니다 — 이 채용 API 는 제목·조건만 주고
+      본문은 주지 않습니다.</p>`;
+  }
+
   function recruitDetail(s) {
     const n = encodeURIComponent(selected.name);
     const jobs = analysis.jobs || {};
@@ -684,14 +717,12 @@ window.CompanyCover = (() => {
                    data-add="${esc(id)}" data-title="${esc(j.title)}" data-url="${esc(j.url || '')}"
                    data-career="${esc(j.career || '')}" data-edu="${esc(j.edu || '')}"
                    data-region="${esc(j.region || '')}" data-dday="${j.dday ?? ''}"
+                   data-qual="${esc(j.qualification || '')}" data-pref="${esc(j.preference || '')}"
                    >이 공고로 자소서 쓰기</button>`}
           </div>`;
         }).join('')}
       </div>
-      <p class="jd-hint">${esc(jobs.source === 'saramin' ? '사람인' : '워크넷')} 기준입니다.
-        공고를 <b>담으면</b> 자소서 코치로 그대로 넘어가요. 요구 역량까지 뽑으려면
-        공고를 열어 <b>본문을 복사해 붙여넣어야</b> 합니다 — 채용 API 는 제목·조건만 주고
-        본문은 주지 않습니다.</p>`
+      ${jobsHint(jobs)}`
       : `<div class="co-note"><i class="ti ti-info-circle"></i>
            ${esc(jobs.reason || '이 회사 이름으로 열린 공고가 없습니다.')}
            대기업 공채는 자사 채용 사이트로만 올라오는 일이 많아, 없는 것이 정상인 경우도 있어요.</div>`;
@@ -869,6 +900,10 @@ window.CompanyCover = (() => {
         edu: el.dataset.edu || '',
         region: el.dataset.region || '',
         dday: el.dataset.dday === '' ? null : Number(el.dataset.dday),
+        /* 있으면 같이 담는다 — 자소서 코치가 이걸로 공고 본문을 만든다(B20).
+           없는 소스(사람인·워크넷)에서는 빈 값이라 예전과 똑같이 동작한다. */
+        qualification: el.dataset.qual || '',
+        preference: el.dataset.pref || '',
       })));
 
     // 계열 펼치기/접기

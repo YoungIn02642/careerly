@@ -34,7 +34,11 @@ const rec = (o) => ({
   pbancBgngYmd: ymd(-10), pbancEndYmd: o.end,
   srcUrl: 'https://example.go.kr/notice', recrutSeNm: o.se ?? '신입',
   acbgCondNmLst: '학력무관', workRgnNmLst: '대전', hireTypeNmLst: '정규직',
-  ncsCdNmLst: '보건.의료', aplyQlfcCn: '결격사유 없는 자', prefCn: '장애인 우대',
+  /* 실제 공고에서 뽑은 결의 문장을 쓴다. '결격사유 없는 자'·'장애인 우대' 같은
+     정형문구를 넣으면 stripBoilerplate 가 걸러내서(그게 맞다) 픽스처가 비어 버린다. */
+  ncsCdNmLst: '보건.의료',
+  aplyQlfcCn: '임상병리사 면허 소지자로서 관련 분야 업무 경험이 있는 자',
+  prefCn: '정보처리기사 등 관련 자격증 소지자 우대, 데이터 분석 업무 경험자 우대',
 });
 
 fs.writeFileSync(CACHE, JSON.stringify({
@@ -98,10 +102,54 @@ const ALIO = require('../backend/src/alio-jobs.js');
     ok(`공통 필드 ${k}`, k in j);
   }
   ok('source 를 밝힌다', all.source === 'alio');
-  /* 자소서 코치가 쓸 재료 — 공고 본문을 복사하지 않아도 역량을 뽑을 수 있다. */
+  /* 자소서 코치가 공고 칸을 채우는 재료. 다만 이것만으로 역량이 다 잡히지는
+     않는다 — 8장 참고. */
   ok('지원자격·우대사항도 실어 보낸다', Boolean(j.qualification && j.preference));
 
-  console.log('\n── 8. 캐시가 없을 때 ──');
+  console.log('\n── 8. 공고 정형문구 걸러내기 ──');
+  /* 공공기관 공고의 지원자격·우대사항에는 직무 요건보다 **법정 가점·전형 안내**가
+     많다. 안 거르면 역량 추출이 그걸 근거로 집어 든다 — 화면에는 '역량 카드에
+     엉뚱한 인용문'으로 나타나고, 에러가 안 나서 더 나쁘다(6-3 부류).
+
+     ⚠ 이 필터로도 절반은 역량이 안 잡힌다(532건 실측). 저 필드는 애초에 **응시
+     요건**이지 역량 서술이 아니다 — 화면 문구가 그 사실을 그대로 말한다. */
+  const strip = ALIO.stripBoilerplate;
+
+  // 실제 응답에서 반복 횟수를 세어 고른 것들 (532건 기준)
+  ok('취업지원대상자 가점 안내를 버린다',
+     strip('「국가유공자 등 예우 및 지원에 관한 법률」에 따른 취업지원 대상자는 가점을 받습니다') === null);
+  ok('장애인 가점 안내를 버린다',
+     strip('장애인: 장애인의 가점은 만점의 3%를 적용하며 전형마다 반영합니다') === null);
+  ok('첨부파일 참조 안내를 버린다',
+     strip('※ 자세한 사항은 첨부파일의 채용공고문을 참조하시기 바랍니다.') === null);
+  ok('블라인드 채용 안내를 버린다',
+     strip('우리 기관은 정부의 블라인드 채용 가이드라인에 따라 응시절차 및 방법을 준수하고 있습니다') === null);
+  ok('결격사유 조항을 버린다',
+     strip('공단 인사규정 제18조(결격사유 및 임용취소)에 해당하지 않는 자여야 합니다') === null);
+  ok('연령 제한 안내를 버린다',
+     strip('입사지원서 접수 마감일 현재 만 18세 이상이면서 60세 미만인 자에 한합니다') === null);
+
+  /* ── 여기가 핵심이다 ──
+     처음 필터는 '우대' 가 든 줄을 통째로 버려서 **진짜 우대사항까지 날렸다.**
+     역량 0개인 공고가 110 → 222건으로 늘어난 것으로 확인하고 되돌렸다.
+     애매하면 남긴다 — 남은 노이즈는 한 번 보이고 말지만 지운 신호는 못 되찾는다. */
+  const real = strip('정보처리기사 등 관련 자격증 소지자 우대하며 데이터 분석 경험자를 찾습니다');
+  ok('진짜 우대사항은 남긴다', real !== null && real.includes('자격증'), `→ ${JSON.stringify(real)}`);
+  ok('직무 요건은 남긴다', strip('빅데이터분석 기사 취득 후 관련분야 7년 이상 종사한 자') !== null);
+
+  ok('빈 값은 null', strip('') === null && strip(null) === null);
+
+  // 노이즈와 신호가 섞인 줄글에서 신호만 남는지
+  const mixed = strip([
+    '- 컴퓨터공학 전공자로 SQL 활용이 가능한 자',
+    '- 「국가유공자 등 예우 및 지원에 관한 법률」에 따른 취업지원 대상자는 가점 부여',
+    '※ 자세한 사항은 첨부파일의 채용공고문을 참조',
+  ].join('\n'));
+  ok('섞여 있으면 신호만 남긴다',
+     mixed !== null && mixed.includes('SQL') && !mixed.includes('국가유공자') && !mixed.includes('첨부파일'),
+     `→ ${JSON.stringify(mixed)}`);
+
+  console.log('\n── 9. 캐시가 없을 때 ──');
   fs.unlinkSync(CACHE);
   delete require.cache[require.resolve('../backend/src/alio-jobs.js')];
   const FRESH = require('../backend/src/alio-jobs.js');

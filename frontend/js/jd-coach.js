@@ -404,6 +404,8 @@
           <div class="co-picked" style="margin-top:8px">
             ${list.map(e => `<div class="co-picked-item"><span>
               <b>${esc(e.text)}</b>
+              ${e.qualification || e.preference
+                ? ` <span class="wf-badge wf-badge--ok">지원자격 포함</span>` : ''}
               ${[e.region, e.career, e.edu].filter(Boolean).length
                 ? `<br><span style="color:var(--wf-mute)">${[e.region, e.career, e.edu].filter(Boolean).map(esc).join(' · ')}</span>`
                 : ''}
@@ -422,21 +424,41 @@
 
      이미 입력한 내용이 있으면 덮지 않는다. 사용자가 직접 붙여넣은 공고가
      자동 입력으로 지워지면 되돌릴 방법이 없다. */
+  /* 담아 온 공고로 '채용공고' 칸을 채운다.
+
+     ── 소스에 따라 채워지는 정도가 다르다 (B20) ──
+     사람인·워크넷 목록 API 는 제목·조건만 준다. 그것만으로 분석을 돌리면 역량이
+     빈약하게 나오는데, 그걸 '분석 결과'로 믿으면 안 되므로 본문을 붙여넣으라고 알린다.
+
+     공공기관 채용정보(잡알리오)는 **지원자격·우대사항이 구조화돼서 온다.** 그 공고는
+     복사·붙여넣기 없이 바로 분석이 된다 — `jd-competency.js` 가 읽는 것이 정확히
+     이런 자격요건·우대사항 문장이다.
+
+     반환값으로 '어디까지 채웠는지'를 알려준다. 호출부가 안내 문구를 고르는 데 쓴다 —
+     본문이 들어갔는데도 "본문을 붙여넣으세요"라고 하면 안 된다. */
   function applyPickedJob(company) {
     const job = evidenceFor(company)[0];
     const ta = $('#jd-text');
-    if (!job || !ta || ta.value.trim()) return false;
+    if (!job || !ta || ta.value.trim()) return null;
 
-    const lines = [
+    const head = [
       `[모집분야] ${job.text}`,
       job.region ? `[근무지] ${job.region}` : null,
       job.career ? `[경력] ${job.career}` : null,
       job.edu ? `[학력] ${job.edu}` : null,
-      job.url ? `[공고 주소] ${job.url}` : null,
     ].filter(Boolean);
 
-    ta.value = lines.join('\n');
-    return true;
+    /* 원문을 그대로 싣는다 — 요약하지 않는다. 요약은 없는 사실을 만들고, 학생은
+       그걸 자소서에 쓴다(11-2 와 같은 원칙). */
+    const body = [
+      job.qualification ? `[자격요건]\n${job.qualification}` : null,
+      job.preference ? `[우대사항]\n${job.preference}` : null,
+    ].filter(Boolean);
+
+    const tail = job.url ? [`[공고 주소] ${job.url}`] : [];
+
+    ta.value = [...head, ...body, ...tail].join('\n');
+    return body.length ? 'full' : 'head';
   }
 
   function init() {
@@ -533,7 +555,7 @@
        되살린다 — 자소서를 며칠에 걸쳐 쓰는 동안 회사 칸이 매번 비어 있으면
        흐름이 화면을 나갈 때마다 끊긴다. */
     const picked = localStorage.getItem('careerly_selected_company') || Roadmap.company();
-    let applied = false;
+    let applied = null;        // null | 'head'(제목·조건만) | 'full'(자격요건까지)
     if (picked && $('#jd-company')) {
       $('#jd-company').value = picked;
       localStorage.removeItem('careerly_selected_company');
@@ -548,12 +570,18 @@
     paintProgress();
     paintLibrary();
 
-    /* 공고 칸을 채웠으면 본문이 아직 없다는 것을 분명히 알린다. 제목·조건만으로
-       분석을 돌리면 역량이 빈약하게 나오는데, 그걸 '분석 결과'로 믿으면 안 된다. */
+    /* 어디까지 채워졌는지에 따라 다르게 알린다.
+         head — 제목·조건만
+         full — 지원자격·우대사항까지 들어왔다
+       둘 다 '본문을 이어붙이라'고 말하는 것은 같다. 공공기관 공고의 지원자격은
+       **응시 요건**이지 역량 서술이 아니라, 그것만으로는 역량이 잘 안 잡힌다(실측
+       532건 중 절반이 0개). 채워졌다고 다 된 것처럼 말하지 않는다. */
     if (applied) {
       openStep(1, true);
       if (typeof toast === 'function') {
-        toast('공고를 불러왔어요 — 본문을 복사해 이어붙이면 역량이 정확해져요', { icon: false });
+        toast(applied === 'full'
+          ? '공고를 지원자격까지 불러왔어요 — 역량까지 보려면 본문을 이어붙이세요'
+          : '공고를 불러왔어요 — 본문을 복사해 이어붙이면 역량이 정확해져요', { icon: false });
       }
     }
   }

@@ -48,6 +48,58 @@ function load() {
 
 const isConfigured = () => Boolean(load());
 
+/* ── 공고 정형문구를 걷어낸다 ────────────────────────────────
+   `aplyQlfcCn`(지원자격)·`prefCn`(우대사항)에는 직무 요건보다 **법정 가점 안내와
+   전형 절차 안내**가 훨씬 많다. 532건에서 문장 빈도를 세어 확인한 것들:
+
+     "취업지원 대상자(「국가유공자 등 예우 및 지원에 관한 법률」…)"   33회
+     "※ 자세한 사항은 첨부파일의 채용공고문을 참조하시기 바랍니다."    31회
+     "1차 전형 점수 만점의 범위 내에서 10% 가산"                     27회
+     "장애인: 장애인의 가점은 만점의 3%를 적용"                       19회
+     "우리 기관은 정부의 블라인드 채용 가이드라인에 따라…"            13회
+
+   안 거르면 역량 추출이 이런 문장을 근거로 집어 든다. 실측에서 '결격사유에 해당되지
+   않는 자'가 `process` 역량의 근거로, '블라인드 채용 가이드라인'이 또 `process` 의
+   근거로 뽑혔다. 학생 화면에는 **역량 카드에 엉뚱한 인용문이 붙는 형태**로 나타난다 —
+   에러가 안 나고 그럴듯해서 더 나쁘다(6-3 부류).
+
+   news.js 의 NEWS_STOP 과 같은 방식이다. 다만 **이 소스에만 적용한다** — 사람인 공고에
+   같은 잣대를 대면 멀쩡한 문장이 날아간다.
+
+   ── 지우는 것이 아니라 넘기지 않는 것이다 ──
+   원문은 srcUrl 로 언제든 볼 수 있다. 우리가 하는 일은 '역량 추출에 넣을 문장'을
+   고르는 것이고, 못 고르겠으면 아예 안 넘긴다(그러면 화면이 '본문을 붙여넣으라'고 한다).
+
+   ── 너무 세게 걸면 신호까지 지운다 (실측) ──
+   처음에는 `우대` 가 든 줄을 통째로 버렸다. 그랬더니 "관련 자격증 소지자 우대" 같은
+   **진짜 우대사항**이 같이 날아가, 역량 0개인 공고가 110 → 222건으로 늘었다.
+   지금은 **법정 가점·전형 안내만** 겨냥한다. 애매하면 남긴다 — 남은 노이즈는 근거
+   문장으로 한 번 보이고 말지만, 지운 신호는 되찾을 방법이 없다. */
+const NOISE = [
+  /국가유공자|취업지원\s*대상자|독립유공자|5\s*[·.]?\s*18|고엽제|보훈\s*(대상|보상)/,
+  /장애인고용촉진|장애인의?\s*가점|장애인,?\s*보훈/,
+  /가점|가산점|만점의\s*\d|전형\s*점수/,
+  /결격사유|임용취소|채용비위|부정합격|저촉되지\s*않는/,
+  /첨부파일|채용공고문을?\s*참조|자세한\s*사항은|홈페이지\s*참조|공고문\s*참조/,
+  /블라인드\s*채용|전형\s*절차|면접위원|선발예정인원|응시절차|응시원서\s*마감일\s*기준/,
+  /군복무|전역이?\s*가능|병역/,
+  /만\s*\d+\s*세\s*이상.*\d+\s*세\s*미만/,          // 연령 제한 안내 — 역량이 아니다
+  /^[○ㅇ0\-*※·\s]*$/,
+  /(인사규정|시행령|국가공무원법|공무원법)\s*제\s*\d+\s*조/,
+];
+
+/* 문장 단위로 자른다. jd-competency 의 splitSentences 와 같은 결이지만, 여기서는
+   줄바꿈이 곧 항목 구분인 공고문이라 줄을 먼저 살린다. */
+function stripBoilerplate(text) {
+  if (!text) return null;
+  const kept = String(text)
+    .split(/\r?\n|(?<=[.。])\s+/)
+    .map(s => s.trim())
+    .filter(s => s.length >= 6 && !NOISE.some(re => re.test(s)));
+  const out = kept.join('\n').trim();
+  return out.length >= 20 ? out : null;      // 남은 게 너무 적으면 없는 것으로 본다
+}
+
 /* 잡알리오 레코드 → 사람인·워크넷과 **같은 모양**. 화면(company-cover.js)이 세
    소스를 구분하지 않고 그리므로 여기서 모양을 맞춰야 한다.
 
@@ -66,9 +118,11 @@ function normalizeJob(r) {
     jobType: r.hireTypeNmLst || null,      // '정규직' · '비정규직' 등
     /* 아래 둘은 이 소스에만 있다. 자소서 코치가 공고 본문 없이도 역량을 뽑을 수
        있게 하는 재료다(학생이 복사·붙여넣기를 건너뛴다). 화면 공통 모양에는
-       없는 값이라 쓰는 쪽에서만 꺼내 쓴다. */
-    qualification: r.aplyQlfcCn || null,
-    preference: r.prefCn || null,
+       없는 값이라 쓰는 쪽에서만 꺼내 쓴다.
+       정형문구를 걷어내고 남은 것만 넘긴다 — 남는 게 없으면 null 이고, 그러면
+       화면이 예전처럼 "본문을 복사해 붙여넣으세요"로 돌아간다(거짓말을 안 한다). */
+    qualification: stripBoilerplate(r.aplyQlfcCn),
+    preference: stripBoilerplate(r.prefCn),
     ncs: r.ncsCdNmLst || null,
   };
 }
@@ -131,7 +185,7 @@ async function companyJobs(companyName, { newcomerOnly = false } = {}) {
 }
 
 module.exports = {
-  companyJobs, isConfigured, normalizeJob, isOpen, newcomerOk,
+  companyJobs, isConfigured, normalizeJob, isOpen, newcomerOk, stripBoilerplate, NOISE,
   MAX_ITEMS, CACHE_PATH: CACHE,
   _load: load,
 };
