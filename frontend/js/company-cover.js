@@ -188,11 +188,12 @@ window.CompanyCover = (() => {
             : `<span class="wf-badge wf-badge--mute">기업 리포트</span>`}</span>
       </button>`;
 
+    const rm = Roadmap.get();
     return `
       <div class="co-search-page">
         <div class="co-search-head">
           <div class="wf-eyebrow wf-eyebrow--lg">Company research</div>
-          <h1>어느 회사에 지원하세요?</h1>
+          <h1>${rm ? `${Roadmap.withJosa(rm.jobName || rm.middleName, '로')} 어디에 지원할까요?` : '어느 회사에 지원하세요?'}</h1>
           <p>회사를 고르면 실적·최근 기사에서 자소서 지원동기에 그대로 인용할 수 있는
              사실만 모아 드려요.</p>
         </div>
@@ -207,6 +208,7 @@ window.CompanyCover = (() => {
         </div>
 
         <div class="co-lanes">
+          ${jobFocusHtml()}
           ${rec.length ? `
             <section>
               <div class="co-lane-h"><h2>최근 본 회사</h2><span>${rec.length}곳</span></div>
@@ -222,6 +224,83 @@ window.CompanyCover = (() => {
       </div>`;
   }
 
+  /* ── 로드맵 3단계 · 이 직무를 주로 뽑는 계열 ────────────────
+     직무를 골라 온 학생에게 778곳을 가나다순으로 통째로 내밀면 고를 근거가 없다.
+     서버가 직무(KECO 2차 분류) → 계열 매핑을 준다(company-sectors.js sectorFocus).
+
+     ── 무엇인지 정확히 적는다 ──
+     이건 **"이 회사가 그 직무를 지금 뽑고 있다"가 아니다.** 업종 수준의 연결이고,
+     실제 채용 여부는 회사 리포트의 공고 칸에서 확인한다. 그렇게 안 적으면 학생이
+     '채용 중'으로 읽는다 — 없는 것을 있는 척하지 않는다는 이 화면의 원칙(머리주석)
+     이 여기에도 그대로 적용된다.
+
+     ── 좁히지 못하는 직무는 좁히지 않는다 ──
+     경영·사무직과 영업·판매직은 전 업종이 뽑는다. 계열 몇 개를 억지로 골라 주면
+     나머지를 후보에서 지워 버린다. 그때는 그 사실을 그대로 말하고 아래 계열 목록
+     전체를 쓰게 둔다. */
+  function jobFocusHtml() {
+    const rm = Roadmap.get();
+    if (!rm) return '';
+
+    const focus = sectorData?.focus;
+    const name = rm.jobName || rm.middleName;
+    const goal = esc(name);
+    /* 조사는 이름의 받침에 따라 갈린다 — '개발자를' / '기술직을'. '을(를)' 로 두면
+       데이터로 만든 문장이라는 티가 그대로 난다(roadmap.js josa 주석). */
+    const goalEul = Roadmap.withJosa(name, '을');
+    const goalEun = Roadmap.withJosa(name, '은');
+    const note = t => `<section><div class="co-note"><i class="ti ti-info-circle"></i> ${t}</div></section>`;
+
+    if (!sectorData) return `<section><div class="co-loading">${goal} 관련 계열을 찾는 중…</div></section>`;
+    if (!focus || !focus.matched) return '';
+
+    if (focus.universal) {
+      return note(`<b>${goalEun}</b> <b>업종을 가리지 않는 직무</b>예요.
+        특정 계열로 좁히면 나머지 업종의 회사를 후보에서 지우게 되니 좁히지 않았어요 —
+        아래 계열 목록에서 관심 있는 산업을 골라 보세요.`);
+    }
+    if (!focus.sectors.length) {
+      return note(`<b>${goalEun}</b> 공무원·군인 채용 경로라 민간 기업 계열로 이어지지 않아요.
+        그래도 회사를 정해 자소서를 쓰려면 아래에서 직접 찾아 주세요.`);
+    }
+
+    const picked = (sectorData.sectors || []).filter(s => focus.sectors.includes(s.name));
+    const total = picked.reduce((n, s) => n + s.companies.length, 0);
+    if (!total) return '';
+
+    return `
+      <section class="co-focus">
+        <div class="co-lane-h">
+          <h2>${goalEul} 주로 뽑는 계열</h2>
+          <span>${picked.length}개 계열 · ${total.toLocaleString()}곳</span>
+        </div>
+        <div class="co-note co-note--tight">
+          <i class="ti ti-info-circle"></i>
+          <b>업종 기준</b>이에요 — "이 회사가 지금 ${goalEul} 뽑는다"는 뜻은 아닙니다.
+          실제 채용 여부는 회사를 열면 나오는 <b>채용공고</b> 칸에서 확인하세요.
+        </div>
+        <div class="co-sectors">
+          ${picked.map(s => {
+            const open = openSector === s.name;
+            const list = open ? s.companies : s.companies.slice(0, SECTOR_PREVIEW);
+            return `<div class="co-sector is-focus ${open ? 'is-open' : ''}">
+              <button type="button" class="co-sector-h" data-sector="${esc(s.name)}">
+                <b>${esc(s.name)}</b>
+                <span class="wf-badge wf-badge--ok">${s.companies.length}곳</span>
+                <i class="ti ti-chevron-down"></i>
+              </button>
+              <div class="co-sector-body">
+                ${list.map(c => `<button type="button" class="co-chip" data-pick="${esc(c.name)}">${esc(c.name)}</button>`).join('')}
+                ${!open && s.companies.length > SECTOR_PREVIEW
+                  ? `<button type="button" class="co-chip co-chip--more" data-sector="${esc(s.name)}">+${s.companies.length - SECTOR_PREVIEW}곳 더</button>`
+                  : ''}
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      </section>`;
+  }
+
   /* ── 계열별 기업 ───────────────────────────────────────────
      "이미 아는 회사 8곳" 만 보여주면 학생은 아는 데만 지원한다. 계열로 묶어 펼치면
      **몰랐던 회사**를 만난다 — 이 화면을 만든 이유가 그것이다.
@@ -235,13 +314,21 @@ window.CompanyCover = (() => {
     if (!sectorData) return `<section><div class="co-loading">계열별 기업을 불러오는 중…</div></section>`;
     if (!sectorData.sectors?.length) return '';
 
+    /* 위 '주로 뽑는 계열' 에 이미 나온 것은 여기서 뺀다. 같은 계열이 두 번 뜨면
+       목록이 길어지는 것보다 나쁜 일이 생긴다 — 펼침 상태(openSector)를 이름으로
+       기억하므로 한쪽을 펼치면 다른 쪽도 같이 펼쳐져 고장으로 보인다. */
+    const focused = new Set(sectorData.focus?.sectors || []);
+    const rest = sectorData.sectors.filter(s => !focused.has(s.name));
+    if (!rest.length) return '';
+    const restTotal = rest.reduce((n, s) => n + s.companies.length, 0);
+
     return `<section>
       <div class="co-lane-h">
-        <h2>계열로 둘러보기</h2>
-        <span>상장사 ${sectorData.total.toLocaleString()}곳 · 이름을 못 들어본 회사를 찾아보세요</span>
+        <h2>${focused.size ? '다른 계열도 둘러보기' : '계열로 둘러보기'}</h2>
+        <span>상장사 ${restTotal.toLocaleString()}곳 · 이름을 못 들어본 회사를 찾아보세요</span>
       </div>
       <div class="co-sectors">
-        ${sectorData.sectors.map(s => {
+        ${rest.map(s => {
           const open = openSector === s.name;
           const list = open ? s.companies : s.companies.slice(0, SECTOR_PREVIEW);
           return `<div class="co-sector ${open ? 'is-open' : ''}">
@@ -564,6 +651,39 @@ window.CompanyCover = (() => {
   /* 채용공고 — 우리가 회사별 공고를 들고 있지 않다. 있는 척하지 않고 찾는 경로를 준다.
      예전 '인재상' 칸을 이걸로 바꿨다: 인재상은 회사마다 비슷한 캐치프레이즈라
      자소서에 쓸 게 못 되고, 실제로 필요한 건 지금 열려 있는 공고의 자격요건이다. */
+  /* ── 안내 문구는 소스마다 다르다 ────────────────────────────
+     사람인·워크넷은 목록 API 가 **제목·조건만** 준다.
+     잡알리오는 `aplyQlfcCn`(지원자격)·`prefCn`(우대사항)을 같이 준다.
+
+     ── 다만 그것이 '역량'은 아니다 (실측) ──
+     처음에는 "이제 복붙 없이 역량 분석이 된다"고 안내하려 했다. 532건에 돌려 보고
+     접었다 — 공공기관 공고의 저 필드는 **응시 요건**이지 직무 역량 서술이 아니다.
+     연령·학력·전공 제한, 마감일 기준, 법정 가점이 대부분이고, 정형문구를 걷어내도
+     **절반은 역량이 하나도 안 잡힌다.** 민간 공고의 [자격요건]/[우대사항]과 성격이
+     다르다.
+
+     그래도 담는 값어치는 있다 — 학생이 **지원할 수 있는 공고인지**(연령·학력·자격증)
+     판단하는 정보다. 그러니 있는 그대로 말한다: 자격 정보는 채워지고, 역량까지
+     원하면 원문을 이어붙이라고. 되는 것처럼 말해 놓고 안 되면 그게 더 나쁘다. */
+  const SOURCE_LABEL = { saramin: '사람인', worknet: '워크넷', alio: '공공기관 채용정보(잡알리오)' };
+
+  function jobsHint(jobs) {
+    const label = SOURCE_LABEL[jobs.source] || '채용 API';
+    const withBody = (jobs.items || []).filter(j => j.qualification || j.preference).length;
+
+    if (withBody) {
+      return `<p class="jd-hint">${esc(label)} 기준입니다.
+        이 공고들은 <b>지원자격·우대사항이 함께</b> 담겨요 — 연령·학력·자격증 요건을
+        여기서 바로 확인할 수 있습니다.
+        다만 공공기관 공고는 <b>응시 요건 위주</b>라 요구 역량은 잘 드러나지 않아요.
+        역량까지 뽑으려면 공고를 열어 <b>본문을 이어붙이는 편</b>이 정확합니다.</p>`;
+    }
+    return `<p class="jd-hint">${esc(label)} 기준입니다.
+      공고를 <b>담으면</b> 자소서 코치로 그대로 넘어가요. 요구 역량까지 뽑으려면
+      공고를 열어 <b>본문을 복사해 붙여넣어야</b> 합니다 — 이 채용 API 는 제목·조건만 주고
+      본문은 주지 않습니다.</p>`;
+  }
+
   function recruitDetail(s) {
     const n = encodeURIComponent(selected.name);
     const jobs = analysis.jobs || {};
@@ -597,14 +717,12 @@ window.CompanyCover = (() => {
                    data-add="${esc(id)}" data-title="${esc(j.title)}" data-url="${esc(j.url || '')}"
                    data-career="${esc(j.career || '')}" data-edu="${esc(j.edu || '')}"
                    data-region="${esc(j.region || '')}" data-dday="${j.dday ?? ''}"
+                   data-qual="${esc(j.qualification || '')}" data-pref="${esc(j.preference || '')}"
                    >이 공고로 자소서 쓰기</button>`}
           </div>`;
         }).join('')}
       </div>
-      <p class="jd-hint">${esc(jobs.source === 'saramin' ? '사람인' : '워크넷')} 기준입니다.
-        공고를 <b>담으면</b> 자소서 코치로 그대로 넘어가요. 요구 역량까지 뽑으려면
-        공고를 열어 <b>본문을 복사해 붙여넣어야</b> 합니다 — 채용 API 는 제목·조건만 주고
-        본문은 주지 않습니다.</p>`
+      ${jobsHint(jobs)}`
       : `<div class="co-note"><i class="ti ti-info-circle"></i>
            ${esc(jobs.reason || '이 회사 이름으로 열린 공고가 없습니다.')}
            대기업 공채는 자사 채용 사이트로만 올라오는 일이 많아, 없는 것이 정상인 경우도 있어요.</div>`;
@@ -782,6 +900,10 @@ window.CompanyCover = (() => {
         edu: el.dataset.edu || '',
         region: el.dataset.region || '',
         dday: el.dataset.dday === '' ? null : Number(el.dataset.dday),
+        /* 있으면 같이 담는다 — 자소서 코치가 이걸로 공고 본문을 만든다(B20).
+           없는 소스(사람인·워크넷)에서는 빈 값이라 예전과 똑같이 동작한다. */
+        qualification: el.dataset.qual || '',
+        preference: el.dataset.pref || '',
       })));
 
     // 계열 펼치기/접기
@@ -801,6 +923,10 @@ window.CompanyCover = (() => {
     box.querySelectorAll('[data-tocoach]').forEach(el =>
       el.addEventListener('click', () => {
         localStorage.setItem('careerly_selected_company', selected.name);
+        /* 로드맵 3단계의 결론 — 스텝바와 4단계가 이 회사 이름을 쓴다.
+           직무 없이 회사만 고른 경우(네비로 바로 들어온 사용자)는 흐름 상태를
+           만들지 않는다. Roadmap.setCompany 가 알아서 무시한다. */
+        Roadmap.setCompany(selected.name);
         navigate('jd');
       }));
 
@@ -848,12 +974,18 @@ window.CompanyCover = (() => {
   }
 
   /* 페이지 진입 — 자소서 코치에서 회사명을 들고 왔으면 그 회사를 연다. */
-  /* 계열 목록은 화면을 막지 않는다 — 먼저 그리고, 도착하면 그 자리만 다시 그린다. */
+  /* 계열 목록은 화면을 막지 않는다 — 먼저 그리고, 도착하면 그 자리만 다시 그린다.
+
+     로드맵 직무가 바뀌면 focus 도 달라지므로 다시 받는다. 캐시한 채로 두면
+     직무를 바꿔도 예전 직무의 계열이 강조된 채 남는다(조용히 틀리는 쪽). */
+  let sectorFor = null;                       // 지금 받아 둔 focus 의 직무 코드
   async function loadSectors() {
-    if (sectorData || sectorErr) return;
+    const mid = Roadmap.get()?.middle || null;
+    if ((sectorData || sectorErr) && sectorFor === mid) return;
+    sectorFor = mid;
     try {
-      sectorData = await DB.companySectors();
-      if (!sectorData.sectors?.length && sectorData.reason) sectorErr = sectorData.reason;
+      sectorData = await DB.companySectors(mid);
+      sectorErr = (!sectorData.sectors?.length && sectorData.reason) ? sectorData.reason : null;
     } catch (e) {
       sectorErr = e.message;
     }
@@ -861,6 +993,7 @@ window.CompanyCover = (() => {
   }
 
   function onEnter() {
+    Roadmap.mount('rm-bar-company', 'company');
     loadSectors();
     const handoff = localStorage.getItem('careerly_company_open');
     if (handoff) {

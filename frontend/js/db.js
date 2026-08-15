@@ -187,9 +187,12 @@ window.DB = (() => {
     });
   }
 
-  /* 계열별 기업 목록 — 회사 찾기 첫 화면. 서버가 캐시 파일만 읽어 빠르다. */
-  async function companySectors() {
-    return api('GET', '/api/company/sectors');
+  /* 계열별 기업 목록 — 회사 찾기 첫 화면. 서버가 캐시 파일만 읽어 빠르다.
+     middle(KECO 2차 분류 코드)을 주면 "이 직무를 주로 뽑는 계열"이 focus 로 함께 온다.
+     목록 자체는 그대로다 — 좁힌 계열 밖에도 지원할 회사가 있다. */
+  async function companySectors(middle) {
+    const qs = middle ? `?middle=${encodeURIComponent(middle)}` : '';
+    return api('GET', '/api/company/sectors' + qs);
   }
 
   /* 기업분석 5단계 — 개요·재무·경쟁사(DART) + 최근이슈(뉴스).
