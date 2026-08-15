@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════
-//  CAREERLY  —  Spec Aggregation Engine
+//  C:road  —  Spec Aggregation Engine
 //   • computeAggregate(filter)  : { count, gpa, certs, scores, qual }
 //     filter: { dept?, field?, job?, corpType? } 모두 옵션. 미지정 시 전체.
 //   • OPIc / TOEIC Speaking 레벨은 ordinal scale 로 평균 후 다시 레벨로 환산

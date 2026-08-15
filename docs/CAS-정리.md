@@ -1,4 +1,4 @@
-# careerly CAS 정리
+# C:road CAS 정리
 
 작성일: 2026-07-21
 

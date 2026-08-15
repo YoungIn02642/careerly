@@ -41,7 +41,7 @@ npm run dev        # nodemon
 ### 폴더 구조 (실제)
 
 ```text
-careerly
+C:road
 ├─ frontend
 │  ├─ careerly.html            # 단일 문서 SPA
 │  ├─ css/  main.css · home.css · mentoring.css · jd-coach.css
@@ -692,7 +692,7 @@ node scripts/fetch-worknet-jobs.js          # 공고 수집 → data/worknet-job
 node scripts/build-job-trends.js            # 역량 빈도 집계 → data/job-trends.json
 ```
 
-- **`scripts/fetch-worknet-jobs.js`** — 수집. **직종코드(KECO) 대신 NCS 중분류 이름을 키워드로 훑는다.** 매핑표를 만들 필요가 없고, 수집 단위와 careerly 화면 단위가 처음부터 일치한다. `--keyword=` / `--limit=` / `--probe` / `--probe-detail=` 옵션.
+- **`scripts/fetch-worknet-jobs.js`** — 수집. **직종코드(KECO) 대신 NCS 중분류 이름을 키워드로 훑는다.** 매핑표를 만들 필요가 없고, 수집 단위와 C:road 화면 단위가 처음부터 일치한다. `--keyword=` / `--limit=` / `--probe` / `--probe-detail=` 옵션.
   - **응답 스키마를 박아두지 않았다.** 210L01 응답을 아직 못 봤기 때문이다(권한 차단). 반복되는 항목 태그를 **자동 인식**하고 제목·회사명도 후보 목록(`TITLE_FIELDS`/`COMPANY_FIELDS`)에서 고른다. 권한이 열리면 **`--probe` 부터 돌려 실제 응답을 눈으로 확인**할 것.
 - **`src/job-trends.js`** — 집계·조회. 같은 `ruleExtract` 를 쓰므로 **화면 카드와 집계 숫자가 어긋날 수 없다**.
 - **`scripts/build-job-trends.js`** — 집계만 재실행(네트워크 안 탐). 추출 규칙은 앞으로 자주 손볼 부분이라 수집과 분리했다.
@@ -1071,7 +1071,7 @@ feature/*  각자 작업 ──PR──▶ dev ──PR──▶ main
 
 자소서 코치에 **"이 회사를 분석해서, 내 스펙 중 쓸 것을 골라, 이렇게 적어라"** 를 채운 작업.
 출처는 링커리어 커뮤니티 글 두 편(기업분석 방법 2026 · AI 자소서 프롬프트 정리)이고,
-거기서 careerly 에 **없던 것만** 골라 넣었다. 이미 있던 것(문항별 기준·소재 배분·역량 추출)은 그대로 뒀다.
+거기서 C:road 에 **없던 것만** 골라 넣었다. 이미 있던 것(문항별 기준·소재 배분·역량 추출)은 그대로 뒀다.
 
 ### 16-1. 만든 것
 
@@ -1116,7 +1116,7 @@ feature/*  각자 작업 ──PR──▶ dev ──PR──▶ main
 
 ### 16-5. 5단계를 다 못 채워도 칸을 지우지 않는다
 
-기업분석 5단계(사업구조·재무·경쟁사·최근이슈·인재상JD) 중 careerly 가 못 채우는 칸은
+기업분석 5단계(사업구조·재무·경쟁사·최근이슈·인재상JD) 중 C:road 가 못 채우는 칸은
 **숨기지 않고 "직접 확인하세요"로 남긴다.** 안 보여주면 학생은 그 칸이 필요 없다고 오해한다.
 뉴스와 재무를 하나의 '기업 매력도' 점수로 버무리지 않는 것도 그대로다(11-1 원칙).
 

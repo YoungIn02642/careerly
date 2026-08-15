@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════
-//  CAREERLY — Career Roadmap (임금직업정보 · 한국고용직업분류 KECO 2018 기반)
+//  C:road — Career Roadmap (임금직업정보 · 한국고용직업분류 KECO 2018 기반)
 //   • 사이드바      : 1차 분류 10개 (js/keco.js · 임금직업정보시스템)
 //   • STEP 01       : 2차 분류 선택    (미용·여행…경비·청소직 → 경호·경비직)
 //   • STEP 02       : 직업 선택        (경호·경비직 → 경호원) · 9개씩 페이지로 나눈다
@@ -167,13 +167,13 @@ window.CareerPage = (() => {
     return `
       <div class="phase-bar">
         <div class="phase-tab ${!currentMiddle ? 'active' : ''}" onclick="CareerPage.gotoPhase(1)">
-          <div class="pt-num">STEP 01</div><div class="pt-label">2차 분류</div>
+          <div class="pt-num">STEP 01</div><div class="pt-label">직무 찾기</div>
         </div>
         <div class="phase-tab ${currentMiddle && !currentJob ? 'active' : ''}" onclick="CareerPage.gotoPhase(2)">
-          <div class="pt-num">STEP 02</div><div class="pt-label">직업</div>
+          <div class="pt-num">STEP 02</div><div class="pt-label">직무 고르기</div>
         </div>
         <div class="phase-tab ${currentJob ? 'active' : ''}" onclick="CareerPage.gotoPhase(3)">
-          <div class="pt-num">STEP 03</div><div class="pt-label">커리어 로드맵</div>
+          <div class="pt-num">STEP 03</div><div class="pt-label">내 로드맵</div>
         </div>
       </div>`;
   }
@@ -604,10 +604,11 @@ window.CareerPage = (() => {
     return `
       <div class="welcome">
         <div class="welcome-icon">🗺️</div>
-        <h2>직업 분류를 선택해 주세요</h2>
-        <p>왼쪽에서 1차 분류 ${c.majors}개 중 하나를 고르면<br>
-          2차 분류 → 직업 순으로 좁혀 가며 <b>평균 연봉</b>과 선배 스펙을 볼 수 있어요.<br>
-          <span class="welcome-sub">직업 ${c.jobs}개 · 한국고용직업분류(KECO) 기준</span></p>
+        <h2>관심 있는 직무를 골라 보세요</h2>
+        <p>여기가 커리어 로드맵의 <b>첫 단계</b>예요. 직무를 고르면
+          <b>지금 내 위치 → 채울 것 → 지원할 회사</b> 순으로 이어집니다.<br>
+          왼쪽 분야 ${c.majors}개 중 하나를 고르면 세부 분류 → 직무 순으로 좁혀 가요.<br>
+          <span class="welcome-sub">직무 ${c.jobs}개 · 한국고용직업분류(KECO) 기준 · 평균임금은 임금직업정보시스템</span></p>
       </div>`;
   }
 
