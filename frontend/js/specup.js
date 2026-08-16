@@ -168,12 +168,18 @@ window.SpecUp = (() => {
     const gaps = state.ok ? G.computeGaps('cert', state.ctx) : [];
 
     /* 부족한 게 없어도 빈 화면을 주지 않는다 — 선배 보유율 상위를 그대로 보여준다.
-       '더 할 게 없다' 와 '보여줄 게 없다' 는 다른 말이다. */
+       '더 할 게 없다' 와 '보여줄 게 없다' 는 다른 말이다.
+
+       ── 이 목록에서도 '아직 없는 것' 이 먼저다 ──
+       실측(정보통신 직무군)에서 상위 6개 중 3개가 이미 보유한 자격이라, 채울 것을
+       찾으러 온 화면의 절반이 '보유' 배지로 찼다. 보유한 것을 지우지는 않는다 —
+       "선배들이 많이 가진 것" 이라는 목록의 뜻이 달라지기 때문이다. 순서만 바꾼다. */
     const fallback = !gaps.length;
     const rows = fallback
       ? (ctx.agg.certs || []).filter(c => c.pct > 0)
-          .sort((a, b) => b.pct - a.pct).slice(0, 6)
           .map(c => ({ name: c.name, pct: c.pct, mine: (ctx.spec.certs || []).includes(c.id) }))
+          .sort((a, b) => (a.mine === b.mine ? 0 : a.mine ? 1 : -1) || b.pct - a.pct)
+          .slice(0, 6)
       : gaps.map(g => ({ name: g.name, pct: g.pct, mine: false }));
 
     if (!rows.length) {
@@ -220,7 +226,11 @@ window.SpecUp = (() => {
 
     const item = (examState.items || []).find(i => i.name === name);
     if (!item) return '';
-    if (!item.matched) return `<div class="sup-sched sup-sched--none">${esc(item.note)}</div>`;
+    /* ── 못 찾은 종목은 짧게 한 줄 ────────────────────────────
+       실측(정보통신 직무군)에서 6줄 중 5줄이 민간자격이라, 줄마다 같은 두 문장을
+       반복해 **화면이 통째로 경고문이 됐다.** 이유 설명은 목록 아래 각주로 한 번만
+       하고(examFoot), 여기서는 사실만 짧게 적는다. */
+    if (!item.matched) return `<div class="sup-sched sup-sched--none">국가자격 일정표에 없는 종목이에요<sup>*</sup></div>`;
     if (!item.round)   return `<div class="sup-sched sup-sched--none">${esc(item.note || '남은 회차가 없어요')}</div>`;
 
     const r = item.round;
@@ -260,10 +270,17 @@ window.SpecUp = (() => {
   /* 일정을 못 받았을 때의 안내는 목록 아래에 **한 번만** 붙인다. 자격증마다 같은
      문구를 반복하면 화면이 경고문으로 덮인다. */
   function examFoot() {
-    if (!examState || examState.loading || examState.ok) {
-      return examState?.ok
-        ? `<div class="sup-src">시험일정: ${esc(examState.source || '')} · ${examState.year}년 기준</div>`
-        : '';
+    if (!examState || examState.loading) return '';
+
+    if (examState.ok) {
+      /* 못 찾은 종목이 있으면 그 이유를 여기서 **한 번만** 설명한다. */
+      const missed = (examState.items || []).filter(i => !i.matched).map(i => i.name);
+      return `<div class="sup-src">
+        시험일정: ${esc(examState.source || '')} · ${examState.year}년 필기 기준
+        (실기는 필기 합격자만 접수할 수 있어 보여주지 않아요)
+        ${missed.length ? `<br><sup>*</sup> ${esc(missed.join(' · '))} 는 국가자격 시험일정에서 못 찾았어요 —
+          민간자격이거나 종목 목록에 빠진 종목이라, 시행기관 공지를 확인해 주세요.` : ''}
+      </div>`;
     }
     return `<div class="sup-note">
       <i class="ti ti-calendar-off"></i>
@@ -372,9 +389,14 @@ window.SpecUp = (() => {
       ? ['competition']
       : ['extracurricular', 'club', 'campus', 'volunteer'];
     const gaps = G.computeGaps('activity', state.ctx);
-    const hit = gaps.filter(g => want.some(w => matchesType(g, w)));
 
-    const rows = (hit.length ? hit : gaps).slice(0, 3);
+    /* ── 이 탭과 무관한 유형으로 채우지 않는다 ────────────────────
+       처음에는 해당 유형이 하나도 없으면 부족 활동 전체로 물러섰다. 그랬더니
+       **'공모전·대회' 탭에 "인턴십 44% · 프로젝트 61%" 가 떴다**(실측). 탭 제목이
+       말하는 것과 아래 내용이 다르면, 학생은 이 화면이 무엇을 근거로 고른 목록인지
+       알 수 없게 된다. 이 유형이 부족하지 않으면 이 줄은 그냥 안 그린다 —
+       아래 모집 공고는 그대로 보여주므로 화면이 비지 않는다. */
+    const rows = gaps.filter(g => want.some(w => matchesType(g, w))).slice(0, 3);
     if (!rows.length) return '';
 
     return `<div class="sup-note sup-note--why">
