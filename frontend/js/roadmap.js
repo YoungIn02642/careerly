@@ -180,24 +180,31 @@
     };
   }
 
-  /* 2차 분류 형제들 — CAS 의 '비교 직무' 셀렉트가 쓴다. 같은 1차 분류 안에서
-     직무군을 바로 바꿔 볼 수 있어야 "내 위치" 를 비교하는 의미가 산다. */
-  function siblings() {
-    const cur = get();
-    if (!cur || !root.KECO?.ready?.()) return [];
-    return (root.KECO.byId(cur.major)?.middles || []).map(m => ({ code: m.code, name: m.name }));
-  }
+  /* 목표 직무군을 갈아 끼운다. 직업 단위 선택은 비운다 — '반도체공학기술자' 를 고른
+     채 직무군만 금융으로 바꾸면 이름이 거짓말이 된다.
 
-  /* 2차 분류만 갈아 끼운다(1차는 그대로). 직업 단위 선택은 뜻을 잃으므로 비운다 —
-     '반도체공학기술자' 를 고른 채 직무군만 금융으로 바꾸면 이름이 거짓말이 된다. */
-  function switchMiddle(middleCode) {
+     ── majorCode 를 받는 이유 ──
+     CAS 의 '비교 직무' 셀렉트는 같은 1차 분류의 형제만이 아니라 **35개 직무군 전부**를
+     담는다. 형제만 담으면 형제가 하나뿐인 분류에서는 고를 것이 없고(그게 그 칸이
+     비어 보이던 원인 중 하나였다), 목표 직무가 아직 없는 사람은 시작점조차 없다.
+     그래서 1차 분류까지 옮길 수 있게 하고, 안 주면 예전처럼 지금 1차 분류 안에서만
+     바꾼다. */
+  function switchMiddle(middleCode, majorCode) {
     const cur = get();
-    if (!cur || !root.KECO?.ready?.()) return cur;
-    const m = root.KECO.middleById(cur.major, middleCode);
-    if (!m) return cur;
+    if (!root.KECO?.ready?.()) return cur;
+    const majorId = majorCode || cur?.major;
+    if (!majorId) return cur;
+
+    const maj = root.KECO.byId(majorId);
+    const m = root.KECO.middleById(majorId, middleCode);
+    if (!maj || !m) return cur;
+    /* 고른 것을 다시 고른 경우 — 그냥 통과시키면 아래 setJob 이 직업 선택을 비워서
+       목표 칩의 '백엔드 개발자' 가 조용히 '정보통신 연구개발직' 으로 뭉개진다. */
+    if (cur && cur.major === majorId && cur.middle === m.code) return cur;
+
     return setJob({
-      major: cur.major, middle: m.code, job: null,
-      majorName: cur.majorName, middleName: m.name, jobName: '',
+      major: maj.code, middle: m.code, job: null,
+      majorName: maj.name, middleName: m.name, jobName: '',
       avgWage: m.wageRange?.avg ?? null,
     });
   }
@@ -255,18 +262,26 @@
         <div class="rm-bar-inner">
           <span class="rm-bar-title">커리어 로드맵</span>
           <div class="rm-steps">${cells}</div>
-          ${goalChip(cur)}
+          ${goalChip(cur, activeId)}
         </div>
       </nav>`;
   }
 
   /* 지금 목표가 무엇인지 스텝바 오른쪽에 붙인다. 네 화면 어디서든 같은 문장이
-     보여야 "이 화면이 그 직무 얘기를 하고 있다" 가 성립한다. */
-  function goalChip(cur) {
+     보여야 "이 화면이 그 직무 얘기를 하고 있다" 가 성립한다.
+
+     ── '바꾸기' 는 직무 찾기 화면에서는 뺀다 (사용자 지시) ──
+     그 링크가 하는 일이 navigate('career') 인데, 직무 찾기(#career)에서 누르면
+     지금 보고 있는 화면으로 다시 온다. 아무 일도 안 일어나는 버튼이라 "눌렀는데
+     안 되네" 로 읽히고, 바로 아래에 분류를 고르는 격자가 이미 깔려 있어서 안내로도
+     필요 없다. 나머지 세 화면(CAS·회사·자소서)에서는 여기가 유일한 되돌아가는
+     길이므로 그대로 둔다. */
+  function goalChip(cur, activeId) {
+    const onJobPage = activeId === 'job';
     if (!cur) {
       return `<span class="rm-goal rm-goal--empty">
         <i class="ti ti-target"></i> 목표 직무 없음
-        <a onclick="navigate('career')">고르기</a>
+        ${onJobPage ? '' : `<a onclick="navigate('career')">고르기</a>`}
       </span>`;
     }
     const name = cur.jobName || cur.middleName;
@@ -276,7 +291,7 @@
       <i class="ti ti-target"></i>
       <b>${esc(name)}</b>${sub}
       ${cur.company ? `<span class="rm-goal-co">· ${esc(cur.company)}</span>` : ''}
-      <a onclick="navigate('career')">바꾸기</a>
+      ${onJobPage ? '' : `<a onclick="navigate('career')">바꾸기</a>`}
     </span>`;
   }
 
@@ -303,7 +318,7 @@
   const api = {
     STEPS, LS_KEY,
     get, hasJob, company, setJob, setCompany, clear,
-    bench, siblings, switchMiddle, syncGoalToSpec,
+    bench, switchMiddle, syncGoalToSpec,
     stepBar, mount, goalChip, nextLabel, goNext,
     josa, withJosa,
   };

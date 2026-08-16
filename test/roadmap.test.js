@@ -138,6 +138,49 @@ ok('바뀐 직무군 이름을 쓴다', Roadmap.get().middleName === '제조 연
 Roadmap.switchMiddle('99');
 ok('없는 2차 분류로는 안 바뀐다', Roadmap.get().middle === '15');
 
+/* ── 같은 것을 다시 고르면 손대지 않는다 ──────────────────────
+   CAS 의 비교 직무 셀렉트는 change 로 불린다. 여기서 그냥 통과시키면 setJob 이
+   직업 선택을 비워, 목표 칩의 '백엔드 개발자' 가 조용히 직무군 이름으로 뭉개진다. */
+reset();
+Roadmap.setJob(DEV);
+Roadmap.switchMiddle('13');
+ok('같은 직무군을 다시 고르면 직업 선택이 살아 있다',
+   Roadmap.get().jobName === '백엔드 개발자' && Roadmap.get().job === 'K1');
+
+/* ── 1차 분류까지 옮길 수 있어야 한다 ─────────────────────────
+   비교 직무 셀렉트는 형제 2차 분류만이 아니라 35개 직무군 전부를 담는다.
+   형제만 담으면 형제가 하나뿐인 분류에서 고를 것이 없고(그게 그 칸이 비어 보이던
+   원인 중 하나였다), 목표 직무가 아직 없는 사람은 시작점조차 없다. */
+reset();
+Roadmap.setJob(DEV);
+Roadmap.switchMiddle('15', '1');
+ok('major 를 같이 주면 그 분류로 옮긴다',
+   Roadmap.get().major === '1' && Roadmap.get().middle === '15');
+
+reset();
+ok('목표가 없어도 셀렉트로 처음 고를 수 있다',
+   Roadmap.switchMiddle('13', '1') !== null && Roadmap.get().middle === '13',
+   '예전에는 기존 목표가 없으면 그냥 무시했다');
+
+Roadmap.clear();
+ok('major 를 모르면 아무 일도 하지 않는다', Roadmap.switchMiddle('13') === null);
+
+// ── 5-1. 목표 칩의 '바꾸기' ─────────────────────────────────
+/* navigate('career') 로 가는 링크라, 직무 찾기 화면에서는 지금 보는 화면으로
+   다시 오는 버튼이 된다. 아무 일도 안 일어나서 "눌렀는데 안 되네" 로 읽힌다. */
+console.log('\n── 5-1. 직무 찾기에서는 목표 칩에 링크를 붙이지 않는다 ──');
+reset();
+Roadmap.setJob(DEV);
+ok('직무 찾기(job)에는 바꾸기가 없다', !Roadmap.stepBar('job').includes('바꾸기'));
+ok('CAS(me)에는 바꾸기가 있다', Roadmap.stepBar('me').includes('바꾸기'));
+ok('회사(company)에도 바꾸기가 있다', Roadmap.stepBar('company').includes('바꾸기'));
+
+reset();
+ok('목표가 없을 때도 직무 찾기에는 고르기 링크가 없다',
+   !Roadmap.stepBar('job').includes('고르기'), '이미 고르는 화면에 있다');
+ok('목표가 없으면 다른 화면에는 고르기 링크가 있다',
+   Roadmap.stepBar('me').includes('고르기'));
+
 // ── 6. 스텝바 ───────────────────────────────────────────────
 console.log('\n── 6. 스텝바 ──');
 reset();
