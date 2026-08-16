@@ -67,7 +67,7 @@ window.CareerPage = (() => {
         currentMiddle = null;
         currentJob = null;
         jobPage = 1;
-        render();
+        render({ toTop: true });   // 본문이 통째로 갈리므로 맨 위에서 다시 시작한다
       });
     });
   }
@@ -91,9 +91,30 @@ window.CareerPage = (() => {
     }
   }
 
-  function render() {
+  /* ── 다시 그려도 보던 자리에 있게 한다 ──────────────────────
+     render() 는 #career-main 의 innerHTML 을 통째로 갈아 끼운다. 그러면 브라우저가
+     스크롤 위치를 **0 으로 되돌린다**. 직업 카드를 누르면 화면이 맨 위로 튀어서
+     방금 고른 카드도, 아래에 새로 열린 로드맵도 보이지 않았다 — 눌렀는데 아무 일도
+     안 일어난 것처럼 보인다.
+
+     그래서 다시 그리기 전 위치를 기억했다가 되돌린다. 다만 **분야를 통째로 바꾸는
+     이동**(왼쪽 사이드바 · 01 단계로 되돌아가기)은 화면 내용이 전부 갈리므로
+     맨 위가 맞다. 그때만 `toTop` 으로 부른다.
+
+     여기 한 곳으로 모으는 이유: render() 에는 중간에 빠져나가는 갈래가 넷이라
+     각자 innerHTML 을 쓰면 한두 곳을 빠뜨린다. */
+  function paint(main, html, toTop) {
+    const keep = toTop ? 0 : main.scrollTop;
+    main.innerHTML = html;
+    main.scrollTop = keep;                 // 내용이 짧아졌으면 브라우저가 알아서 줄인다
+    syncTopbarCompact(main);               // 되돌린 위치 기준으로 상단바를 접는다
+    bindTopbarScroll(main);
+  }
+
+  function render(opts) {
     const main = document.getElementById('career-main');
     if (!main) return;
+    const toTop = Boolean(opts && opts.toTop);
 
     /* 스텝바는 어느 상태에서든 맨 위에 있어야 한다 — 직무를 고르기 전에도
        "여기가 4단계 중 1단계" 라는 것이 보여야 흐름으로 읽힌다. */
@@ -102,7 +123,7 @@ window.CareerPage = (() => {
     // 분류가 아직 없으면 받아오고, 그동안은 상태를 보여준다
     if (!KECO.ready()) {
       ensureLoaded();
-      main.innerHTML = shell(loadError ? loadErrorBlock() : loadingBlock());
+      paint(main, shell(loadError ? loadErrorBlock() : loadingBlock()), true);
       return;
     }
     /* 지난번에 고른 직무가 있으면 그 자리에서 다시 시작한다. 로드맵은 하루에
@@ -118,13 +139,13 @@ window.CareerPage = (() => {
     if (!painted || activeId !== (currentMajor ?? null)) paintSidebar();
 
     if (!currentMajor) {
-      main.innerHTML = shell(welcomeBlock());
+      paint(main, shell(welcomeBlock()), true);
       return;
     }
 
     const major = KECO.byId(currentMajor);
     if (!major) {
-      main.innerHTML = placeholderBlock();
+      paint(main, placeholderBlock(), true);
       return;
     }
     const middle = currentMiddle
@@ -135,7 +156,7 @@ window.CareerPage = (() => {
         ? KECO.jobById(currentMajor, currentMiddle, currentJob)
         : null;
 
-    main.innerHTML = `
+    paint(main, `
       <div class="topbar">
         <div class="breadcrumb">
           <span>${major.emoji} ${esc(major.name)}</span>
@@ -154,10 +175,8 @@ window.CareerPage = (() => {
         ${middle ? jobSelect(middle) : ''}
         ${job ? renderRoadmap(major, middle, job) : ''}
       </div>
-    `;
+    `, toTop);
     animateBars();
-    syncTopbarCompact(main);
-    bindTopbarScroll(main);
   }
 
   /* 저장된 로드맵 직무를 화면 상태로 되돌린다.
@@ -392,8 +411,12 @@ window.CareerPage = (() => {
       scope = `${major.name} 전체 (2차 분류 미일치)`;
     }
 
+    /* ── 여기서 연봉을 다시 보여주지 않는다 (사용자 지시) ──
+       직업 카드(STEP 02)에 이미 평균연봉이 붙어 있어서 고른 직후에 같은 숫자를
+       크게 한 번 더 띄우면, 이 화면의 주제인 '선배 스펙'보다 연봉이 먼저 읽힌다.
+       임금 정보의 출처·한계(전체 재직자 기준·신입 초봉 아님)는 직업 카드 쪽으로
+       남겨 둔다. */
     const head = `
-      ${wageBlock(job)}
       ${corpTabBar(corpCounts)}
       <div class="section-title">${esc(middle.name)} 선배 스펙
         ${agg.empty ? '' : `<span class="scope-tag">${esc(scope)} · n = ${agg.count}명</span>`}
@@ -410,21 +433,6 @@ window.CareerPage = (() => {
                     )
                     .join('')
                 : `<span class="chip chip--empty">전공 무관</span>`
-            }
-          </div>
-        </div>
-        <div class="roadmap-card">
-          <div class="roadmap-card-title">같은 갈래의 다른 직업</div>
-          <div class="roadmap-chips">
-            ${
-              middle.jobs
-                .filter((j) => j.code !== job.code)
-                .slice(0, 12)
-                .map(
-                  (j) => `<span class="chip chip--small">${esc(j.name)}</span>`,
-                )
-                .join('') ||
-              `<span class="chip chip--empty">이 갈래에는 이 직업뿐이에요</span>`
             }
           </div>
         </div>
@@ -483,30 +491,6 @@ window.CareerPage = (() => {
           <span class="empty-or">또는</span>
           <a class="empty-cta" onclick="navigate('backoffice')">백오피스에서 데모 시드 추가 →</a>
         </div>
-      </div>`;
-  }
-
-  /* ── 연봉 ────────────────────────────────────────────────────
-     기업 유형보다 **위에** 둔다. 기업 유형은 "같은 직업 안에서 어디로 갈까"를 고르는
-     칸인데, 그 직업이 얼마를 버는지를 모르고 고를 수는 없다. 연봉이 먼저다.
-
-     ── 선배 데이터의 연봉이 아니다 ──
-     이 값은 임금직업정보시스템의 **직업별 평균임금**(전체 재직자 기준)이다. careerly
-     선배 표본과 무관하고 신입 초봉도 아니다. 그 구분을 화면에 적어두지 않으면
-     "선배들이 이만큼 받는다"로 읽힌다. STEP 02 직업 카드에도 같은 값이 작게 붙어
-     있지만 거기엔 이 단서가 없다 — 고르고 나서 크게 보이는 자리에 단서를 붙인다. */
-  function wageBlock(job) {
-    return `
-      <div class="section-title">연봉</div>
-      <div class="wage-card">
-        <div class="wage-main">
-          <div class="wage-label">${esc(job.name)} 평균임금</div>
-          <div class="wage-amount">${KECO.wageText(job.avgWage)}</div>
-        </div>
-      </div>
-      <div class="wage-note">
-        임금직업정보시스템의 <b>직업별 평균임금</b>이에요 — 해당 직업 <b>전체 재직자</b> 기준이라
-        신입 초봉이 아니고, 아래 선배 스펙 통계와도 다른 자료입니다.
       </div>`;
   }
 
@@ -784,6 +768,8 @@ window.CareerPage = (() => {
       jobPage = Math.max(1, n);
       render();
     },
+    /* 01 로 되돌아가는 것은 '처음부터 다시' 라서 맨 위로 올린다.
+       02·03 은 지금 보던 목록 위에서 범위만 좁히는 이동이라 자리를 지킨다. */
     gotoPhase(n) {
       if (n === 1) {
         currentMiddle = null;
@@ -792,7 +778,7 @@ window.CareerPage = (() => {
       if (n === 2) {
         currentJob = null;
       }
-      render();
+      render({ toTop: n === 1 });
     },
     switchTab(t) {
       specTab = t;
@@ -804,7 +790,7 @@ window.CareerPage = (() => {
     },
     retry() {
       loadError = null;
-      render();
+      render({ toTop: true });
     },
   };
 })();
