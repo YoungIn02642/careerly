@@ -17,6 +17,16 @@
 //   받아오므로 render() 가 '아직 안 왔음' 상태를 다룰 수 있어야 한다.
 // ════════════════════════════════════════════════════════════
 window.CareerPage = (() => {
+  /* ── 1차 분류는 이제 '직무 그룹' 이다 (사용자 지시) ─────────────
+     예전에는 KECO 대분류 10개('경영·사무·금융·보험직')를 그대로 왼쪽에 깔았다.
+     통계 분류라 정확하지만 구직자가 쓰는 말이 아니라서, 인사 직무를 찾는 학생이
+     어디를 눌러야 할지 알 수 없었다. 채용 사이트의 '희망 직무' 결로 다시 묶은
+     그룹(job-groups.js)을 보여준다.
+
+     **그 아래는 KECO 그대로다.** 2차 분류·직업·임금·선배 스펙 집계가 전부 KECO
+     코드에 붙어 있어서, 그룹은 '무엇을 보여줄지' 만 고르고 고른 뒤에는 예전과
+     똑같이 major/middle/job 으로 움직인다. 그래서 currentMajor 도 그대로 남는다. */
+  let currentGroup = null; // 직무 그룹 id ('it' · 'hr' …). 화면의 1차 분류
   let currentMajor = null; // 1차 분류 **공식 코드** ('0'~'9'). 화면 번호(1~10)는 m.no 로 따로 있다
   let currentMiddle = null; // 2차 분류 코드 ('54' 등)
   let currentJob = null; // 직업 코드 ('K000007549' 등)
@@ -44,6 +54,37 @@ window.CareerPage = (() => {
   function paintSidebar() {
     const list = document.getElementById('job-major-list');
     if (!list) return;
+
+    /* 서버가 그룹을 안 줬으면(옛 응답이 캐시됐거나 서버가 옛 버전) 예전처럼 대분류로
+       그린다 — 새 층 하나 때문에 화면이 통째로 비면 안 된다. */
+    const groups = KECO.GROUPS();
+    if (!groups.length) return paintSidebarByMajor(list);
+
+    list.innerHTML = groups.map(g => `
+      <div class="dept-item job-major-item ${currentGroup === g.id ? 'active' : ''}" data-group="${esc(g.id)}">
+        <span class="dept-emoji">${g.emoji}</span>
+        <div>
+          <div class="dept-label">${esc(g.label)}</div>
+          <div class="dept-sub">직업 ${g.jobCount}개</div>
+        </div>
+      </div>`).join('');
+
+    list.querySelectorAll('.job-major-item').forEach((el) => {
+      el.addEventListener('click', () => {
+        list.querySelectorAll('.job-major-item').forEach((d) => d.classList.remove('active'));
+        el.classList.add('active');
+        currentGroup = el.dataset.group;
+        currentMajor = null;
+        currentMiddle = null;
+        currentJob = null;
+        jobPage = 1;
+        render({ toTop: true });   // 본문이 통째로 갈리므로 맨 위에서 다시 시작한다
+      });
+    });
+  }
+
+  /* 옛 화면(대분류 10개). 그룹이 없을 때만 쓴다. */
+  function paintSidebarByMajor(list) {
     /* data-id 에는 공식 코드(m.code)를, 눈에 보이는 번호는 m.no 를 쓴다.
        둘을 섞으면 클릭했을 때 조회가 깨진다 — wage-jobs.js 의 no 주석 참고. */
     list.innerHTML = KECO.MAJORS()
@@ -67,7 +108,7 @@ window.CareerPage = (() => {
         currentMiddle = null;
         currentJob = null;
         jobPage = 1;
-        render({ toTop: true });   // 본문이 통째로 갈리므로 맨 위에서 다시 시작한다
+        render({ toTop: true });
       });
     });
   }
@@ -131,24 +172,29 @@ window.CareerPage = (() => {
        매번 처음으로 되감긴다. */
     restoreFromRoadmap();
 
-    /* 사이드바는 아직 안 그렸거나, 강조된 분야가 지금 분야와 다를 때 다시 그린다.
-       복원으로 currentMajor 가 바뀌었는데 안 그리면 **본문은 새 분야인데 왼쪽은
-       옛 분야가 강조된** 상태가 된다. */
+    /* 사이드바는 아직 안 그렸거나, 강조된 칸이 지금 칸과 다를 때 다시 그린다.
+       복원으로 상태가 바뀌었는데 안 그리면 **본문은 새 직무인데 왼쪽은 옛 칸이
+       강조된** 상태가 된다. */
     const painted = document.querySelector('#job-major-list .job-major-item');
-    const activeId = document.querySelector('#job-major-list .job-major-item.active')?.dataset.id ?? null;
-    if (!painted || activeId !== (currentMajor ?? null)) paintSidebar();
+    const activeEl = document.querySelector('#job-major-list .job-major-item.active');
+    const activeKey = activeEl?.dataset.group ?? activeEl?.dataset.id ?? null;
+    const wantKey = useGroups() ? (currentGroup ?? null) : (currentMajor ?? null);
+    if (!painted || activeKey !== wantKey) paintSidebar();
 
-    if (!currentMajor) {
+    const group = useGroups() ? KECO.groupById(currentGroup) : null;
+    if (useGroups() ? !group : !currentMajor) {
       paint(main, shell(welcomeBlock()), true);
       return;
     }
 
-    const major = KECO.byId(currentMajor);
-    if (!major) {
+    /* 그룹 화면에서는 2차 분류를 고르기 전까지 major 가 정해지지 않는다 —
+       한 그룹이 여러 대분류에 걸치기 때문이다(무역사무는 02, 영업은 61+02). */
+    const major = currentMajor ? KECO.byId(currentMajor) : null;
+    if (currentMajor && !major) {
       paint(main, placeholderBlock(), true);
       return;
     }
-    const middle = currentMiddle
+    const middle = currentMajor && currentMiddle
       ? KECO.middleById(currentMajor, currentMiddle)
       : null;
     const job =
@@ -156,10 +202,14 @@ window.CareerPage = (() => {
         ? KECO.jobById(currentMajor, currentMiddle, currentJob)
         : null;
 
+    const head = group
+      ? `<span>${group.emoji} ${esc(group.label)}</span>`
+      : `<span>${major.emoji} ${esc(major.name)}</span>`;
+
     paint(main, `
       <div class="topbar">
         <div class="breadcrumb">
-          <span>${major.emoji} ${esc(major.name)}</span>
+          ${head}
           ${middle ? `<span class="sep">›</span><span class="${job ? '' : 'active'}">${esc(middle.name)}</span>` : ''}
           ${job ? `<span class="sep">›</span><span class="active">${esc(job.name)}</span>` : ''}
         </div>
@@ -170,8 +220,8 @@ window.CareerPage = (() => {
       <div class="content">
         ${Roadmap.stepBar('job')}
         ${phaseBar()}
-        ${majorHero(major)}
-        ${middleSelect(major)}
+        ${group ? groupHero(group) : majorHero(major)}
+        ${group ? groupMiddleSelect(group) : middleSelect(major)}
         ${middle ? jobSelect(middle) : ''}
         ${job ? renderRoadmap(major, middle, job) : ''}
       </div>
@@ -201,9 +251,25 @@ window.CareerPage = (() => {
     currentMajor = rm.major;
     currentMiddle = KECO.middleById(rm.major, rm.middle) ? rm.middle : null;
     currentJob = currentMiddle && rm.job && KECO.jobById(rm.major, rm.middle, rm.job) ? rm.job : null;
+    /* 저장된 로드맵에는 그룹이 없다(KECO 코드만 담는다 — 그룹은 화면 층이라 저장하지
+       않는다). 어느 그룹에서 온 직무인지 되짚어 왼쪽 칸을 맞춰 준다. 못 찾으면
+       그룹 없이 두고, 화면은 대분류 이름으로 그린다. */
+    currentGroup = groupOfJob(currentMajor, currentMiddle, currentJob);
     /* 고른 직업이 목록 첫 페이지에 없을 수 있지만, 이미 고른 상태라 목록을 다시
        뒤질 일이 없다. 페이지는 1로 둔다. */
     jobPage = 1;
+  }
+
+  /* 저장된 직무(major/middle/job) → 그 직무가 담긴 그룹 id.
+     직업까지 있으면 그 직업을 가진 그룹을, 없으면 그 2차 분류를 가진 첫 그룹을 찾는다. */
+  function groupOfJob(major, middle, job) {
+    if (!useGroups() || !major || !middle) return null;
+    for (const g of KECO.GROUPS()) {
+      const slot = g.middles.find(m => m.major === major && m.code === middle);
+      if (!slot) continue;
+      if (!job || slot.jobCodes.includes(job)) return g.id;
+    }
+    return null;
   }
 
   /* 스크롤해서 breadcrumb 가 상단에 붙어 있을 때는 작게 접는다 — 맨 위에 있을 때와
@@ -242,6 +308,52 @@ window.CareerPage = (() => {
           <div class="pt-num">03</div><div class="pt-label">필요한 스펙 보기</div>
         </div>
       </div>`;
+  }
+
+  /* 그룹이 있으면 그룹으로 간다. 서버가 안 줬으면(옛 캐시) 예전 대분류 화면. */
+  const useGroups = () => KECO.GROUPS().length > 0;
+
+  function groupHero(group) {
+    return `
+      <div class="job-hero">
+        <div class="job-hero-icon">${group.emoji}</div>
+        <div class="job-hero-body">
+          <div class="job-hero-top">
+            <h2>${esc(group.label)}</h2>
+            <span class="job-hero-badge">직업 ${group.jobCount}개</span>
+          </div>
+          <p>${esc(group.desc)}</p>
+        </div>
+      </div>`;
+  }
+
+  /* 그룹 안의 2차 분류. 한 그룹이 여러 대분류에 걸칠 수 있어서(무역사무 = 02,
+     영업 = 61+02) major 를 칸마다 같이 들고 있어야 한다 — 눌렀을 때 어느 대분류의
+     2차 분류인지 모르면 조회가 깨진다. */
+  function groupMiddleSelect(group) {
+    const cells = group.middles.map(slot => {
+      const mid = KECO.middleById(slot.major, slot.code);
+      const jobs = KECO.groupJobs(group.id, slot.major, slot.code);
+      const w = mid?.wageRange;
+      const on = currentMajor === slot.major && currentMiddle === slot.code;
+      return `
+        <div class="field-card ${on ? 'active' : ''}"
+             onclick="CareerPage.selectGroupMiddle('${slot.major}','${slot.code}')">
+          <div class="fc-name">${esc(slot.name)}</div>
+          <div class="fc-desc">
+            직업 ${jobs.length}개${w ? ` · 평균 ${KECO.wageText(w.avg)}` : ''}
+          </div>
+        </div>`;
+    }).join('');
+
+    /* 2차 분류가 하나뿐인 그룹이 많다(상품기획/MD 는 직업 1개). 그때 '분류를 고르세요'
+       칸을 한 칸만 띄우는 것은 절차만 늘리는 일이라, 안내 문구를 다르게 적는다. */
+    const one = group.middles.length === 1;
+    return `
+      <div class="section-title">${one ? '이 직무가 속한 분류' : '세부 분야 선택'}
+        <span class="scope-tag">한국고용직업분류 2차 분류 기준</span>
+      </div>
+      <div class="fields-grid">${cells}</div>`;
   }
 
   function majorHero(major) {
@@ -291,6 +403,16 @@ window.CareerPage = (() => {
   const JOBS_PER_PAGE = 9;
 
   function jobSelect(middle) {
+    /* 그룹 화면에서는 **그 그룹이 가져간 직업만** 보여준다. 2차 분류를 통째로 깔면
+       '인사/총무' 를 눌렀는데 경영·행정·사무직 37개가 다 나온다 — 그룹으로 좁힌
+       뜻이 사라진다. */
+    const scoped = currentGroup
+      ? { ...middle, jobs: KECO.groupJobs(currentGroup, currentMajor, middle.code) }
+      : middle;
+    return jobSelectOf(scoped);
+  }
+
+  function jobSelectOf(middle) {
     if (!middle.jobs.length) {
       return `<div class="section-title">직업 선택</div>
         <div class="empty-block"><div class="empty-icon">📭</div>
@@ -661,14 +783,16 @@ window.CareerPage = (() => {
   // ── helpers ───────────────────────────────────────────────
   function welcomeBlock() {
     const c = KECO.counts();
+    const n = useGroups() ? KECO.GROUPS().length : c.majors;
     return `
       <div class="welcome">
         <div class="welcome-icon">🗺️</div>
         <h2>관심 있는 직무를 골라 보세요</h2>
         <p>여기가 커리어 로드맵의 <b>첫 단계</b>예요. 직무를 고르면
           <b>지금 내 위치 → 채울 것 → 지원할 회사</b> 순으로 이어집니다.<br>
-          왼쪽 분야 ${c.majors}개 중 하나를 고르면 세부 분류 → 직무 순으로 좁혀 가요.<br>
-          <span class="welcome-sub">직무 ${c.jobs}개 · 한국고용직업분류(KECO) 기준 · 평균임금은 임금직업정보시스템</span></p>
+          왼쪽 ${n}개 직무 중 하나를 고르면 세부 분야 → 직업 순으로 좁혀 가요.<br>
+          <span class="welcome-sub">직업 ${c.jobs}개 · 분류와 평균임금은 한국고용직업분류(KECO)·임금직업정보시스템 기준이고,
+            왼쪽 묶음은 채용 시장에서 쓰는 직무 이름으로 다시 묶은 것이에요</span></p>
       </div>`;
   }
 
@@ -742,6 +866,16 @@ window.CareerPage = (() => {
       specTab = 'quant';
       render();
     },
+    /* 그룹 화면의 2차 분류 선택. 그룹은 여러 대분류에 걸칠 수 있어서 major 를 같이
+       받는다 — 안 받으면 '무역사무(02)' 와 '영업(61)' 을 구분할 수 없다. */
+    selectGroupMiddle(major, code) {
+      currentMajor = major;
+      currentMiddle = code;
+      currentJob = null;
+      jobPage = 1;
+      specTab = 'quant';
+      render();
+    },
     /* 직업을 고르는 순간이 로드맵 1단계의 결론이다. 여기서 흐름 상태에 심어 두면
        CAS·회사 찾기·자소서 코치가 같은 직무를 본다(roadmap.js 머리주석). */
     selectJob(code) {
@@ -772,6 +906,7 @@ window.CareerPage = (() => {
        02·03 은 지금 보던 목록 위에서 범위만 좁히는 이동이라 자리를 지킨다. */
     gotoPhase(n) {
       if (n === 1) {
+        currentMajor = useGroups() ? null : currentMajor;
         currentMiddle = null;
         currentJob = null;
       }

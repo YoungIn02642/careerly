@@ -2178,3 +2178,6 @@ body.nav-drawer-open { overflow: hidden; }
   .rm-next-actions { width: 100%; }
   .rm-next-btn { flex: 1 1 auto; justify-content: center; }
 }
+
+/* 직무 그룹 칸의 부제(직업 N개) — 대분류 화면에는 없던 줄이다 */
+.dept-sub { font-size: 11.5px; color: var(--text-m); margin-top: 2px; }
