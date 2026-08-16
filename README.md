@@ -1,7 +1,12 @@
-# Careerly
+# C:road (커리어 로드)
 
-대학생 커리어 빌딩 플랫폼 Careerly입니다.
-NCS 직업 분류 기반 커리어 로드맵과, 선배 데이터로 집계한 정량·정성 스펙을 제공합니다.
+대학생 커리어 빌딩 플랫폼 **C:road** 입니다.
+직업 분류(KECO) 기반 커리어 로드맵과, 선배 데이터로 집계한 정량·정성 스펙을 제공합니다.
+
+> **이름이 careerly 에서 C:road 로 바뀌었습니다.** 저장소 URL·배포 주소·파일명
+> (`frontend/careerly.html`)·Docker 컨테이너 이름·localStorage 키에는 옛 이름이
+> 남아 있는데, **일부러 그대로 둔 것**입니다 — 바꾸면 저장된 로그인 세션과 로드맵
+> 상태가 끊기고 배포 주소가 깨집니다. 문서와 화면에 보이는 **제품 이름만** 바꿨습니다.
 
 운영: <https://careerly-production-5d6b.up.railway.app>
 
@@ -48,7 +53,7 @@ clone 부터 첫 PR 까지의 전체 절차는 [docs/팀-개발환경.md](docs/�
 ```text
 C:road
 ├─ frontend                 # careerly.html 단일 문서 SPA (해시 라우팅), 빌드 없음
-│  ├─ careerly.html         # 페이지 11개가 이 한 파일에 들어 있다
+│  ├─ careerly.html         # 페이지 16개가 이 한 파일에 들어 있다
 │  ├─ css                   # main.css · home.css · mentoring.css · jd-coach.css
 │  └─ js
 │     ├─ app.js             # 라우터 + 인증
@@ -66,6 +71,9 @@ C:road
 │     ├─ mentor-profile.js  # 마이페이지 멘토 페이지 (멘토만)
 │     ├─ mentoring.js       # 멘토 찾기 · 멘토 상세 · 내 멘토링
 │     ├─ jd-coach.js        # 자소서 코치
+│     ├─ company-cover.js   # 회사 찾기 (자소서 코치의 앞 단계)
+│     ├─ specup.js          # 스펙 채우기 — 부족 항목 + 시험일정·공모전 모집
+│     ├─ insight.js         # 커리어 인사이트 (커뮤니티 게시판)
 │     ├─ backoffice.js      # 백오피스 (관리자만)
 │     └─ home.js
 ├─ backend
@@ -83,14 +91,15 @@ C:road
 │  │  ├─ job-filter.js      # 대학생 취업 선택지가 아닌 직업 걸러내기
 │  │  ├─ wage-jobs.js       # 직업별 임금·전망
 │  │  ├─ news.js            # 회사 뉴스 → 지원동기 소재
+│  │  ├─ specup.js          # 자격증 시험일정 · 공모전/대외활동 모집
 │  │  ├─ demo-seed.js       # 백오피스 데모 시드
 │  │  ├─ ai-provider.js     # LLM 호출 한 겹 (Groq 전용)
-│  │  └─ routes             # recommendations · casAnalyze · jdCoach · news · mentoring · payments
+│  │  └─ routes             # recommendations · casAnalyze · jdCoach · specup · mentoring · payments · insight
 │  ├─ database/schema.sql   # MySQL 스키마
 │  ├─ data                  # 수집 캐시 (NCS·공공기관·대기업·중견기업·자격증·임금)
 │  └─ scripts               # 수집(fetch-*) · 집계(build-*) · 점검(check-*) · 이관(migrate-*)
 ├─ docs                     # 설계·운영 문서
-└─ test                     # 테스트 264개 (9개 파일)
+└─ test                     # 테스트 575개 (17개 파일)
 ```
 
 저장소는 **MySQL 8** 입니다. `routes/careerData.js` 에 남은 SQLite 경로는 죽은 코드입니다.
@@ -98,10 +107,11 @@ C:road
 
 ## 주요 기능
 
-- 커리어 로드맵 — NCS 대분류 → 중분류 → 소분류(세부 직무), 직업별 임금·전망
+- 커리어 로드맵 — KECO 1차 → 2차 분류 → 직업(461개), 직업별 임금·전망
 - 중분류별 정량 스펙 (학점, 자격증 보유율, 어학 성적) 집계
 - 중분류별 정성 스펙 (대외활동, 인턴십, 프로젝트 등) 보유율
 - CAS 점수 (1000점) · 백분위 · 등급 · 레이더 · 스펙 비교
+- 스펙 채우기 — 부족한 항목에 국가자격 시험일정·공모전 모집공고를 붙여 보여줌
 - 스펙 입력 AI 분석 — 반정형 텍스트에서 활동·정량값을 자동으로 채움
 - 자격증·학과·대학·기업 자동완성 (카탈로그 DB)
 - 자소서 코치 — 채용공고에서 요구 역량을 뽑아 작성 가이드 제공 + 회사 뉴스로 지원동기 소재
@@ -123,7 +133,8 @@ C:road
 | `MYSQL_URL` | 배포용. 있으면 위 `DB_*` 는 무시된다 | Railway MySQL 서비스가 주입 |
 | `ADMIN_USERNAMES` | 백오피스에 아무도 못 들어간다 | 쉼표로 여러 개 |
 | `GROQ_API_KEY` | AI 분석·자소서 코치 AI 보강만 503 | [console.groq.com/keys](https://console.groq.com/keys) (무료) |
-| `DATA_GO_KR_SERVICE_KEY` | 데이터 *갱신*만 불가 (캐시는 저장소에 포함) | 공공데이터포털 |
+| `DATA_GO_KR_SERVICE_KEY` | 데이터 *갱신*만 불가 (캐시는 저장소에 포함). 스펙 채우기의 **자격증 시험일정**도 빠진다 — 이 키는 API 마다 따로 활용신청해야 한다 | 공공데이터포털 |
+| `YOUTH_API_KEY` | 스펙 채우기의 **공모전·대외활동 모집**만 빠진다 | [온통청년 마이페이지](https://www.youthcenter.go.kr/myPage/openapi) (data.go.kr 키와 다름) |
 | `WORK24_API_KEY` | 중견기업 자동판정·직무 트렌드 갱신만 불가 | 고용24 |
 | `CAREERNET_API_KEY` | 대학 자동완성만 빠진다 (직접 입력은 된다) | 커리어넷 (수동 승인) |
 | `NICE_SITE_CODE` / `_PASSWORD` / `_RETURN_URL` | 개발 모드로 동작(모의 CI). **`NODE_ENV=production` 에서는 503** | NICE평가정보 (계약 필요) |
@@ -144,6 +155,7 @@ node scripts/check-ai.js            # AI 프로바이더
 node scripts/check-news-api.js      # 뉴스 검색
 node scripts/check-auth-pay.js      # 소셜 로그인 · 본인확인 · 결제
 node scripts/check-careernet-api.js # 커리어넷
+node scripts/check-specup-api.js    # 자격증 시험일정 · 공모전
 ```
 
 ## AI 프로바이더
@@ -163,11 +175,11 @@ Groq 모델이 폐기되면 `.env` 의 `GROQ_MODEL` 만
 
 **AI 는 분류·추출에만 씁니다.** 점수 계산과 자소서 문장은 코드가 담당합니다 — 모델이 낸
 점수는 서버가 `cas.js` 로 다시 계산하고(`rescore`), 기간·성과는 원문 근거가 있을 때만
-인정합니다. 이유는 `docs/` 와 `CAREERLY-작업정리.md` 6장에 실측과 함께 정리돼 있습니다.
+인정합니다. 이유는 `docs/` 와 `CROAD-작업정리.md` 6장에 실측과 함께 정리돼 있습니다.
 
 ## 테스트
 
-저장소 루트에서, **셸에서** 실행합니다. 현재 264개입니다.
+저장소 루트에서, **셸에서** 실행합니다. 현재 575개입니다.
 
 ```bash
 for f in test/*.test.js; do node "$f" | tail -1; done
@@ -212,6 +224,10 @@ AI · 뉴스
   POST /api/jd/coach                   # 채용공고 → 요구역량 + 작성 가이드
   GET  /api/news/company
 
+스펙 채우기
+  GET  /api/specup/exams               # 자격증 이름 → 국가자격 시험일정(접수중/다음 회차)
+  GET  /api/specup/activities          # 공모전·대외활동 모집
+
 멘토링 · 결제
   GET  /api/mentoring/formats · /api/mentoring/requests
   POST /api/mentoring/requests · /api/mentoring/requests/:id/cancel
@@ -227,8 +243,8 @@ AI · 뉴스
 
 | 문서 | 내용 |
 |---|---|
-| [CAREERLY-작업정리.md](CAREERLY-작업정리.md) | **전체 맥락·설계 판단·실측 기록 (여기부터 읽으면 됩니다)** |
-| [docs/화면-구조-지도.md](docs/화면-구조-지도.md) | **화면을 고치기 전에 볼 것** — 페이지 11개가 한 파일에 있고 절반은 JS 가 만든다 |
+| [CROAD-작업정리.md](CROAD-작업정리.md) | **전체 맥락·설계 판단·실측 기록 (여기부터 읽으면 됩니다)** |
+| [docs/화면-구조-지도.md](docs/화면-구조-지도.md) | **화면을 고치기 전에 볼 것** — 페이지 16개가 한 파일에 있고 절반은 JS 가 만든다 |
 | [docs/팀-개발환경.md](docs/팀-개발환경.md) | clone 부터 첫 PR 까지 |
 | [docs/배포.md](docs/배포.md) | Railway 배포·환경변수·스테이징/운영 분리 |
 | [docs/CAS-정리.md](docs/CAS-정리.md) | CAS 점수 체계 전반 — 배점표·상대채점·정량:정성 비중 |
