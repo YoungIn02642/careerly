@@ -208,10 +208,12 @@ window.DB = (() => {
 
   /* 역량 하나에 대한 AI 초안. 내 활동(_mySpec)을 같이 보내야 모델이 **내 경험으로**
      문장을 짠다 — 안 보내면 일반론이 나오고, 그건 자소서에 쓸 수 없다. */
+  /* star 는 사용자가 STAR 입력칸에 직접 쓴 { S, T, A, R } 이다. 활동 목록은 분류일 뿐
+     '무슨 일이 있었는지' 를 담지 못해서, 그게 없으면 모델이 빈자리를 관용구로 메운다. */
   async function draftJd({ competency, company = '', jobTitle = '', question = '',
-                           quotes = [], reads = '', frame = '', limit = 600 } = {}) {
+                           quotes = [], reads = '', frame = '', limit = 600, star = null } = {}) {
     return api('POST', '/api/jd/draft', {
-      competency, company, jobTitle, question, quotes, reads, frame, limit,
+      competency, company, jobTitle, question, quotes, reads, frame, limit, star,
       activities: _mySpec?.activities || [],
     });
   }

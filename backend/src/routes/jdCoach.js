@@ -137,6 +137,10 @@ router.post('/coach', async (req, res) => {
        역량 카드마다 반복하지 않고 응답에 한 번만 싣는다. STAR 를 카드마다 붙이면
        역량별 frame 과 골격이 두 개로 보여 어느 쪽을 따를지 알 수 없게 된다. */
     star: GUIDE.STAR,
+    /* 칸을 실제로 어떻게 채우는가(질문·나쁜 예·고친 예). STAR 입력 도우미가 쓰고,
+       AI 초안 프롬프트도 같은 표를 읽는다 — 둘이 갈리면 화면이 시킨 것과 AI 가 쓴 것이
+       달라진다(cover-guide.js STAR_WRITE 머리주석). */
+    starWrite: GUIDE.STAR_WRITE,
     checklist: GUIDE.SUBMIT_CHECKLIST,
     /* 검사 목록을 값으로 내려보낸다 — 화면이 초안을 서버로 보내지 않고 그 자리에서
        검사할 수 있게 하려는 것이다. 자소서 초안은 남의 서버에 안 보내는 편이 낫다. */
@@ -162,11 +166,26 @@ router.post('/coach', async (req, res) => {
 
    초안은 서버에 저장하지 않는다. 만들어서 돌려주고 끝이며, 보관은 브라우저가 한다
    (초안 검사와 같은 원칙 — 남의 서버에 둘 이유가 없는 글이다). */
+/* STAR 입력을 S/T/A/R 네 키만 남기고 다듬는다. 화면이 보내는 값을 그대로 믿지 않는
+   것은 다른 라우트와 같은 규약이고, 칸당 900자로 자르는 것은 한 칸에 소설을 붙여
+   보냈을 때 프롬프트 뒤쪽 규칙(10~14번)이 잘려 나가는 것을 막기 위해서다. */
+function starOf(v) {
+  if (!v || typeof v !== 'object') return null;
+  const out = {};
+  for (const k of ['S', 'T', 'A', 'R']) {
+    const s = String(v[k] || '').trim().slice(0, 900);
+    if (s) out[k] = s;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 router.post('/draft', async (req, res) => {
   const competency = String(req.body?.competency || '').trim();
   if (!competency) return res.status(400).json({ error: '어느 역량으로 쓸지 알려 주세요.' });
 
   const limit = Math.min(Math.max(Number(req.body?.limit) || 600, 200), 1500);
+  /* 아래 '예시 베낌' 검사도 이 값을 본다 — 사용자가 직접 적은 대목은 베낌이 아니다. */
+  const star = starOf(req.body?.star);
   const prompt = DRAFT.buildPrompt({
     company: String(req.body?.company || '').trim(),
     jobTitle: String(req.body?.jobTitle || '').trim(),
@@ -176,6 +195,11 @@ router.post('/draft', async (req, res) => {
     frame: String(req.body?.frame || '').trim(),
     activities: Array.isArray(req.body?.activities) ? req.body.activities.slice(0, 5) : [],
     question: String(req.body?.question || '').trim(),
+    /* 사용자가 STAR 칸에 직접 쓴 문장. 활동 목록(이름·기간·역할)은 분류일 뿐이라
+       '무슨 일이 있었는지' 를 담지 못한다 — 그 빈자리를 모델이 관용구로 메운 것이
+       "노력했고 잘 마무리했습니다" 문단의 원인이었다(draft-coach.js 주석).
+       칸당 길이를 자르는 것은 프롬프트가 통째로 길어져 뒤쪽 규칙이 잘리는 것을 막기 위해서다. */
+    star,
     limit,
   });
 
@@ -195,6 +219,25 @@ router.post('/draft', async (req, res) => {
       if (retry && !DRAFT.hasForeign(retry)) out = retry;
       else if (retry) out = { ...retry, foreignWarning: true };
       else out = { ...out, foreignWarning: true };
+    }
+
+    /* ── 예시를 베껴 왔으면 내보내지 않는다 ────────────────────────
+       실측으로 한 번 겪었다: STAR 안내에 있던 예시 문장('화면 정의서'·'검색 결과
+       정렬')이 초안에 통째로 들어왔다. 사용자가 겪지도 않은 일이 자소서에 사실처럼
+       적히는 것이라, 외국어가 섞이는 것보다 훨씬 나쁘다 — 면접에서 바로 무너진다.
+       한 번 다시 부르고, 그래도 베끼면 **초안을 주지 않는다.** 지어낸 문장을 주는
+       것보다 "실패했다"고 말하는 편이 낫다(parseDraft 와 같은 원칙). */
+    let copied = DRAFT.copiedFromExample(out.draft, star);
+    if (copied) {
+      const retry = await ask().catch(() => null);
+      if (retry && !DRAFT.copiedFromExample(retry.draft, star)) { out = retry; copied = null; }
+      else copied = DRAFT.copiedFromExample((retry || out).draft, star);
+    }
+    if (copied) {
+      return res.status(502).json({
+        error: 'AI 가 안내 예시를 그대로 베껴 와서 초안을 버렸어요. 다시 눌러 주세요.',
+        detail: `예시(${copied.key})와 겹침: ${copied.chunk}`,
+      });
     }
     res.json({ ...out, model: modelLabel(), provider: PROVIDER });
   } catch (e) {

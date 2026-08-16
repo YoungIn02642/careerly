@@ -77,6 +77,46 @@
     paintLibrary();
   }
 
+  /* ── STAR 입력 보관 ──────────────────────────────────────────
+     사용자가 S/T/A/R 칸에 직접 적은 경험. 초안과 같은 규약(localStorage · 회사별)이되
+     **문항마다 따로** 담는다 — 문항이 셋이면 보통 다른 경험 셋을 쓰기 때문이다.
+     한 벌만 두면 문항 2를 쓰다가 문항 1의 경험을 덮어쓴다.
+
+     이 값은 AI 초안의 재료가 된다. 활동 목록(이름·기간·역할)만으로는 '무슨 일이
+     있었는지' 를 알 수 없어서 모델이 그 자리를 관용구로 메웠고, 그래서 "노력했고 잘
+     마무리했습니다" 같은 문단이 나왔다(draft-coach.js 주석). */
+  const LS_STAR = 'careerly_jd_star_v1';
+  const STAR_KEYS = ['S', 'T', 'A', 'R'];
+
+  function loadStars() {
+    try { return JSON.parse(localStorage.getItem(LS_STAR)) || {}; } catch { return {}; }
+  }
+  const starSlot = tabKey => `${draftScope()}::${tabKey}`;
+
+  function getStar(tabKey) {
+    const v = loadStars()[starSlot(tabKey)];
+    return (v && typeof v === 'object') ? v : {};
+  }
+  function saveStar(tabKey, key, text) {
+    const all = loadStars();
+    const slot = starSlot(tabKey);
+    const cur = (all[slot] && typeof all[slot] === 'object') ? all[slot] : {};
+    if (text.trim()) cur[key] = text;
+    else delete cur[key];                       // 비우면 흔적을 남기지 않는다(초안과 같은 규칙)
+    if (Object.keys(cur).length) all[slot] = cur;
+    else delete all[slot];
+    localStorage.setItem(LS_STAR, JSON.stringify(all));
+  }
+
+  /* 지금 탭의 STAR 를 { S,T,A,R } 로. 한 칸도 안 썼으면 null 을 준다 —
+     빈 객체를 보내면 서버가 "STAR 가 있다" 고 보고 활동 목록 쪽 안내를 끈다. */
+  function currentStar() {
+    const tab = (_lastTabs || [])[_tab];
+    if (!tab) return null;
+    const v = getStar(tab.key);
+    return STAR_KEYS.some(k => (v[k] || '').trim()) ? v : null;
+  }
+
   /* ── 보관함 ────────────────────────────────────────────────
      초안은 예전에도 저장은 됐지만, 분석을 다시 돌리기 전에는 **화면에 꺼낼 방법이
      없었다**. 어제 쓴 글이 어디 있는지 알 수 없으면 저장한 것이 아니다.
@@ -959,6 +999,145 @@
     </div>`;
   }
 
+  /* ── STAR 입력 아코디언 ──────────────────────────────────────
+     위 띠가 "뼈대가 무엇인가" 를 말한다면, 여기는 **그 뼈대에 내 경험을 직접 채우는
+     자리**다. AI 초안은 여기 적힌 문장을 재료로 쓴다.
+
+     ── 왜 한 번에 하나만 펼치나 ──
+     네 칸을 한꺼번에 열어 두면 화면이 길어지는 것보다 나쁜 일이 생긴다. S 를 대충 쓰고
+     A 로 건너뛰게 된다. STAR 는 앞 칸이 뒤 칸의 전제라(문제를 안 적으면 행동이 왜
+     필요했는지 쓸 수 없다) **순서대로 하나씩** 열리게 했다.
+
+     ── 칸마다 나쁜 예/고친 예를 같이 보여준다 ──
+     "구체적으로 쓰세요" 는 무엇을 고쳐야 하는지 알려주지 않는다. 틀린 문장과 고친
+     문장을 나란히 두는 편이 훨씬 빠르다. 문구는 서버(cover-guide.STAR_WRITE)가 주고,
+     **AI 프롬프트도 같은 표를 읽는다** — 따로 두면 화면이 시킨 것과 AI 가 쓴 것이 갈린다. */
+  let _starOpen = 'S';
+  /* 마지막 AI 되짚기 — STAR 머리줄의 '더 적을 것' 배지가 읽는다.
+     칸을 고치고 다시 돌리면 새 결과로 통째로 갈린다. */
+  let _starCoach = {};
+
+  function starInputHtml(r) {
+    const write = r.starWrite;
+    if (!write?.length) return '';
+    const tab = (_lastTabs || [])[_tab];
+    if (!tab) return '';
+
+    const saved = getStar(tab.key);
+    const filled = STAR_KEYS.filter(k => (saved[k] || '').trim()).length;
+
+    return `<div class="jd-starin">
+      <div class="co-sec-h">
+        <h2>여기에 내 경험을 채우세요 — ${esc(tab.label)}</h2>
+        <span class="co-src">${filled}/4 칸 작성 · 이 브라우저에만 저장됩니다 ·
+          <b>AI 초안 넣기</b>가 이 내용을 읽습니다</span>
+      </div>
+      <div class="jd-starin-steps">
+        ${write.map(w => {
+          const meta = (r.star || []).find(s => s.key === w.key) || {};
+          const val = saved[w.key] || '';
+          const on = _starOpen === w.key;
+          return `
+          <div class="jd-si ${on ? 'is-open' : ''}" data-si="${esc(w.key)}">
+            <button type="button" class="jd-si-h" data-si-open="${esc(w.key)}">
+              <span class="jd-si-key">${esc(w.key)}</span>
+              <span class="jd-si-t">
+                <b>${esc(meta.label || '')}</b>
+                <span class="jd-si-ask">${esc(w.ask)}</span>
+              </span>
+              ${_starCoach[w.key]
+                ? `<span class="jd-si-state is-todo" title="${esc(_starCoach[w.key])}">더 적을 것</span>`
+                : `<span class="jd-si-state ${val.trim() ? 'is-done' : ''}">
+                     ${val.trim() ? `${val.trim().length}자` : '미작성'}
+                   </span>`}
+            </button>
+            <div class="jd-si-body">
+              <p class="jd-si-hint">${bold(w.hint)}</p>
+              <div class="jd-si-ex">
+                <div class="jd-si-ex-row jd-si-ex--bad">
+                  <span class="jd-si-ex-tag">이렇게 쓰면 탈락</span>
+                  <p>${esc(w.bad)}</p>
+                </div>
+                <div class="jd-si-ex-row jd-si-ex--good">
+                  <span class="jd-si-ex-tag">이렇게</span>
+                  <p>${esc(w.good)}</p>
+                </div>
+              </div>
+              <textarea class="jd-si-ta" data-si-key="${esc(w.key)}" rows="5"
+                placeholder="${esc(w.ask)}">${esc(val)}</textarea>
+              <div class="jd-si-foot">
+                <span class="jd-si-saved" data-si-saved="${esc(w.key)}"></span>
+                ${nextStarKey(w.key)
+                  ? `<button type="button" class="wf-btn wf-btn--sm" data-si-next="${esc(nextStarKey(w.key))}">
+                       저장하고 ${esc(nextStarKey(w.key))} 쓰기 <i class="ti ti-arrow-down"></i>
+                     </button>`
+                  : `<span class="jd-si-done">네 칸을 다 채웠으면 아래 <b>AI 초안 넣기</b>를 누르세요</span>`}
+              </div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
+
+  const nextStarKey = k => STAR_KEYS[STAR_KEYS.indexOf(k) + 1] || null;
+
+  /* 아코디언·자동저장. 초안 칸과 같은 규약으로 600ms 묶어 쓴다 — 글자마다
+     localStorage 를 때리면 긴 문장에서 눈에 띄게 버벅인다. */
+  function bindStarInput(box) {
+    const tab = (_lastTabs || [])[_tab];
+    if (!tab) return;
+
+    box.querySelectorAll('[data-si-open]').forEach(el => {
+      el.addEventListener('click', () => {
+        const k = el.dataset.siOpen;
+        _starOpen = (_starOpen === k) ? null : k;   // 열린 것을 다시 누르면 접는다
+        repaintStarInput(box);
+      });
+    });
+
+    box.querySelectorAll('[data-si-next]').forEach(el => {
+      el.addEventListener('click', () => {
+        _starOpen = el.dataset.siNext;
+        repaintStarInput(box);
+      });
+    });
+
+    box.querySelectorAll('[data-si-key]').forEach(ta => {
+      let timer = null;
+      const key = ta.dataset.siKey;
+      const state = box.querySelector(`[data-si-saved="${key}"]`);
+      ta.addEventListener('input', () => {
+        if (state) state.textContent = '입력 중…';
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          saveStar(tab.key, key, ta.value);
+          if (state) state.textContent = `저장됨 · ${ta.value.trim().length}자`;
+          /* 머리줄의 '미작성/N자' 도 같이 고친다 — 접었을 때 보이는 유일한 표시라
+             안 바꾸면 다 쓰고 접었는데 '미작성' 으로 남는다. */
+          const head = box.querySelector(`[data-si-open="${key}"] .jd-si-state`);
+          if (head) {
+            const n = ta.value.trim().length;
+            head.textContent = n ? `${n}자` : '미작성';
+            head.classList.toggle('is-done', Boolean(n));
+          }
+        }, 600);
+      });
+    });
+  }
+
+  /* 펼침만 바꾸는 다시 그리기. 통째로 render(r) 를 부르면 오른쪽 초안 칸의 커서와
+     스크롤까지 날아간다 — STAR 를 쓰는 중에 그러면 쓰던 자리를 잃는다. */
+  function repaintStarInput(box) {
+    const host = box.querySelector('.jd-starin');
+    if (!host || !_last) return;
+    const fresh = document.createRange().createContextualFragment(starInputHtml(_last));
+    host.replaceWith(fresh);
+    bindStarInput(box);
+    const open = box.querySelector('.jd-si.is-open .jd-si-ta');
+    if (open) open.focus();
+  }
+
   function checklistHtml(r) {
     if (!r.checklist?.length) return '';
     return `<div class="co-sec">
@@ -1015,6 +1194,7 @@
         </div>
 
         ${starHtml(r)}
+        ${starInputHtml(r)}
 
         <div class="jd-split">
           <div class="jd-comp-pane">
@@ -1067,6 +1247,7 @@
       $('#jd-doc')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
 
+    bindStarInput(box);
     bindDraft(box);
   }
 
@@ -1099,6 +1280,22 @@
     const tabs = _lastTabs || [];
     const tab = tabs[_tab];
 
+    /* 위 STAR 칸에 적은 것이 초안의 재료다. 한 칸도 안 적혀 있으면 모델이 아는 것이
+       활동 이름·기간·역할뿐이라 문단이 뻔해진다 — 그럴 땐 만들기 전에 알려준다. */
+    const star = currentStar();
+    if (!star) {
+      const go = confirm(
+        '위 STAR 칸이 비어 있어요.\n\n'
+        + '거기에 적은 내용이 초안의 재료라, 비어 있으면 활동 이름·기간·역할만 가지고 '
+        + '뻔한 문단이 나옵니다.\n\n확인을 누르면 그대로 만들고, 취소하면 STAR 부터 채웁니다.');
+      if (!go) {
+        _starOpen = 'S';
+        repaintStarInput(document.getElementById('jd-result'));
+        document.querySelector('.jd-starin')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+    }
+
     btn.disabled = true;
     if (stateEl) stateEl.textContent = '초안을 쓰는 중… (1분 이상 걸릴 수 있어요)';
 
@@ -1111,6 +1308,7 @@
         quotes: item.quotes || [],
         reads: item.reads || '',
         frame: item.frame || '',
+        star,
         limit: 600,
       });
 
@@ -1144,8 +1342,42 @@
       ? `<div class="jd-comp-sec"><span class="wf-eyebrow">${title}</span>
            <ul class="jd-list">${arr.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`
       : '';
-    host.innerHTML = list(out.blanks, '채워야 할 빈칸') + list(out.review, '채용담당자가 볼 약한 지점');
+
+    /* 칸별 되짚기는 목록이 아니라 **STAR 칸으로 돌려보내는 안내**다. 그래서 그냥
+       나열하지 않고 해당 칸을 여는 버튼으로 만든다 — 읽고 나서 어디를 고쳐야 하는지
+       다시 찾게 하면 대부분 안 고친다. */
+    const coach = out.coach?.length
+      ? `<div class="jd-comp-sec"><span class="wf-eyebrow">STAR 에서 더 적어야 할 것</span>
+           <div class="jd-coach">${out.coach.map(c => `
+             <button type="button" class="jd-coach-row" data-coach="${esc(c.key)}">
+               <span class="jd-coach-key">${esc(c.key)}</span>
+               <span class="jd-coach-t">
+                 <b>${esc(c.missing || '더 적을 것이 있어요')}</b>
+                 ${c.ask ? `<span>${esc(c.ask)}</span>` : ''}
+               </span>
+               <i class="ti ti-arrow-up-right"></i>
+             </button>`).join('')}</div>
+           <p class="jd-hint">누르면 그 칸이 열립니다. 채운 뒤 <b>AI 초안 넣기</b>를 다시 누르면
+             그 내용으로 다시 씁니다.</p>
+         </div>`
+      : '';
+
+    host.innerHTML = coach + list(out.blanks, '채워야 할 빈칸') + list(out.review, '채용담당자가 볼 약한 지점');
+
+    host.querySelectorAll('[data-coach]').forEach(el => el.addEventListener('click', () => {
+      _starOpen = el.dataset.coach;
+      const box = document.getElementById('jd-result');
+      repaintStarInput(box);
+      box.querySelector('.jd-starin')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }));
+
+    /* 어느 칸이 모자란지 STAR 머리줄에도 표시해 둔다. 초안 카드를 닫으면
+       되짚기가 안 보이는데, 고쳐야 할 칸은 계속 보여야 한다. */
+    _starCoach = {};
+    (out.coach || []).forEach(c => { _starCoach[c.key] = c.missing || c.ask || ''; });
+    repaintStarInput(document.getElementById('jd-result'));
   }
+
 
   /* 작성칸 자동 저장. 글자마다 localStorage 를 때리지 않도록 600ms 묶어서 쓴다.
      저장은 조용히 되면 사용자가 저장됐는지 모른다 — 상태 문구를 같이 갱신한다. */

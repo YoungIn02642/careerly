@@ -125,5 +125,109 @@ ok('draft 가 비어 있으면 실패로 본다', threw !== null);
 ok('review 가 없어도 깨지지 않는다',
    DRAFT.parseDraft('{"draft":"한 문장입니다."}').review.length === 0);
 
+
+// ── STAR 입력 · 되짚기 · 예시 베낌 검사 ──────────────────────────
+console.log('\n── STAR 입력을 프롬프트에 싣는다 ──');
+
+const STAR_IN = {
+  S: '기획과 개발이 정렬 기준을 다르게 알고 있었습니다.',
+  T: '화면 정의서를 제가 맡고 있었습니다.',
+  A: '회의로 맞췄는데 또 어긋나서 정의서 형식을 바꿨습니다.',
+  R: '재작업이 한 번으로 줄었습니다.',
+};
+
+const pStar = DRAFT.buildPrompt({ ...base, star: STAR_IN });
+
+ok('STAR 에 적은 문장이 프롬프트에 그대로 들어간다',
+   pStar.includes('기획과 개발이 정렬 기준을 다르게 알고 있었습니다.'));
+ok('칸 이름을 붙여서 넘긴다 (어느 칸인지 모르면 순서를 못 지킨다)',
+   pStar.includes('S(상황):') && pStar.includes('A(행동):'));
+/* 활동 목록(이름·기간·역할)만으로는 '무슨 일이 있었는지' 를 알 수 없다.
+   STAR 가 있으면 그쪽이 본문이라고 못 박아야 모델이 활동 분류로 문단을 만들지 않는다. */
+ok('STAR 가 있으면 그것이 유일한 사실이라고 못 박는다',
+   pStar.includes('유일한 사실'));
+ok('STAR 가 있으면 활동 목록은 참고로 내린다',
+   pStar.includes('활동 이름을 정확히 쓰기 위한 참고'));
+
+const pEmpty = DRAFT.buildPrompt({ ...base, star: { S: '   ', T: '', A: '', R: '' } });
+ok('빈 칸만 있는 STAR 는 없는 것으로 본다', !pEmpty.includes('유일한 사실'));
+
+ok('STAR 없이도 예전처럼 동작한다',
+   DRAFT.buildPrompt(base).includes('이 중 하나를 골라'));
+
+console.log('\n── 두루뭉술한 문단을 막는 규칙 ──');
+/* 사용자 지적: "노력했고 잘 마무리했습니다" 류가 나왔다. 막으려는 것은 문체가 아니라
+   정보의 부재라, 셀 수 있는 조건으로 적어야 모델이 지켰는지 스스로 판정할 수 있다. */
+ok('행동에 시도를 두 가지 이상 쓰라고 못 박는다', p.includes('시도를 두 가지 이상'));
+ok('첫 시도가 왜 막혔는지를 요구한다', p.includes('통하지 않았는지'));
+ok('문제의 "왜" 까지 요구한다', p.includes('어떻게 됐는지'));
+ok('결과가 성공이 아니어도 된다고 알려준다', p.includes('성공이 아니어도'));
+ok('"노력했습니다" 류를 금지한다',
+   p.includes('노력했습니다') && p.includes('잘 마무리했습니다'));
+ok('실제로 나왔던 나쁜 문단을 예로 박아 둔다', p.includes('소통을 하려고 노력했고'));
+
+console.log('\n── 고친 예(good)는 프롬프트에 넣지 않는다 ──');
+/* 실측: good 을 넣었더니 모델이 그것을 양식이 아니라 내용으로 읽고 통째로 베꼈다.
+   사용자가 겪지 않은 사건('화면 정의서'·'2주차 중간 점검')이 자소서에 사실처럼 적혔다. */
+const goodS = GUIDE.starWrite('S').good;
+ok('good 문장이 프롬프트에 없다', !p.includes(goodS),
+   '넣으면 모델이 베껴서 없는 사건을 지어낸다');
+ok('대신 bad 는 넣는다 (베껴도 다른 규칙에 걸린다)', p.includes(GUIDE.starWrite('S').bad));
+ok('must(갖춰야 할 조건)를 넣는다', p.includes(GUIDE.starWrite('A').must[0]));
+
+console.log('\n── 예시를 베꼈는지 검사 ──');
+ok('예시를 그대로 베끼면 잡는다', DRAFT.copiedFromExample(goodS) !== null);
+ok('어느 칸에서 베꼈는지 알려준다', DRAFT.copiedFromExample(goodS).key === 'S');
+ok('예시 일부만 섞여도 잡는다',
+   DRAFT.copiedFromExample(`저는 ${goodS.slice(10, 40)} 그렇게 했습니다.`) !== null);
+ok('내가 쓴 문장은 통과한다',
+   DRAFT.copiedFromExample('교내 마케팅 공모전에서 팀장을 맡아 일정표를 다시 짰습니다.') === null);
+/* ── 사용자가 직접 쓴 것은 베낌이 아니다 (실측으로 잡은 오탐) ──
+   화면이 예시를 보여주고 "이렇게 쓰세요" 라고 시키므로, 비슷한 경험을 가진 사람은
+   비슷하게 적는다. 그걸 베낌으로 보면 **멀쩡한 초안이 통째로 버려진다** —
+   실제로 브라우저 확인에서 그렇게 됐다. 막으려는 건 지어내기지 닮음이 아니다. */
+ok('사용자가 STAR 에 적은 대목은 베낌으로 치지 않는다',
+   DRAFT.copiedFromExample(goodS, { S: goodS }) === null,
+   '예시를 보고 자기 경험을 비슷하게 적은 사람의 초안을 버리면 안 된다');
+ok('STAR 에 없는 대목만 걸러낸다',
+   DRAFT.copiedFromExample(goodS, { S: '전혀 다른 이야기를 적었습니다.' }) !== null);
+ok('빈 초안은 통과한다', DRAFT.copiedFromExample('') === null);
+/* 문턱을 짧게 잡으면 흔한 표현이 걸린다. '프로젝트를 진행하면서' 가 11자다. */
+ok('겹침 문턱이 12자 이상이다', DRAFT.COPY_MIN >= 12);
+
+console.log('\n── 칸별 되짚기(coach) ──');
+const withCoach = DRAFT.parseDraft(JSON.stringify({
+  draft: '한 문단입니다.',
+  coach: [
+    { key: 'S', missing: '어떤 의견 차이였는지', ask: '무엇이 갈렸는지 적어 주세요' },
+    { key: 'A', missing: '첫 방법이 왜 막혔는지', ask: '왜 안 통했나요' },
+  ],
+}));
+ok('coach 를 읽어 온다', withCoach.coach.length === 2);
+ok('키와 내용을 그대로 담는다',
+   withCoach.coach[0].key === 'S' && withCoach.coach[1].key === 'A');
+
+/* 화면이 key 로 STAR 입력칸을 찾아 붙인다. 엉뚱한 키는 어디에도 안 붙고 조용히 사라진다. */
+const dirty = DRAFT.parseDraft(JSON.stringify({
+  draft: '한 문단입니다.',
+  coach: [
+    { key: 'X', missing: '없는 칸' },
+    { key: 's', missing: '소문자도 받는다' },
+    { key: 'S', missing: '같은 칸 중복' },
+    { key: 'T' },
+  ],
+}));
+ok('S·T·A·R 가 아닌 키는 버린다', !dirty.coach.some(c => c.key === 'X'));
+ok('소문자도 받는다', dirty.coach.some(c => c.key === 'S'));
+ok('같은 칸은 한 번만 남긴다', dirty.coach.filter(c => c.key === 'S').length === 1);
+ok('내용이 비면 버린다', !dirty.coach.some(c => c.key === 'T'));
+ok('coach 가 없어도 깨지지 않는다',
+   DRAFT.parseDraft('{"draft":"한 문장입니다."}').coach.length === 0);
+
+/* 지어내기와 비워두기가 부딪히면 비워두기가 이긴다 — 겪지 않은 일을 자소서에 적는 것이
+   두루뭉술한 문단보다 나쁘다. */
+ok('STAR 에 없는 것을 지어내지 말라고 못 박는다',
+   pStar.includes('언제나 비워두기가 맞다'));
+
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
 process.exit(fail ? 1 : 0);

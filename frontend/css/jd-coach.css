@@ -934,3 +934,108 @@ a.wf-btn { text-decoration: none; }
   background: color-mix(in srgb, var(--wf-purple, #7a3dff) 4%, transparent);
 }
 .co-note--tight { margin: 0 0 12px; }
+
+/* ── STAR 입력 아코디언 ─────────────────────────────────────────
+   위 띠(.jd-star-band)가 "뼈대가 무엇인가" 라면 여기는 그 뼈대에 내 경험을 채우는
+   자리다. 색은 위 띠의 S·T·A·R 네 색을 그대로 쓴다 — 같은 것을 말하는 두 블록이
+   다른 색을 쓰면 연결이 끊긴다. */
+.jd-starin { margin-bottom: 16px; }
+.jd-starin .co-sec-h { margin-bottom: 10px; }
+.jd-starin-steps {
+  border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-md); overflow: hidden;
+}
+.jd-si { border-bottom: 1px solid var(--wf-hairline); }
+.jd-si:last-child { border-bottom: 0; }
+.jd-si:nth-child(1) { --star-accent: var(--wf-purple); }
+.jd-si:nth-child(2) { --star-accent: var(--wf-blue); }
+.jd-si:nth-child(3) { --star-accent: var(--wf-orange); }
+.jd-si:nth-child(4) { --star-accent: var(--wf-ok); }
+
+.jd-si-h {
+  width: 100%; display: flex; align-items: center; gap: 12px;
+  padding: 13px 16px; background: none; border: 0; cursor: pointer;
+  font: inherit; text-align: left;
+}
+.jd-si-h:hover { background: var(--wf-surface-2, #fafafa); }
+.jd-si.is-open .jd-si-h { background: var(--wf-surface-2, #fafafa); }
+.jd-si-key {
+  flex: 0 0 auto; width: 28px; height: 28px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; font-weight: 700; color: #fff;
+  background: var(--star-accent, var(--wf-ink));
+}
+.jd-si-t { flex: 1; min-width: 0; }
+.jd-si-t b { display: block; font-size: 13.5px; font-weight: 600; color: var(--wf-ink); }
+.jd-si-ask {
+  display: block; margin-top: 2px; font-size: 12.8px; line-height: 1.5; color: var(--wf-mute);
+}
+.jd-si-state {
+  flex: 0 0 auto; font-size: 12px; font-weight: 600; color: var(--wf-mute);
+  padding: 3px 9px; border-radius: 99px; background: var(--wf-surface-2, #f3f3f3);
+}
+.jd-si-state.is-done { color: var(--wf-ok); background: rgba(22,133,95,.10); }
+
+/* 접힌 칸은 머리줄만 남는다 — STAR 는 앞 칸이 뒤 칸의 전제라 한 번에 하나만 연다 */
+.jd-si-body { display: none; padding: 0 16px 16px; }
+.jd-si.is-open .jd-si-body { display: block; }
+
+.jd-si-hint { font-size: 12.8px; line-height: 1.7; color: var(--wf-body-mid); margin-bottom: 10px; }
+.jd-si-hint b { font-weight: 600; color: var(--wf-ink); }
+
+/* 나쁜 예 / 고친 예를 나란히. "구체적으로 쓰세요" 보다 이 대비가 훨씬 빠르다. */
+.jd-si-ex {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px;
+}
+.jd-si-ex-row {
+  padding: 10px 12px; border-radius: var(--wf-r-sm, 8px);
+  border: 1px solid var(--wf-hairline);
+}
+.jd-si-ex-row p { font-size: 12.8px; line-height: 1.65; color: var(--wf-body); }
+.jd-si-ex-tag {
+  display: inline-block; margin-bottom: 5px;
+  font-size: 11px; font-weight: 700; letter-spacing: .02em;
+}
+.jd-si-ex--bad  { background: rgba(197,48,48,.045); border-color: rgba(197,48,48,.20); }
+.jd-si-ex--bad  .jd-si-ex-tag { color: var(--wf-error, #C53030); }
+.jd-si-ex--bad  p { color: var(--wf-mute); text-decoration: line-through; text-decoration-color: rgba(197,48,48,.35); }
+.jd-si-ex--good { background: rgba(22,133,95,.045); border-color: rgba(22,133,95,.20); }
+.jd-si-ex--good .jd-si-ex-tag { color: var(--wf-ok, #16855F); }
+
+.jd-si-ta {
+  width: 100%; min-height: 108px; resize: vertical;
+  padding: 12px 14px; border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-sm, 8px);
+  font: inherit; font-size: 13.5px; line-height: 1.75; color: var(--wf-ink); background: #fff;
+}
+.jd-si-ta:focus { outline: none; border-color: var(--star-accent, var(--wf-ink)); }
+
+.jd-si-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin-top: 8px; flex-wrap: wrap;
+}
+.jd-si-saved { font-size: 12px; color: var(--wf-mute); }
+.jd-si-done { font-size: 12.8px; color: var(--wf-body-mid); }
+.jd-si-done b { font-weight: 600; color: var(--wf-ink); }
+
+@media (max-width: 860px) {
+  .jd-si-ex { grid-template-columns: 1fr; }
+}
+
+/* 칸별 되짚기 — 읽고 끝내지 않고 그 칸으로 돌아가는 버튼이다 */
+.jd-coach { display: flex; flex-direction: column; gap: 6px; }
+.jd-coach-row {
+  display: flex; align-items: flex-start; gap: 10px; width: 100%;
+  padding: 10px 12px; text-align: left; cursor: pointer;
+  background: rgba(240,150,20,.05); border: 1px solid rgba(240,150,20,.28);
+  border-radius: var(--wf-r-sm, 8px); font: inherit;
+}
+.jd-coach-row:hover { background: rgba(240,150,20,.10); }
+.jd-coach-row i { margin-left: auto; color: var(--wf-mute); font-size: 15px; }
+.jd-coach-key {
+  flex: 0 0 auto; width: 22px; height: 22px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: #fff; background: var(--wf-orange, #e08600);
+}
+.jd-coach-t { flex: 1; min-width: 0; }
+.jd-coach-t b { display: block; font-size: 13px; font-weight: 600; color: var(--wf-ink); }
+.jd-coach-t span { display: block; margin-top: 3px; font-size: 12.5px; line-height: 1.55; color: var(--wf-body-mid); }
+.jd-si-state.is-todo { color: #a35a00; background: rgba(240,150,20,.16); }

@@ -77,11 +77,80 @@ function tells(limit = 4) {
   return GUIDE.AI_TELLS.slice(0, limit).map(t => t.term);
 }
 
+/* ── 칸마다의 규칙 ──────────────────────────────────────────────
+   "구체적으로 써라" 는 모델을 거의 못 움직인다(실측: 그 문장만으로는 여전히
+   "노력했고 잘 마무리했습니다" 가 나왔다). 그래서 **갖춰야 할 조건(must)** 을
+   셀 수 있는 형태로 주고, **안 되는 예(bad)** 를 붙인다.
+
+   ── good(고친 예)은 절대 넣지 않는다 (실측) ──
+   처음엔 cover-guide 의 good 문장도 같이 넣었다. 모델이 그것을 **양식이 아니라
+   내용으로 읽고 통째로 베꼈다** — 사용자는 "팀원과 소통에 다툼이 있었습니다" 만
+   적었는데 초안에 예시의 '화면 정의서'·'검색 결과 정렬'·'2주차 중간 점검' 이
+   그대로 나왔다. 있지도 않은 사건을 사실처럼 쓴 것이라 이 파일이 막으려던 사고
+   그 자체다. bad 는 베껴도 다른 규칙에 걸리고, must 는 문장이 아니라 조건이라
+   베낄 것이 없다. good 은 사람이 보는 화면에만 남긴다. */
+function starRules() {
+  return GUIDE.STAR.map(s => {
+    const w = GUIDE.starWrite(s.key);
+    if (!w) return `   ${s.key}(${s.label}): ${s.what} — ${s.check}`;
+    return [
+      `   ${s.key}(${s.label}) — ${w.ask}`,
+      ...(w.must || []).map(m => `     · 반드시: ${m}`),
+      `     · 이렇게 쓰면 탈락: "${w.bad}"`,
+    ].join('\n');
+  }).join('\n');
+}
+
+/* ── 예시를 베꼈는지 검사 ────────────────────────────────────────
+   위 주석의 사고를 말로 막아 두는 것만으로는 부족하다 — 프롬프트에서 good 을 빼도
+   모델이 다른 경로로 같은 짓을 할 수 있고(예: 이 파일을 학습한 적이 있다면),
+   무엇보다 **틀렸을 때 조용히 틀린다.** 사용자는 자기가 안 한 일이 적힌 자소서를
+   그대로 낸다. 그래서 받아서 확인한다.
+
+   예시 문장에서 12자 이상 연속으로 겹치면 베낀 것으로 본다. 12자는 한국어에서
+   우연히 겹치기 어려운 길이이고("프로젝트를 진행하면서" 가 11자다), 짧게 잡으면
+   흔한 표현이 걸린다.
+
+   ── 사용자가 직접 쓴 것은 베낌이 아니다 (실측으로 잡은 오탐) ──
+   처음에는 초안과 예시만 비교했다. 그랬더니 **사용자가 예시와 비슷한 경험을 STAR 에
+   적었을 때 멀쩡한 초안이 통째로 버려졌다** — 화면이 예시를 보여주고 "이렇게 쓰세요"
+   라고 시켰으니 비슷하게 적는 것은 당연한 일이다. 우리가 막으려는 것은 *지어내기*지
+   *닮음*이 아니므로, **사용자의 STAR 에도 있는 대목은 통과시킨다.** */
+const COPY_MIN = 12;
+
+const squash = s => String(s || '').replace(/\s+/g, '');
+
+function copiedFromExample(draft, star) {
+  const body = squash(draft);
+  if (!body) return null;
+  /* 사용자가 자기 입으로 적은 것 — 여기 있는 대목은 베낌으로 치지 않는다. */
+  const own = squash(Object.values(star || {}).join(' '));
+
+  for (const w of GUIDE.STAR_WRITE) {
+    const ex = squash(w.good);
+    for (let i = 0; i + COPY_MIN <= ex.length; i++) {
+      const chunk = ex.slice(i, i + COPY_MIN);
+      if (body.includes(chunk) && !own.includes(chunk)) return { key: w.key, chunk };
+    }
+  }
+  return null;
+}
+
+/* 사용자가 STAR 입력칸에 직접 쓴 것. 여기 있는 문장이 **가장 믿을 수 있는 재료**다 —
+   활동 목록(이름·기간·역할)은 분류일 뿐이고, 무슨 일이 있었는지는 이것뿐이다. */
+function starLines(star) {
+  if (!star) return [];
+  return GUIDE.STAR.map(s => {
+    const v = String(star[s.key] || '').trim();
+    return v ? `${s.key}(${s.label}): ${v}` : null;
+  }).filter(Boolean);
+}
+
 /* ── 프롬프트 조립 (P.C.R.O) ──────────────────────────────── */
-function buildPrompt({ company, jobTitle, competency, quotes, reads, frame, activities, question, limit }) {
+function buildPrompt({ company, jobTitle, competency, quotes, reads, frame, activities, question, limit, star }) {
   const acts = (activities || []).map(activityLine).filter(Boolean);
   const names = (activities || []).map(a => a?.name).filter(Boolean);
-  const star = GUIDE.STAR.map(s => `${s.key}(${s.label}): ${s.what} — ${s.check}`);
+  const mine = starLines(star);
 
   const context = [
     `지원 회사: ${company || '(미지정)'}`,
@@ -91,11 +160,25 @@ function buildPrompt({ company, jobTitle, competency, quotes, reads, frame, acti
     reads ? `이 역량으로 기업이 보는 것: ${reads}` : null,
     quotes?.length ? `공고 원문 근거:\n${quotes.map(q => `  - ${q}`).join('\n')}` : null,
     frame ? `이 역량을 쓰는 순서: ${frame}` : null,
+
+    /* ── STAR 입력이 있으면 그것이 본문이다 ──────────────────────
+       예전에는 활동 이름·기간·역할만 넘겼다. 그 정보로는 "무슨 일이 있었는지" 를
+       모르니 모델이 빈 곳을 관용구로 메웠고, 그래서 "소통하려 노력했고 잘 마무리
+       했습니다" 같은 문단이 나왔다(사용자 지적). 사용자가 STAR 칸에 적은 문장이
+       있으면 **그것이 유일한 사실 출처**이고, 모델이 할 일은 지어내기가 아니라
+       그 사실을 자소서 문장으로 다듬는 것뿐이다. */
+    mine.length
+      ? `지원자가 직접 적은 경험(STAR). **이것이 유일한 사실이다. 여기 없는 사건을 만들지 마라:**\n`
+        + `${mine.map(l => `  ${l}`).join('\n')}`
+      : null,
+
     acts.length
-      ? `지원자가 실제로 한 활동(이것 말고는 아는 것이 없다):\n${acts.map(a => `  - ${a}`).join('\n')}\n`
-        + `  ※ 이 중 하나를 골라 **'이름:' 값을 문장에 그대로 넣고** 그 경험으로 문단을 써라.`
-        + ` 활동 이름이 문단에 없으면 틀린 답이다.`
-      : '지원자의 활동 정보가 없다. 활동 자리도 전부 대괄호로 남겨라.',
+      ? `지원자가 실제로 한 활동(분류 정보):\n${acts.map(a => `  - ${a}`).join('\n')}\n`
+        + (mine.length
+          ? `  ※ 위 STAR 가 본문이고 이 목록은 활동 이름을 정확히 쓰기 위한 참고다.`
+          : `  ※ 이 중 하나를 골라 **'이름:' 값을 문장에 그대로 넣고** 그 경험으로 문단을 써라.`
+            + ` 활동 이름이 문단에 없으면 틀린 답이다.`)
+      : (mine.length ? null : '지원자의 활동 정보가 없다. 활동 자리도 전부 대괄호로 남겨라.'),
   ].filter(Boolean).join('\n');
 
   const restriction = [
@@ -108,7 +191,7 @@ function buildPrompt({ company, jobTitle, competency, quotes, reads, frame, acti
     `1-1. 대괄호는 한 문단에 **최대 4개**까지만 쓴다. 그보다 많으면 문장이 아니라 서식이다.`,
     `2. 아래 표현은 쓰지 마라(변별력이 없다): ${banned().join(', ')}`,
     `3. 아래 연결어를 반복하지 마라(AI 초안 티가 난다): ${tells().join(', ')}`,
-    `4. STAR 순서를 지킨다:\n${star.map(s => `   ${s}`).join('\n')}`,
+    `4. STAR 순서를 지키되, 칸마다 아래를 반드시 지킨다:\n${starRules()}`,
     `5. 역량 이름("${competency}")을 문장에 그대로 쓰지 마라. 그 역량을 쓴 상황으로 보여라.`,
     `6. 전체 ${limit}자 안팎. 소감·다짐·포부로 끝내지 말고 결과와 배운 점으로 닫는다.`,
     `7. 존댓말 서술체(~했습니다)로 쓴다.`,
@@ -120,12 +203,58 @@ function buildPrompt({ company, jobTitle, competency, quotes, reads, frame, acti
       ? `9. 다음 활동 이름 중 하나를 문단에 **그대로** 써라: ${names.map(n => `"${n}"`).join(', ')}.`
         + ` '대외활동'·'3개월' 같은 분류나 기간이 아니라 **이름**이다. 일반론을 쓰지 마라.`
       : null,
+
+    /* ── 여기부터가 '두루뭉술한 문단' 을 막는 규칙 (사용자 지적) ──
+       STAR 순서만 지키면 문법도 맞고 형식도 맞는데 아무 정보가 없는 문단이 나온다.
+       막으려는 것은 문체가 아니라 **정보의 부재**라, 셀 수 있는 조건으로 적는다 —
+       "구체적으로" 는 모델이 지켰는지 스스로도 판정하지 못한다. */
+    `10. **행동(A)에는 시도를 두 가지 이상 쓴다.** 첫 번째 방법이 왜 통하지 않았는지를`
+      + ` 반드시 적고, 그래서 두 번째로 무엇을 바꿨는지로 잇는다. 시도가 하나뿐이면 틀린 답이다.`,
+    `11. **문제를 "왜 문제인지" 까지 적는다.** 어긋난 지점 하나를 짚고, 그 때문에 일정·품질·결과가`
+      + ` 어떻게 됐는지를 같이 쓴다. "문제가 있었습니다" 로 끝나면 틀린 답이다.`,
+    `12. **결과는 성공이 아니어도 된다.** 목표에 못 미쳤으면 못 미친 대로 적고, 그때 건진 것`
+      + `(작은 성과·다음에 바꿀 것)을 한 줄 붙인다. 없는 성공을 만들어 붙이지 마라.`,
+    `13. 아래 말은 **행동도 결과도 아니므로 쓰지 마라**: "노력했습니다", "최선을 다했습니다",`
+      + ` "소통했습니다", "합을 맞췄습니다", "잘 마무리했습니다", "원활하게 진행했습니다",`
+      + ` "많은 것을 배웠습니다". 무엇을 어떻게 했는지로 바꿔 쓴다.`,
+
+    /* 규칙을 아무리 적어도 '무엇이 틀린 문단인지' 를 안 보여주면 잘 안 지켜진다.
+       사용자가 실제로 받아 본 나쁜 문단을 그대로 넣고, 무엇이 빠졌는지 짚는다. */
+    /* ── 모자란 칸을 지어내서 메우지 않는다 ──────────────────────
+       10~13번을 지키려다 보면 모델이 STAR 에 없는 행동을 만들어 넣는다(실측:
+       사용자는 "소통을 하려고 노력했습니다" 만 적었는데 초안에 '일대일 미팅'·
+       '추가적인 교육 제공' 이 나왔다). 사용자가 겪지 않은 일을 자소서에 적는 것이라
+       두루뭉술한 문단보다 나쁘다. 규칙과 규칙이 부딪히는 자리이므로 어느 쪽이
+       이기는지를 못 박아 둔다. */
+    mine.length
+      ? `13-1. **위 STAR 에 없는 사건·행동·수치를 새로 만들지 마라.** 10~13번을 지키려고`
+        + ` 없는 시도를 지어내면 안 된다. 모자란 자리는 [첫 번째로 시도한 방법],`
+        + ` [그 방법이 막힌 지점] 처럼 **대괄호로 비우고**, 무엇을 물어야 하는지를`
+        + ` coach 에 적어라. 지어내기와 비워두기 중에서는 **언제나 비워두기가 맞다.**`
+      : null,
+    `13-2. coach 에는 S·T·A·R 중 **모자란 칸만** 담는다. 그 칸이 왜 모자란지(missing)와`
+      + ` 사용자가 무엇을 더 적어야 하는지(ask)를 각각 한 문장으로. 충분한 칸은 넣지 마라.`,
+
+    `14. 아래는 **절대로 내놓으면 안 되는 답의 예**다. 문법과 STAR 순서는 맞지만 정보가 없다.\n`
+      + `   "3개월 프로젝트에서 팀원과 소통에 다툼이 있었습니다. 저는 소통을 하려고 노력했고,\n`
+      + `    노력한 결과 팀원과 합을 맞추며 프로젝트를 잘 마무리 할 수 있었습니다."\n`
+      + `   빠진 것: 무엇이 어긋났는지 · 그래서 무엇이 안 됐는지 · 어떤 방법을 몇 가지 써 봤는지\n`
+      + `   · 그중 무엇이 실패했는지 · 결과가 숫자나 사실로 확인되는지. 이 다섯을 모두 채워라.`,
   ].filter(Boolean).join('\n');
 
   const output = [
     '{',
     '  "draft": "완성된 문단 한 개. 줄바꿈은 \\n 으로.",',
     '  "blanks": ["대괄호로 남긴 자리마다 무엇을 채워야 하는지 한 줄씩"],',
+    /* ── coach 가 이 기능의 핵심이다 ────────────────────────────
+       사용자가 원한 것은 "대신 써 줘" 가 아니라 **"내 STAR 를 보고 어떻게 더
+       구체적으로 적어야 하는지 알려 줘"** 다. 초안만 주면 모자란 자리를 모델이
+       지어내게 되고(실측: STAR 에 없던 '일대일 미팅'·'추가 교육' 이 나왔다),
+       그건 사용자가 겪지 않은 일을 자소서에 적는 것이다.
+       그래서 **모자란 칸은 지어내지 말고 여기에 '무엇을 더 적어야 하는지' 로
+       돌려주게** 한다. 화면은 이걸 STAR 칸 옆에 붙여 준다. */
+    '  "coach": [{"key": "S|T|A|R", "missing": "그 칸에서 빠진 것 한 줄",',
+    '             "ask": "그래서 무엇을 더 적어야 하는지 묻는 한 문장"}],',
     '  "review": ["채용담당자 관점에서 이 초안의 약한 지점 2~3개"]',
     '}',
   ].join('\n');
@@ -153,6 +282,7 @@ function parseDraft(raw) {
   return {
     draft,
     blanks: toLines(data.blanks),
+    coach: toCoach(data.coach),
     review: toLines(data.review),
     /* 서버가 직접 센다. 모델이 "빈칸 3개" 라고 말해도 실제 문장과 다를 수 있어서,
        화면에 띄우는 숫자는 문자열에서 세는 값만 믿는다. */
@@ -165,6 +295,25 @@ function parseDraft(raw) {
 function toLines(v) {
   if (!Array.isArray(v)) return [];
   return v.map(x => String(x || '').trim()).filter(Boolean).slice(0, 5);
+}
+
+/* 칸별 되짚기. key 가 S·T·A·R 가 아니면 버린다 — 화면이 그 키로 STAR 입력칸을 찾아
+   붙이므로, 엉뚱한 키가 들어오면 어디에도 안 붙고 조용히 사라진다.
+   같은 칸을 두 번 말하는 것도 첫 줄만 남긴다(모델이 종종 중복해서 낸다). */
+function toCoach(v) {
+  if (!Array.isArray(v)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const x of v) {
+    const key = String(x?.key || '').trim().toUpperCase().slice(0, 1);
+    if (!['S', 'T', 'A', 'R'].includes(key) || seen.has(key)) continue;
+    const missing = String(x?.missing || '').trim();
+    const ask = String(x?.ask || '').trim();
+    if (!missing && !ask) continue;
+    seen.add(key);
+    out.push({ key, missing, ask });
+  }
+  return out;
 }
 
 /* ── 한국어가 아닌 글자 감지 ──────────────────────────────────
@@ -182,4 +331,7 @@ function hasForeign(out) {
   return FOREIGN.test(text);
 }
 
-module.exports = { buildPrompt, parseDraft, activityLine, hasForeign, SYSTEM };
+module.exports = {
+  buildPrompt, parseDraft, activityLine, starLines, starRules,
+  hasForeign, copiedFromExample, COPY_MIN, SYSTEM,
+};
