@@ -46,6 +46,58 @@ const SECTORS = [
 
 const SECTOR_OF = new Map();
 for (const [name, codes] of SECTORS) for (const c of codes) SECTOR_OF.set(c, name);
+const SECTOR_ORDER = new Map(SECTORS.map(([n], i) => [n, i]));
+
+/* ── 한국표준산업분류(KSIC) 대분류 ────────────────────────────────
+   위 SECTORS 는 **취업 시장의 말**로 묶은 15개 계열이고, 이건 **통계청 공식 분류**의
+   대분류다. 둘 다 필요하다.
+
+   ── 왜 대분류가 따로 필요한가 (사용자 지시) ──
+   직업 하나가 어느 업종에 속하는지는 대개 **대분류 수준에서 자명하다** —
+   '초·중·고등학교 교장' 은 교육 서비스업(P)이고 '금융관리자' 는 금융 및 보험업(K)이다.
+   그걸 우리 계열 이름('의료·교육·기타서비스')으로 직접 적으면, 계열을 다시 묶을 때
+   매핑을 통째로 손봐야 하고 근거도 남지 않는다. 공식 분류를 한 번 거치면 아래
+   SECTIONS_BY_JOB 이 "이 직업은 KSIC 어디에 속하는가" 만 말하면 되고, 계열 이름은
+   여기서 자동으로 따라온다.
+
+   ── 2자리 코드는 우리 데이터에 실제로 있는 것 기준이다 ──
+   DART 업종코드를 실측해 확인했다(01,03,06,10~33,35,38,41~52,55~66,68,70~76,85,87,
+   90,91,95,96). 84(공공행정)·97~99 는 상장사가 없어 0곳인데, **그게 정상이고 그
+   사실이 화면에 그대로 나가야 한다** — 공무원 직업에 억지로 민간 계열을 붙이지
+   않기 위한 근거다. */
+const KSIC_SECTIONS = {
+  A: { label: '농업, 임업 및 어업',                     codes: [1, 2, 3] },
+  B: { label: '광업',                                   codes: [5, 6, 7, 8] },
+  C: { label: '제조업',                                 codes: [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34] },
+  D: { label: '전기·가스·증기 및 공기조절 공급업',      codes: [35] },
+  E: { label: '수도·하수 및 폐기물 처리, 원료 재생업',  codes: [36, 37, 38, 39] },
+  F: { label: '건설업',                                 codes: [41, 42] },
+  G: { label: '도매 및 소매업',                         codes: [45, 46, 47] },
+  H: { label: '운수 및 창고업',                         codes: [49, 50, 51, 52] },
+  I: { label: '숙박 및 음식점업',                       codes: [55, 56] },
+  J: { label: '정보통신업',                             codes: [58, 59, 60, 61, 62, 63] },
+  K: { label: '금융 및 보험업',                         codes: [64, 65, 66] },
+  L: { label: '부동산업',                               codes: [68] },
+  M: { label: '전문·과학 및 기술 서비스업',             codes: [70, 71, 72, 73] },
+  N: { label: '사업시설 관리·사업 지원 및 임대 서비스업', codes: [74, 75, 76] },
+  O: { label: '공공행정·국방 및 사회보장 행정',         codes: [84] },
+  P: { label: '교육 서비스업',                          codes: [85] },
+  Q: { label: '보건업 및 사회복지 서비스업',            codes: [86, 87] },
+  R: { label: '예술·스포츠 및 여가관련 서비스업',       codes: [90, 91] },
+  S: { label: '협회 및 단체, 수리 및 기타 개인 서비스업', codes: [94, 95, 96] },
+};
+
+/* KSIC 대분류 → 우리 계열 이름. 화면 순서(SECTORS)를 따라 정렬해서 돌려준다. */
+function sectorsOfSections(letters) {
+  const names = new Set();
+  for (const L of letters || []) {
+    for (const c of KSIC_SECTIONS[L]?.codes || []) {
+      const n = SECTOR_OF.get(c);
+      if (n) names.add(n);
+    }
+  }
+  return [...names].sort((a, b) => SECTOR_ORDER.get(a) - SECTOR_ORDER.get(b));
+}
 
 /* ── 직무(KECO 2차 분류) → 그 직무를 주로 뽑는 계열 ──────────────
    커리어 로드맵 4단계('지원할 회사')가 쓴다. 직무를 골라 온 학생에게 785곳을
@@ -111,18 +163,110 @@ const SECTORS_BY_MIDDLE = {
    오타 하나가 '해당 계열 0곳' 으로만 보이고 에러는 안 난다. */
 const SECTOR_NAMES = new Set(SECTORS.map(([n]) => n));
 
+/* ── 직업 단위 보정 — KECO 직업코드 → KSIC 대분류 ─────────────────
+   ── 왜 필요한가 (사용자 지적) ──
+   '초·중·고등학교 교장 및 교감' 을 고르면 **"업종을 가리지 않는 직무"** 라는 안내가
+   뜨고 회사가 하나도 안 떴다. 교장이 갈 곳은 학교뿐인데 말이다.
+
+   원인은 매핑의 **해상도**였다. 위 SECTORS_BY_MIDDLE 은 2차 분류 단위인데, 관리직
+   (01)에는 성격이 전혀 다른 직업 24개가 같이 들어 있다 — 기업 임원·금융관리자·
+   교장·유치원 원장·정부 고위공무원이 한 칸이다. 그 칸 전체로 보면 '전 업종' 이
+   맞아서 universal 로 두었고, 그 판단이 개별 직업에는 틀렸다.
+
+   ── 그래서 직업 단위로 내려간다 ──
+   여기 적힌 직업은 **이름 자체가 업종을 말한다.** '○○ 관련 관리자' 는 그 ○○ 업종의
+   회사에만 있다. 그래서 추측이 아니라 확인이다. 이름으로 업종을 알 수 없는 직업
+   (기업 대표·경영 지원 관리자·마케팅 관리자·영업 관리자·연구관리자)은 **여기에 넣지
+   않는다** — 그건 진짜 universal 이고, 억지로 계열을 붙이면 나머지 업종의 회사를
+   후보에서 지운다.
+
+   ── 값은 계열 이름이 아니라 KSIC 대분류다 ──
+   계열 이름을 직접 적으면 계열을 다시 묶을 때 여기까지 손봐야 하고, "왜 그 계열인가"
+   의 근거도 사라진다. 공식 분류를 한 번 거치면 근거가 남는다(KSIC_SECTIONS 주석).
+
+   ── 빈 배열은 '민간 경로 없음' 이다 ──
+   공무원 직업(O 공공행정)은 상장사가 없다. 억지로 붙이지 않고 빈 값으로 두면
+   sectorFocus 가 '민간 계열로 이어지지 않는 직무' 로 답한다. */
+const SECTIONS_BY_JOB = {
+  // ── 관리직(01) — 이름에 업종이 박혀 있는 것만 ──
+  K000000895: ['F', 'B'],        // 건설 및 광업 관련 관리자
+  K000001210: ['K'],             // 금융관리자
+  K000007471: ['K'],             // 보험관리자
+  K000000990: ['P'],             // 대학교 총장 및 대학학장
+  K000000838: ['P'],             // 초·중·고등학교 교장 및 교감  ← 사용자가 짚은 그 직업
+  K000001171: ['P'],             // 유치원 원장 및 원감
+  K000000931: ['Q'],             // 보건 의료 관련 관리자
+  K000000833: ['Q'],             // 사회복지 관련 관리자
+  K000001032: ['J'],             // 정보 통신 관련 관리자
+  /* J(정보통신업)를 같이 넣었더니 IT·소프트웨어 회사가 딸려 왔다 — 방송사를 넣으려다
+     소프트웨어까지 끌어온 셈이라 뺐다. 대분류는 이럴 때 너무 넓다. */
+  K000000969: ['R'],             // 문화·예술 관련 관리자
+  K000001018: ['D', 'E'],        // 전기·가스 및 수도 관련 관리자
+  K000000989: ['E', 'N'],        // 환경·청소 및 경비 관련 관리자
+  K000001094: ['H'],             // 운송 관련 관리자
+  K000000991: ['I'],             // 여행·숙박(호텔)관리자
+  K000000950: ['I'],             // 음식 서비스 관련 관리자
+  K000001173: ['C'],             // 제품 생산 관련 관리자 (제조업 전반)
+  /* 공무원 — 상장사가 없는 대분류라 계열이 비고, 그 사실을 화면이 그대로 말한다 */
+  K000001081: ['O'],             // 정부 행정 관리자
+  K000000933: ['O'],             // 행정부고위공무원
+  K000000910: ['O'],             // 법률·경찰·소방 및 교도 관리자
+
+  // ── 경영·행정·사무직(02) 중 업종이 자명한 전문직 ──
+  K000007449: ['M'],             // 회계사
+  K000007525: ['M'],             // 세무사
+  K000007500: ['M'],             // 관세사
+  K000007562: ['M'],             // 노무사
+  K000007514: ['M'],             // 감정평가사
+  K000007524: ['M'],             // 행정사
+
+  // ── 영업·판매직(61) 중 업종이 자명한 것 ──
+  K000007536: ['L'],             // 부동산 컨설턴트 및 중개사
+};
+
 /* 직무 하나의 계열 초점.
      matched   : 아는 직무인가 (모르는 코드에 빈 배열을 주면 universal 과 구분되지 않는다)
      universal : 전 업종 공통이라 일부러 좁히지 않았다
      sectors   : 좁힐 계열 (universal 이거나 민간 경로가 없으면 빈 배열) */
-function sectorFocus(middleCode) {
+function sectorFocus(middleCode, jobCode) {
   const code = String(middleCode || '').trim();
+  const job = String(jobCode || '').trim();
+
+  /* ── 직업이 아는 것이 있으면 2차 분류보다 먼저다 ────────────────
+     '초·중·고등학교 교장' 은 관리직(01) 안에 있고 그 칸은 universal 이지만, 이
+     직업만 보면 교육 서비스업이 확실하다. 좁은 쪽이 이긴다.
+
+     sections 를 같이 돌려주는 이유: 화면이 "왜 이 계열인가" 를 말할 수 있어야 한다.
+     '교육 서비스업' 이라고 근거를 대면 학생이 맞는지 스스로 판단할 수 있지만,
+     계열 이름만 던지면 우리가 어떻게 골랐는지 알 수 없다. */
+  const sections = SECTIONS_BY_JOB[job];
+  if (sections) {
+    const names = sectorsOfSections(sections);
+    return {
+      middle: code,
+      job,
+      matched: true,
+      universal: false,
+      /* KSIC 대분류는 아는데 그 업종에 상장사가 없다(공무원 O 등). 좁힐 계열이
+         없는 것과 '전 업종' 은 다른 말이라 by 로 구분해 둔다. */
+      by: 'job',
+      /* codes 를 같이 주는 이유: 화면이 계열 버킷(15개, 넓다) 대신 **이 업종의 회사만**
+         골라 보여줄 수 있어야 한다(build() 의 ksic 주석). */
+      sections: sections.map(L => ({
+        code: L, label: KSIC_SECTIONS[L]?.label || L, codes: KSIC_SECTIONS[L]?.codes || [],
+      })),
+      sectors: names,
+    };
+  }
+
   const list = SECTORS_BY_MIDDLE[code];
-  if (!list) return { middle: code, matched: false, universal: false, sectors: [] };
+  if (!list) return { middle: code, job, matched: false, universal: false, sectors: [] };
   return {
     middle: code,
+    job,
     matched: true,
     universal: UNIVERSAL_MIDDLES.has(code),
+    by: 'middle',
     sectors: list.filter(n => SECTOR_NAMES.has(n)),
   };
 }
@@ -170,10 +314,15 @@ function build() {
   for (const c of corps) {
     const key = norm(c.name);
     if (!c.industry || !known.has(key) || taken.has(key)) continue;
-    const sector = SECTOR_OF.get(parseInt(String(c.industry).slice(0, 2), 10));
+    const ksic = parseInt(String(c.industry).slice(0, 2), 10);
+    const sector = SECTOR_OF.get(ksic);
     if (!sector) continue;
     taken.add(key);
-    buckets.get(sector).push({ name: c.name, stock: c.stock || null });
+    /* 회사마다 KSIC 중분류 2자리를 남긴다. 계열(15개)은 화면에 올리려고 넓게 묶은
+       것이라, 직업 단위 보정처럼 **정확히 그 업종만** 보여줘야 할 때 되짚을 것이
+       없으면 안 된다 — 실측: '교장' 이 교육(85)으로 좁혀졌는데도 계열 버킷을 통째로
+       보여주는 바람에 강원랜드(카지노 91)가 같이 떴다. */
+    buckets.get(sector).push({ name: c.name, stock: c.stock || null, ksic });
   }
 
   /* 가나다순으로 둔다. 매출 순이 더 좋겠지만 785곳의 재무를 받아오려면 DART 를
@@ -200,7 +349,8 @@ function sectorOfCode(industryCode) {
 }
 
 module.exports = {
-  sectors, sectorOfCode, sectorFocus,
+  sectors, sectorOfCode, sectorFocus, sectorsOfSections,
   SECTORS, SECTORS_BY_MIDDLE, UNIVERSAL_MIDDLES,
+  KSIC_SECTIONS, SECTIONS_BY_JOB,
   _build: build,
 };

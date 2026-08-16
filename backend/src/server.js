@@ -839,15 +839,19 @@ app.get('/api/company/stats', ah(async (req, res) => res.json(await catalog.comp
 /* 계열별 기업 목록 — 회사 찾기 첫 화면. 캐시 파일만 읽으므로 빠르다.
    내용이 하루에 바뀌는 자료가 아니라 ETag 재검증에 맡긴다(/api/jobs 와 같은 규약).
 
-   ?middle=<KECO 2차 코드> 를 주면 **목록은 그대로 두고** focus 만 덧붙인다.
+   ?middle=<KECO 2차 코드>[&job=<KECO 직업코드>] 를 주면 **목록은 그대로 두고** focus 만
+   덧붙인다. job 을 같이 주는 이유: 2차 분류 하나에 성격이 다른 직업이 섞여 있어서
+   ('관리직' 에 기업 임원과 학교 교장이 같이 있다) 분류만으로는 업종을 못 좁힌다
+   (company-sectors.js SECTIONS_BY_JOB 주석).
    커리어 로드맵 4단계에서 "이 직무를 주로 뽑는 계열"을 앞으로 끌어올리는 데 쓴다.
    목록 자체를 잘라 보내지 않는 이유는, 좁힌 계열 밖에도 지원할 회사가 있기 때문이다 —
    무엇을 왜 앞에 뒀는지는 화면이 밝히고, 나머지를 볼 자유는 남긴다. */
 app.get('/api/company/sectors', (req, res) => {
   res.set('Cache-Control', 'no-cache');
   const middle = String(req.query.middle || '').trim();
+  const job = String(req.query.job || '').trim();
   const base = sectors.sectors();
-  res.json(middle ? { ...base, focus: sectors.sectorFocus(middle) } : base);
+  res.json(middle ? { ...base, focus: sectors.sectorFocus(middle, job) } : base);
 });
 
 /* ── 자격증 카탈로그 ────────────────────────────────────────────

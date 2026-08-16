@@ -259,12 +259,30 @@ window.CompanyCover = (() => {
         특정 계열로 좁히면 나머지 업종의 회사를 후보에서 지우게 되니 좁히지 않았어요 —
         아래 계열 목록에서 관심 있는 산업을 골라 보세요.`);
     }
+    /* 업종은 아는데(KSIC 대분류) 그 업종에 상장사가 없는 경우 — 공무원이 그렇다.
+       '모른다' 와 '알지만 민간에 없다' 는 다른 말이라, 아는 만큼은 말해 준다. */
     if (!focus.sectors.length) {
-      return note(`<b>${goalEun}</b> 공무원·군인 채용 경로라 민간 기업 계열로 이어지지 않아요.
+      const why = focus.sections?.length
+        ? `<b>${esc(focus.sections.map(x => x.label).join(' · '))}</b>이라 상장 기업 목록에 해당하는 회사가 없어요.`
+        : '공무원·군인 채용 경로라 민간 기업 계열로 이어지지 않아요.';
+      return note(`<b>${goalEun}</b> ${why}
         그래도 회사를 정해 자소서를 쓰려면 아래에서 직접 찾아 주세요.`);
     }
 
-    const picked = (sectorData.sectors || []).filter(s => focus.sectors.includes(s.name));
+    /* ── 직업으로 좁혔으면 그 업종의 회사만 남긴다 ───────────────
+       계열(15개)은 화면에 올리려고 넓게 묶은 것이라, 그대로 보여주면 좁힌 뜻이
+       흐려진다 — 실측: '교장' 을 교육 서비스업(85)으로 좁혀 놓고 계열 버킷을 통째로
+       띄우는 바람에 강원랜드(카지노 91)가 같이 떴다. 16곳 → 9곳.
+       2차 분류로 정한 경우(by:'middle')는 원래 넓게 보여주는 것이 맞으므로 그대로 둔다. */
+    const exact = focus.by === 'job' && focus.sections?.length
+      ? new Set(focus.sections.flatMap(x => x.codes || []))
+      : null;
+    const picked = (sectorData.sectors || [])
+      .filter(s => focus.sectors.includes(s.name))
+      .map(s => (exact
+        ? { ...s, companies: s.companies.filter(c => exact.has(c.ksic)) }
+        : s))
+      .filter(s => s.companies.length);
     const total = picked.reduce((n, s) => n + s.companies.length, 0);
     if (!total) return '';
 
@@ -276,7 +294,9 @@ window.CompanyCover = (() => {
         </div>
         <div class="co-note co-note--tight">
           <i class="ti ti-info-circle"></i>
-          <b>업종 기준</b>이에요 — "이 회사가 지금 ${goalEul} 뽑는다"는 뜻은 아닙니다.
+          ${focus.by === 'job' && focus.sections?.length
+            ? `이 직업은 한국표준산업분류상 <b>${esc(focus.sections.map(x => x.label).join(' · '))}</b>에 속해서 그 업종으로 좁혔어요. `
+            : ''}<b>업종 기준</b>이에요 — "이 회사가 지금 ${goalEul} 뽑는다"는 뜻은 아닙니다.
           실제 채용 여부는 회사를 열면 나오는 <b>채용공고</b> 칸에서 확인하세요.
         </div>
         <div class="co-sectors">
@@ -980,11 +1000,16 @@ window.CompanyCover = (() => {
      직무를 바꿔도 예전 직무의 계열이 강조된 채 남는다(조용히 틀리는 쪽). */
   let sectorFor = null;                       // 지금 받아 둔 focus 의 직무 코드
   async function loadSectors() {
-    const mid = Roadmap.get()?.middle || null;
-    if ((sectorData || sectorErr) && sectorFor === mid) return;
-    sectorFor = mid;
+    /* 직업 코드까지 같이 보낸다 — 같은 2차 분류라도 직업에 따라 업종이 갈린다
+       (관리직 안의 '교장' 과 '기업 임원'). 캐시 키도 둘을 합쳐서 본다. */
+    const rm = Roadmap.get();
+    const mid = rm?.middle || null;
+    const job = rm?.job || null;
+    const key = `${mid || ''}::${job || ''}`;
+    if ((sectorData || sectorErr) && sectorFor === key) return;
+    sectorFor = key;
     try {
-      sectorData = await DB.companySectors(mid);
+      sectorData = await DB.companySectors(mid, job);
       sectorErr = (!sectorData.sectors?.length && sectorData.reason) ? sectorData.reason : null;
     } catch (e) {
       sectorErr = e.message;
