@@ -35,6 +35,8 @@ window.SpecUp = (() => {
   ];
 
   let tab = 'cert';
+  let actFilter = null;                 // 활동분야 칩 (null = 전체)
+  let sortBy = 'deadline';              // deadline | latest
 
   /* 외부 호출 상태는 탭마다 따로 들고 있다. 탭을 옮길 때마다 다시 부르면 개발계정
      하루 1,000건이 금방 닳는다(backend/src/specup.js 캐시와 같은 이유). */
@@ -46,6 +48,19 @@ window.SpecUp = (() => {
     c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   const host = () => document.getElementById('specup-wrap');
+
+  /* ── 카드 커버 ────────────────────────────────────────────────
+     참고한 취업 사이트(링커리어 등)의 카드는 **모집 포스터 이미지**가 절반을
+     차지한다. 우리 데이터에는 그 이미지가 없다 — 국가자격 시험일정에도, 온통청년
+     청년정책에도 썸네일 필드가 없다. 아무 이미지나 끌어다 붙이면 그 공고의 것이
+     아닌 그림을 그 공고의 것처럼 보여주는 셈이라 넣지 않았다.
+
+     대신 **이름에서 색을 정해** 카드마다 다른 표지를 만든다. 격자에 리듬이 생겨
+     목록을 훑을 수 있고, 없는 정보를 지어내지도 않는다. 멘토 아바타 색을 이름 해시로
+     고정한 것과 같은 방식이다(mentoring.js PAL_KEYS) — 매번 랜덤이면 새로고침할
+     때마다 카드 색이 바뀐다. */
+  const PALS = 6;
+  const palOf = s => [...String(s ?? '')].reduce((a, c) => a + c.charCodeAt(0), 0) % PALS;
 
   // ── 진입 ────────────────────────────────────────────────────
   function onEnter() {
@@ -59,7 +74,59 @@ window.SpecUp = (() => {
 
   function switchTab(id) {
     tab = TABS.some(t => t.id === id) ? id : 'cert';
+    actFilter = null;                   // 탭이 바뀌면 분야 칩도 처음으로
     render();
+  }
+
+  function setFilter(v) { actFilter = v || null; render(); }
+  function setSort(v)   { sortBy = v === 'latest' ? 'latest' : 'deadline'; render(); }
+
+  // ── 카드 조각 ───────────────────────────────────────────────
+  /* D-day 배지. **마감이 코앞인 것만 빨갛게** 한다 — 전부 강조하면 무엇이 급한지
+     안 보인다(잡코리아 '마감임박' 줄이 오늘 마감만 빨간 것과 같은 이유). */
+  function dday(days, { verb = '마감' } = {}) {
+    if (days == null) return '';
+    if (days < 0) return `<span class="sup-dday is-done">${verb} 지남</span>`;
+    if (days === 0) return `<span class="sup-dday is-today">오늘 ${verb}</span>`;
+    const cls = days <= 7 ? 'is-soon' : '';
+    return `<span class="sup-dday ${cls}">D-${days}</span>`;
+  }
+
+  /* 카드 하나. 네 탭이 담는 것이 다르지만(자격증·어학·공고) 격자에서 높이와 정보
+     위치가 어긋나면 훑을 수가 없어서, 뼈대는 한 곳에서 만든다. */
+  function card({ emoji, coverTag, palKey, badges = [], title, org, foot, url, cta }) {
+    const badgeHtml = badges.filter(Boolean)
+      .map(b => `<span class="sup-badge ${b.cls || ''}">${esc(b.text)}</span>`).join('');
+    const inner = `
+      <div class="sup-cover" data-pal="${palOf(palKey ?? title)}">
+        <span class="sup-cover-emoji">${emoji}</span>
+        ${coverTag ? `<span class="sup-cover-tag">${esc(coverTag)}</span>` : ''}
+      </div>
+      <div class="sup-card-body">
+        ${badgeHtml ? `<div class="sup-badges">${badgeHtml}</div>` : ''}
+        <h3 class="sup-card-title">${esc(title)}</h3>
+        <div class="sup-card-org">${esc(org || '')}</div>
+        <div class="sup-card-foot">${foot || ''}</div>
+      </div>
+      ${cta ? `<span class="sup-card-cta">${esc(cta)} <i class="ti ti-external-link"></i></span>` : ''}`;
+
+    return url
+      ? `<a class="sup-card" href="${esc(url)}" target="_blank" rel="noopener">${inner}</a>`
+      : `<article class="sup-card">${inner}</article>`;
+  }
+
+  const grid = cards => `<div class="sup-grid">${cards.join('')}</div>`;
+
+  /* 목록 위 한 줄 — 몇 건인지와 정렬. 참고한 사이트의 '검색결과 N건 · 최신순' 자리다. */
+  function listHead(count, { sortable = false } = {}) {
+    return `<div class="sup-listhead">
+      <span class="sup-count">검색결과 <b>${count}</b>건</span>
+      ${sortable ? `
+        <select class="sup-sort" onchange="SpecUp.setSort(this.value)">
+          <option value="deadline"${sortBy === 'deadline' ? ' selected' : ''}>마감 임박순</option>
+          <option value="latest"${sortBy === 'latest' ? ' selected' : ''}>최근 등록순</option>
+        </select>` : ''}
+    </div>`;
   }
 
   // ── 문맥 ────────────────────────────────────────────────────
@@ -77,7 +144,72 @@ window.SpecUp = (() => {
     Roadmap.mount('rm-bar-specup', 'me');
 
     const resolved = resolve();
-    el.innerHTML = head(resolved) + tabBar() + `<div class="sup-body">${body(resolved)}</div>`;
+    el.innerHTML = head(resolved) + deadlineRail() + tabBar()
+      + `<div class="sup-body">${body(resolved)}</div>`;
+  }
+
+  /* ── 🔥 마감임박 ─────────────────────────────────────────────
+     탭과 무관하게 맨 위에 둔다. 이 화면에서 **되돌릴 수 없는 것은 마감뿐**이라,
+     탭을 안 열어 봐서 놓치는 일이 없어야 한다. 자격증 접수 마감과 공고 마감을
+     한 줄에 섞는 이유도 같다 — 학생에게는 둘 다 그냥 '이번 주에 해야 할 일' 이다.
+
+     7일 이내만 담고, 없으면 줄 자체를 안 그린다. 늘 떠 있으면 배경이 되어 아무도
+     안 본다. */
+  function deadlineRail() {
+    const soon = [];
+
+    if (examState && examState.ok) {
+      (examState.items || []).forEach(i => {
+        const r = i.round;
+        if (!r || r.phase !== 'open') return;
+        if (r.daysToRegEnd == null || r.daysToRegEnd > 7) return;
+        soon.push({ days: r.daysToRegEnd, emoji: '📜', title: i.name,
+          sub: `${r.stage} 원서접수 ~${r.regEnd}`, url: 'https://www.q-net.or.kr' });
+      });
+    }
+
+    Object.values(actState).forEach(st => {
+      if (!st || !st.ok) return;
+      (st.items || []).forEach(a => {
+        const d = daysTo(a.endDate);
+        if (d == null || d < 0 || d > 7) return;
+        soon.push({ days: d, emoji: '🏆', title: a.name,
+          sub: `${a.org || '주관 미상'} · 신청 ~${a.endDate}`, url: a.url });
+      });
+    });
+
+    if (!soon.length) return '';
+    soon.sort((a, b) => a.days - b.days);
+
+    return `
+      <section class="sup-rail-sec">
+        <div class="sup-rail-head">
+          <h2>🔥 마감 임박</h2>
+          <span class="sup-rail-sub">7일 안에 접수가 끝나는 것만 모았어요</span>
+        </div>
+        <div class="sup-rail">
+          ${soon.slice(0, 8).map(s => `
+            ${s.url ? `<a class="sup-rail-card" href="${esc(s.url)}" target="_blank" rel="noopener">`
+                    : `<div class="sup-rail-card">`}
+              <div class="sup-rail-top">
+                <span class="sup-rail-emoji">${s.emoji}</span>
+                ${dday(s.days, { verb: '마감' })}
+              </div>
+              <div class="sup-rail-title">${esc(s.title)}</div>
+              <div class="sup-rail-desc">${esc(s.sub)}</div>
+            ${s.url ? '</a>' : '</div>'}`).join('')}
+        </div>
+      </section>`;
+  }
+
+  /* 'YYYY-MM-DD' 까지 며칠. 서버가 자격증에는 daysTo* 를 붙여 주지만 공고에는
+     날짜만 온다. */
+  function daysTo(dateStr) {
+    if (!dateStr) return null;
+    const a = Date.parse(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
+    const b = Date.parse(dateStr + 'T00:00:00Z');
+    if (Number.isNaN(a) || Number.isNaN(b)) return null;
+    return Math.round((b - a) / 86400000);
   }
 
   function head(resolved) {
@@ -194,68 +326,45 @@ window.SpecUp = (() => {
           '부족한 자격증은 없어요. 아래는 이 직무군 선배들이 많이 가진 자격증이에요.', true)
       : '';
 
-    return banner + `
-      <div class="sup-list">${rows.map(certRow).join('')}</div>
-      ${examFoot()}`;
+    return banner + listHead(rows.length) + grid(rows.map(certCard)) + examFoot();
   }
 
-  function certRow(r) {
-    const sched = examOf(r.name);
-    return `
-      <div class="sup-item">
-        <div class="sup-item-ic">📜</div>
-        <div class="sup-item-body">
-          <div class="sup-item-name">${esc(r.name)}
-            ${r.mine ? `<span class="sup-tag sup-tag--have">보유</span>` : ''}
-          </div>
-          <div class="sup-item-desc">선배 <b>${r.pct}%</b>가 보유${r.mine ? '' : ' · 나는 미보유'}</div>
-          ${sched}
-        </div>
-        <a class="sup-item-go" href="https://www.q-net.or.kr" target="_blank" rel="noopener">
-          큐넷 <i class="ti ti-external-link"></i>
-        </a>
-      </div>`;
-  }
+  function certCard(r) {
+    const item = examState && examState.ok
+      ? (examState.items || []).find(i => i.name === r.name) : null;
+    const round = item && item.round;
 
-  /* 한 자격의 시험일정 줄. **모르면 모른다고 적는다** — 일정이 안 뜨는 것과
-     시험이 없는 것은 다르다. */
-  function examOf(name) {
-    if (!examState) return '';
-    if (examState.loading) return `<div class="sup-sched sup-sched--wait">시험일정 확인 중…</div>`;
-    if (!examState.ok) return '';                       // 안내는 examFoot() 이 한 번만 한다
+    /* 커버 꼬리표는 자격구분('국가기술자격 기사 …' 의 앞부분)이다. 못 찾은 종목은
+       우리가 구분을 모르므로 비워 둔다 — 추측해서 '민간자격' 이라 적으면 틀린다. */
+    const kind = round && /^(국가기술자격|전문자격|과정평가형자격|일학습병행자격)/.exec(round.label || '');
 
-    const item = (examState.items || []).find(i => i.name === name);
-    if (!item) return '';
-    /* ── 못 찾은 종목은 짧게 한 줄 ────────────────────────────
-       실측(정보통신 직무군)에서 6줄 중 5줄이 민간자격이라, 줄마다 같은 두 문장을
-       반복해 **화면이 통째로 경고문이 됐다.** 이유 설명은 목록 아래 각주로 한 번만
-       하고(examFoot), 여기서는 사실만 짧게 적는다. */
-    if (!item.matched) return `<div class="sup-sched sup-sched--none">국가자격 일정표에 없는 종목이에요<sup>*</sup></div>`;
-    if (!item.round)   return `<div class="sup-sched sup-sched--none">${esc(item.note || '남은 회차가 없어요')}</div>`;
-
-    const r = item.round;
-    const which = roundLabel(r);
-
-    if (r.phase === 'open') {
-      const d = r.daysToRegEnd;
-      return `<div class="sup-sched sup-sched--open">
-        <b>지금 ${esc(which)} 접수 중</b> · ${esc(r.regStart)} ~ ${esc(r.regEnd)}
-        ${d != null ? `<span class="sup-dday">${d === 0 ? '오늘 마감' : `D-${d}`}</span>` : ''}
-        ${r.examStart ? ` · 시험 ${esc(r.examStart)}` : ''}
-      </div>`;
+    let foot = '<span class="sup-foot-muted">시험일정 확인 중…</span>';
+    if (examState && !examState.loading) {
+      /* 이번 응답이 이 자격증을 안 담고 있으면 **아직 안 물어본 것**이다.
+         '일정 정보 없음' 이라고 적으면 확인해 봤는데 없다는 뜻이 되어 틀린다. */
+      if (examState.ok && !item)          foot = '<span class="sup-foot-muted">시험일정 확인 중…</span>';
+      else if (!examState.ok)             foot = '<span class="sup-foot-muted">일정을 불러오지 못함</span>';
+      else if (!item.matched)             foot = '<span class="sup-foot-muted">국가자격 일정표에 없는 종목<sup>*</sup></span>';
+      else if (!round)                    foot = '<span class="sup-foot-muted">남은 회차 없음</span>';
+      else if (round.phase === 'open')    foot = `${dday(round.daysToRegEnd, { verb: '마감' })}<span class="sup-foot-txt"><b>${esc(round.stage)} 접수 중</b> ~${esc(round.regEnd)}</span>`;
+      else if (round.phase === 'upcoming') foot = `<span class="sup-dday is-wait">${round.daysToRegStart}일 뒤</span><span class="sup-foot-txt">${esc(round.stage)} 접수 ${esc(round.regStart)} 시작</span>`;
+      else                                foot = `<span class="sup-foot-muted">${esc(round.stage)} 접수 마감 · 시험 ${esc(round.examStart || '-')}</span>`;
     }
-    if (r.phase === 'upcoming') {
-      const d = r.daysToRegStart;
-      return `<div class="sup-sched sup-sched--soon">
-        ${esc(which)} 접수 시작 ${esc(r.regStart)}${d != null ? ` (${d}일 뒤)` : ''}
-        ${r.examStart ? ` · 시험 ${esc(r.examStart)}` : ''}
-      </div>`;
-    }
-    /* 접수는 끝났고 시험을 기다리는 회차. 이번엔 못 넣는다는 뜻이므로 그렇게 적는다 —
-       '시험 8/7' 만 보여주면 아직 신청할 수 있는 것처럼 읽힌다. */
-    return `<div class="sup-sched">
-      ${esc(which)} 접수 마감${r.examStart ? ` · 시험 ${esc(r.examStart)}` : ''} · 다음 회차를 기다려야 해요
-    </div>`;
+
+    return card({
+      emoji: '📜',
+      coverTag: kind ? kind[1] : (item && !item.matched ? '' : ''),
+      palKey: r.name,
+      badges: [
+        { text: `선배 ${r.pct}%`, cls: 'is-peer' },
+        r.mine ? { text: '보유', cls: 'is-have' } : null,
+      ],
+      title: r.name,
+      org: round ? roundLabel(round) : '',
+      foot,
+      url: 'https://www.q-net.or.kr',
+      cta: '큐넷',
+    });
   }
 
   /* '국가기술자격 기사 (2026년도 제3회)' → '필기 2026년도 제3회'.
@@ -291,14 +400,26 @@ window.SpecUp = (() => {
     </div>`;
   }
 
-  /* 같은 자격증 목록이면 다시 부르지 않는다. render() 는 탭을 옮길 때마다 돈다. */
+  /* 같은 자격증 목록이면 다시 부르지 않는다. render() 는 탭을 옮길 때마다 돈다.
+
+     ── 늦게 온 옛 응답이 새 응답을 덮지 않게 ──
+     이 화면은 짧은 사이에 두 번 그려진다. 처음에는 학과 기준으로, 직무 분류(200KB)가
+     도착하면 목표 직무군 기준으로 — 그때 자격증 목록이 통째로 바뀐다. 요청이 두 번
+     나가는데 **먼저 보낸 것이 늦게 도착하면** 옛 목록의 일정이 새 카드에 얹힌다.
+     실측으로 걸렸다: 카드에는 '데이터분석 준전문가' 가 있는데 각주는 이전 목록
+     (정보보안기사·AWS SAA)을 말하고 있었다. 에러가 안 나서 눈에 잘 안 띈다.
+     번호를 붙여 **마지막으로 보낸 요청의 답만** 받는다. */
+  let examSeq = 0;
   function requestExams(names) {
     const key = names.slice().sort().join('|');
     if (key === lastCertKey) return;
     lastCertKey = key;
-    examState = { loading: true };
+
+    const seq = ++examSeq;
+    examState = { loading: true, names };
     DB.specupExams(names).then(res => {
-      examState = res;
+      if (seq !== examSeq) return;                // 그사이 새 요청이 나갔다 — 이 답은 버린다
+      examState = { ...res, names };
       if (tab === 'cert') render();
     });
   }
@@ -324,46 +445,41 @@ window.SpecUp = (() => {
     const mine = ctx.spec.scores || {};
     const peer = ctx.agg.scores || {};
 
-    const rows = LANG_ROWS.map(l => {
+    const cards = LANG_ROWS.map(l => {
       const p = peer[l.key];
       const m = mine[l.key];
-      if (!p && m == null) return '';                 // 선배도 나도 없는 시험은 굳이 줄을 만들지 않는다
+      if (!p && m == null) return '';                 // 선배도 나도 없는 시험은 굳이 카드를 만들지 않는다
 
       const gap = (typeof p?.avg === 'number' && typeof m === 'number') ? p.avg - m : null;
       const status = m == null
-        ? { cls: 'lack', text: '미응시' }
+        ? { text: '미응시', cls: 'is-lack' }
         : gap == null
-          ? { cls: '', text: '보유' }
-          : gap > 0 ? { cls: 'lack', text: `${gap}${l.unit} 부족` } : { cls: 'ok', text: '평균 이상' };
+          ? { text: '보유', cls: 'is-have' }
+          : gap > 0 ? { text: `${gap}${l.unit} 부족`, cls: 'is-lack' }
+                    : { text: '평균 이상', cls: 'is-have' };
 
-      return `
-        <div class="sup-item">
-          <div class="sup-item-ic">🗣️</div>
-          <div class="sup-item-body">
-            <div class="sup-item-name">${l.label}
-              <span class="sup-tag ${status.cls === 'ok' ? 'sup-tag--have' : ''}">${esc(status.text)}</span>
-            </div>
-            <div class="sup-item-desc">
-              선배 평균 <b>${p ? esc(String(p.avg)) + l.unit : '자료 없음'}</b>${p ? ` (n=${p.n})` : ''}
-              · 내 점수 <b>${m == null ? '없음' : esc(String(m)) + l.unit}</b>
-            </div>
-          </div>
-          <a class="sup-item-go" href="${l.url}" target="_blank" rel="noopener">
-            접수 <i class="ti ti-external-link"></i>
-          </a>
-        </div>`;
-    }).filter(Boolean).join('');
+      return card({
+        emoji: '🗣️',
+        coverTag: '어학',
+        palKey: l.label,
+        badges: [status, p ? { text: `표본 ${p.n}명`, cls: 'is-peer' } : null],
+        title: l.label,
+        org: p ? `선배 평균 ${p.avg}${l.unit}` : '선배 자료 없음',
+        foot: `<span class="sup-foot-txt">내 점수 <b>${m == null ? '없음' : esc(String(m)) + l.unit}</b></span>`,
+        url: l.url,
+        cta: '접수',
+      });
+    }).filter(Boolean);
 
-    if (!rows) {
+    if (!cards.length) {
       return notice('📭', '어학 데이터가 아직 없어요',
         '이 직무군 선배 중 어학 성적을 입력한 사람이 없어서 목표치를 낼 수 없어요.');
     }
 
-    return `
-      <div class="sup-list">${rows}</div>
+    return listHead(cards.length) + grid(cards) + `
       <div class="sup-src">
         목표치는 <b>${esc(ctx.scopeLabel)} 선배 평균</b>이에요. 어학시험은 시행기관이 공개 API 를
-        열지 않아 접수 일정을 자동으로 가져오지 못합니다 — 위 ‘접수’ 로 공식 페이지에서 확인하세요.
+        열지 않아 접수 일정을 자동으로 가져오지 못합니다 — ‘접수’ 로 공식 페이지에서 확인하세요.
       </div>`;
   }
 
@@ -437,29 +553,57 @@ window.SpecUp = (() => {
         '키워드로 걸러 낸 결과라 시기에 따라 비어 있을 수 있어요.');
     }
 
-    return `
-      <div class="sup-list">${st.items.slice(0, 20).map(actRow).join('')}</div>
-      <div class="sup-src">출처: ${esc(st.source)}</div>`;
+    /* ── 분야 칩은 **실제로 걸린 것만** 만든다 ────────────────────
+       참고한 사이트처럼 분야를 미리 박아 두면(서포터즈·해외탐방·봉사단…) 우리 소스에
+       없는 분야가 칩으로 떠서, 눌러도 0건인 칸이 생긴다. 받아 온 공고의 키워드에서
+       실제로 있는 것만 세어 만든다 — 옆의 숫자가 곧 "눌렀을 때 나올 개수" 다. */
+    const counts = new Map();
+    st.items.forEach(a => (a.keywords || []).forEach(k => counts.set(k, (counts.get(k) || 0) + 1)));
+    const chips = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+
+    const shown = actFilter
+      ? st.items.filter(a => (a.keywords || []).includes(actFilter))
+      : st.items;
+
+    /* 기본은 마감 임박순 — 이 화면에서 되돌릴 수 없는 것은 마감뿐이다.
+       마감일이 없는(상시) 공고는 뒤로 보낸다. */
+    const sorted = [...shown].sort((a, b) => sortBy === 'latest'
+      ? String(b.startDate || '').localeCompare(String(a.startDate || ''))
+      : String(a.endDate || '9999-99-99').localeCompare(String(b.endDate || '9999-99-99')));
+
+    const chipBar = chips.length ? `
+      <div class="sup-chipbar">
+        <button type="button" class="sup-fchip ${actFilter ? '' : 'on'}"
+                onclick="SpecUp.setFilter('')">전체 <b>${st.items.length}</b></button>
+        ${chips.map(([k, n]) => `
+          <button type="button" class="sup-fchip ${actFilter === k ? 'on' : ''}"
+                  onclick="SpecUp.setFilter('${esc(k).replace(/'/g, '&#39;')}')">
+            ${esc(k)} <b>${n}</b></button>`).join('')}
+      </div>` : '';
+
+    return chipBar + listHead(sorted.length, { sortable: true })
+      + grid(sorted.slice(0, 24).map(actCard))
+      + `<div class="sup-src">출처: ${esc(st.source)} · 모집 공고에는 포스터 이미지가 없어
+           카드 표지는 이름에서 색만 정해 그립니다(없는 그림을 지어내지 않습니다).</div>`;
   }
 
-  function actRow(a) {
-    const dday = a.endDate ? ` · 마감 ${esc(a.endDate)}` : (a.period ? ' · 상시' : '');
-    return `
-      <div class="sup-item">
-        <div class="sup-item-ic">🏆</div>
-        <div class="sup-item-body">
-          <div class="sup-item-name">${esc(a.name)}</div>
-          <div class="sup-item-desc">${esc(a.org || '주관 미상')}${dday}</div>
-          ${a.summary ? `<div class="sup-item-sub">${esc(a.summary)}</div>` : ''}
-          ${a.keywords.length
-            ? `<div class="sup-chips">${a.keywords.map(k => `<span class="sup-chip">${esc(k)}</span>`).join('')}</div>`
-            : ''}
-        </div>
-        ${a.url
-          ? `<a class="sup-item-go" href="${esc(a.url)}" target="_blank" rel="noopener">
-               신청 <i class="ti ti-external-link"></i></a>`
-          : ''}
-      </div>`;
+  function actCard(a) {
+    const d = daysTo(a.endDate);
+    const foot = a.endDate
+      ? `${dday(d, { verb: '마감' })}<span class="sup-foot-txt">~${esc(a.endDate)}</span>`
+      : (a.period ? `<span class="sup-dday is-wait">상시</span>` : '<span class="sup-foot-muted">기간 미상</span>');
+
+    return card({
+      emoji: '🏆',
+      coverTag: (a.keywords || [])[0] || '',
+      palKey: a.name,
+      badges: (a.keywords || []).slice(0, 2).map(k => ({ text: k })),
+      title: a.name,
+      org: a.org || '주관 미상',
+      foot,
+      url: a.url,
+      cta: a.url ? '신청' : '',
+    });
   }
 
   function requestActivities(topic) {
@@ -479,5 +623,5 @@ window.SpecUp = (() => {
     </div>`;
   }
 
-  return { onEnter, switchTab, render };
+  return { onEnter, switchTab, setFilter, setSort, render };
 })();
