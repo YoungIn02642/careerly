@@ -17,15 +17,24 @@
    열리는지" 를 적어 내려보낸다 — 다른 라우트가 키 없을 때 503 + 안내를 주는 것과
    같은 규약이다(ai-provider.js·news.js).
 
-   ── 실호출로 확인하지 못한 것 (정직하게 적어 둔다) ──
-   시험일정 API 는 이 계정 키가 **아직 활용신청 전**이라 실제 응답을 못 봤다
-   (`SERVICE_KEY_IS_NOT_REGISTERED_ERROR`). 그래서 응답 필드 이름은 공공데이터포털
-   명세서 기준이고, 명세서 오타 사고가 이 저장소에서만 두 번 있었다
-   (공정위 `entrprsNm`·고용24 `coNm` — 작업정리 3-1·3-3).
-   그래서 두 가지 장치를 뒀다.
-     1) 파서가 필드 이름 후보를 여러 개 받는다(`pick`).
-     2) `scripts/check-specup-api.js` 가 **원본 item 을 그대로 출력**한다.
-        승인되면 그것부터 보고 이름을 확정할 것.
+   ── 실호출로 바로잡은 것 (2026-08-16 활용승인 직후) ──
+   승인 전에 명세서만 보고 짠 코드가 **세 군데 틀렸다.** `check-specup-api.js` 가
+   원본 item 을 찍게 해 둔 덕에 첫 호출에서 다 드러났다.
+
+   | 넘겨짚은 것 | 실제 |
+   |---|---|
+   | 응답에 종목코드·종목명(`jmCd`/`jmNm`)이 들어온다 | **안 들어온다.** 한 줄은 '자격구분 × 회차' 다 (`국가기술자격 기사 (2026년도 제2회)`) |
+   | 그러니 한 해치를 통째로 받아 종목코드로 나눠 쓰면 된다 | 나눌 종목코드가 없다. 대신 **요청에 `jmCd` 를 주면 그 종목의 회차만** 걸러 준다 |
+   | `numOfRows` 를 크게 잡아 페이지를 줄이면 된다 | **상한 50.** 넘기면 `resultCode 930` 인데 **HTTP 200** 이라, 안 잡으면 '일정 없음' 으로 조용히 둔갑한다 |
+
+   그래서 **종목 단위로 부르고 종목 단위로 캐시한다.** 자격증 6개면 6번 부르지만,
+   12시간 캐시라 같은 목록을 다시 열 때는 0번이다(개발계정 1,000건/일).
+
+   ── 한 줄에 필기와 실기가 같이 온다 ──
+   `doc*`(필기)·`prac*`(실기) 가 한 회차 안에 함께 있고, 한쪽만 채워진 줄도 흔하다.
+   또 같은 회차가 **두 줄**로 오기도 한다 — 정기접수와 빈자리접수다(실측: 기사 제3회가
+   `0720~0723` 과 `0801~0802` 두 줄). 둘 다 진짜라 버리지 않고, '지금 접수 중 → 가장
+   가까운 예정' 순으로 하나만 골라 보여준다.
    ══════════════════════════════════════════════════════════════ */
 const fs = require('fs');
 const path = require('path');
@@ -81,6 +90,22 @@ function gatewayError(status, body) {
   if (status >= 400) {
     return { code: 502, reason: 'upstream', error: `시험일정 서버가 ${status} 를 돌려줬어요.` };
   }
+
+  /* ── 200 인데 실패한 경우 (실측으로 잡았다) ──────────────────
+     `numOfRows` 를 51 이상 주면 <resultCode>930</resultCode> '한 페이지당 조회 가능한
+     최대 목록 수는 50개를 넘을 수 없습니다' 가 **HTTP 200 으로** 온다. items 는 없다.
+     여기서 안 걸러내면 파서가 0건을 돌려주고, 화면은 '남은 회차가 없어요' 라고
+     적는다 — 우리 코드가 틀렸는데 사용자에게는 '시험이 없다' 로 보인다.
+
+     그래서 resultCode 가 00 이 아니면 전부 서버 잘못(500)으로 올린다. 사용자가 할
+     수 있는 일이 없는 오류라 위의 안내 문구들과 성격이 다르다. */
+  const rc = b.match(/<resultCode>\s*(\d+)\s*<\/resultCode>/);
+  if (rc && rc[1] !== '00' && rc[1] !== '0') {
+    const msg = (b.match(/<resultMsg>\s*([^<]*)<\/resultMsg>/) || [])[1] || '';
+    return { code: 500, reason: 'bad-request',
+      error: `시험일정 요청이 거절됐어요 (코드 ${rc[1]}).`,
+      how: `${msg.trim()} — 서버 쪽 문제입니다. backend/src/specup.js 의 요청 파라미터를 확인하세요.` };
+  }
   return null;
 }
 
@@ -99,14 +124,6 @@ function parseItems(xml) {
   return items;
 }
 
-/* 명세서 이름이 틀릴 수 있으므로 후보를 차례로 본다(머리주석 참고). */
-function pick(row, names) {
-  for (const n of names) {
-    if (row[n] != null && row[n] !== '') return row[n];
-  }
-  return null;
-}
-
 // ── 날짜 ──────────────────────────────────────────────────────
 /* 'YYYYMMDD' 와 'YYYY-MM-DD' 둘 다 온다고 보고 하나로 맞춘다. 못 읽으면 null 을
    주고, 호출부는 그 회차를 **판정 대상에서 뺀다** — 0000-00-00 같은 값을 그대로
@@ -121,8 +138,7 @@ function ymd(v) {
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
-/* 회차 하나가 지금 어느 상태인가. 필기 기준이다 — 학생이 먼저 해야 하는 일이
-   필기 원서접수이고, 실기는 필기에 붙은 뒤의 이야기다. */
+/* 한 단계(필기 또는 실기)가 지금 어느 상태인가. */
 function phaseOf(round, today = todayStr()) {
   const { regStart, regEnd, examStart, examEnd } = round;
   if (regStart && regEnd) {
@@ -176,33 +192,36 @@ function codeOf(certName) {
 }
 
 // ── 국가자격 시험일정 ──────────────────────────────────────────
-const examCache = new Map();   // year → { at, rounds }
+/* 캐시 키는 `연도:종목코드` 다. 응답에 종목이 안 담기므로 한 해치를 받아 나눠 쓸 수가
+   없고, 요청에 jmCd 를 실어 종목별로 받는다(머리주석 참고). */
+const examCache = new Map();
 
-/* 한 해치를 통째로 받아 종목코드로 묶어 둔다.
-   종목마다 따로 부르면(부족 자격증이 6개면 6번) 개발계정 하루 1,000건이 금방 닳고,
-   응답도 그만큼 느려진다. */
-async function fetchYear(year) {
-  const hit = examCache.get(year);
-  if (hit && Date.now() - hit.at < EXAM_TTL_MS) return hit;
+/* numOfRows 상한이 50 이다. 실측 최대는 기능사 41건(연 41회)이라 한 장이면 되지만,
+   상한이 바뀌거나 회차가 늘 수 있으니 두 장까지 받는다. */
+const EXAM_PER_PAGE = 50;
+const EXAM_MAX_PAGES = 2;
+
+function noKey() {
+  const e = new Error('DATA_GO_KR_SERVICE_KEY 가 없습니다.');
+  e.payload = { code: 503, reason: 'no-key',
+    error: '자격증 시험일정 키가 설정되지 않았어요.',
+    how: `backend/.env 의 DATA_GO_KR_SERVICE_KEY 를 채우고 ${EXAM_APPLY_URL} 에서 활용신청하세요.` };
+  return e;
+}
+
+async function fetchCert(jmCd, year) {
+  const cacheKey = `${year}:${jmCd}`;
+  const hit = examCache.get(cacheKey);
+  if (hit && Date.now() - hit.at < EXAM_TTL_MS) return hit.rounds;
 
   const serviceKey = key('DATA_GO_KR_SERVICE_KEY');
-  if (!serviceKey) {
-    const e = new Error('DATA_GO_KR_SERVICE_KEY 가 없습니다.');
-    e.payload = { code: 503, reason: 'no-key',
-      error: '자격증 시험일정 키가 설정되지 않았어요.',
-      how: `backend/.env 의 DATA_GO_KR_SERVICE_KEY 를 채우고 ${EXAM_APPLY_URL} 에서 활용신청하세요.` };
-    throw e;
-  }
+  if (!serviceKey) throw noKey();
 
-  /* 페이징 — 한 해 전 종목의 회차라 1,000행을 넘는다. 상한을 두고 끊는다.
-     끊긴 것을 조용히 숨기지 않고 truncated 로 알린다. */
-  const PER = 500, MAX_PAGES = 8;
   const rows = [];
-  let truncated = false;
-
-  for (let page = 1; page <= MAX_PAGES; page++) {
+  for (let page = 1; page <= EXAM_MAX_PAGES; page++) {
     const url = `${EXAM_API}?serviceKey=${encodeURIComponent(serviceKey)}`
-      + `&implYy=${encodeURIComponent(year)}&numOfRows=${PER}&pageNo=${page}&dataFormat=xml`;
+      + `&implYy=${encodeURIComponent(year)}&jmCd=${encodeURIComponent(jmCd)}`
+      + `&numOfRows=${EXAM_PER_PAGE}&pageNo=${page}&dataFormat=xml`;
     const { status, body } = await getText(url);
 
     const err = gatewayError(status, body);
@@ -210,84 +229,121 @@ async function fetchYear(year) {
 
     const items = parseItems(body);
     rows.push(...items);
-    if (items.length < PER) break;
-    if (page === MAX_PAGES) truncated = true;
+    if (items.length < EXAM_PER_PAGE) break;
   }
 
   const rounds = rows.map(toRound).filter(Boolean);
-  const entry = { at: Date.now(), year, rounds, truncated };
-  examCache.set(year, entry);
-  return entry;
+  examCache.set(cacheKey, { at: Date.now(), rounds });
+  return rounds;
 }
 
-/* 응답 한 줄 → 회차 하나. 필드 이름은 명세서 기준이며 후보를 여러 개 둔다
-   (머리주석 '실호출로 확인하지 못한 것'). */
+/* 응답 한 줄 → 회차 하나. 한 줄에 필기(doc*)와 실기(prac*)가 같이 오고, 한쪽만
+   채워진 줄도 흔하다. 빈 태그(`<docRegStartDt/>`)는 ymd() 가 null 로 걸러 준다. */
 function toRound(row) {
-  const code = pick(row, ['jmCd', 'jmcd', 'jmfldCd']);
-  const regStart  = ymd(pick(row, ['docRegStartDt', 'docRegStartdt', 'docRegStrtDt']));
-  const regEnd    = ymd(pick(row, ['docRegEndDt', 'docRegEnddt']));
-  const examStart = ymd(pick(row, ['docExamStartDt', 'docExamStartdt', 'docExamStrtDt']));
-  const examEnd   = ymd(pick(row, ['docExamEndDt', 'docExamEnddt']));
-  const passDt    = ymd(pick(row, ['docPassDt', 'docPassdt']));
+  const stage = (p) => {
+    const regStart  = ymd(row[`${p}RegStartDt`]);
+    const regEnd    = ymd(row[`${p}RegEndDt`]);
+    const examStart = ymd(row[`${p}ExamStartDt`]);
+    const examEnd   = ymd(row[`${p}ExamEndDt`]);
+    const passDt    = ymd(row[`${p}PassDt`]);
+    /* 날짜가 하나도 없으면 그 단계는 없는 것이다 — 빈 카드를 만들어 봐야
+       학생이 할 수 있는 일이 없다. */
+    if (!regStart && !regEnd && !examStart) return null;
+    return { regStart, regEnd, examStart, examEnd, passDt };
+  };
 
-  /* 날짜가 하나도 없는 줄은 버린다 — 화면에 '일정 미정' 카드를 만들어 봐야
-     학생이 할 수 있는 일이 없다. */
-  if (!regStart && !regEnd && !examStart) return null;
+  const doc = stage('doc');
+  const prac = stage('prac');
+  if (!doc && !prac) return null;
 
   return {
-    code: code ? String(code) : null,
-    name: pick(row, ['jmNm', 'jmfldnm', 'jmfldNm']),
-    seq: pick(row, ['implSeq', 'implseq']),
-    qualKind: pick(row, ['qualgbNm', 'qualgbnm']),
-    label: pick(row, ['description', 'descrip', 'implYy']),
-    regStart, regEnd, examStart, examEnd, passDt,
+    seq: row.implSeq || null,
+    qualgbCd: row.qualgbCd || null,
+    qualgbNm: row.qualgbNm || null,
+    /* '국가기술자격 기사 (2026년도 제2회)' — 회차를 사람에게 보여줄 이름이다.
+       응답에 종목명이 없으므로 이게 유일한 라벨이다. */
+    label: row.description || null,
+    doc, prac,
   };
 }
 
-/* 자격증 이름 목록 → 각 자격의 **가장 먼저 할 수 있는 회차**.
-   접수중 > 접수예정 > 시험대기 순으로 하나만 고른다. 회차를 다 늘어놓으면
-   화면이 표가 되고, 학생이 지금 눌러야 할 것이 무엇인지 흐려진다. */
+/* 회차들 → 단계 목록. 학생이 실제로 하는 일은 '필기 접수' 와 '실기 접수' 라서,
+   회차가 아니라 **단계**가 화면의 단위다. */
+function stagesOf(rounds, today) {
+  const out = [];
+  rounds.forEach(r => {
+    if (r.doc)  out.push({ ...r.doc,  stage: '필기', seq: r.seq, label: r.label, phase: phaseOf(r.doc, today) });
+    if (r.prac) out.push({ ...r.prac, stage: '실기', seq: r.seq, label: r.label, phase: phaseOf(r.prac, today) });
+  });
+  return out;
+}
+
+/* 자격증 이름 목록 → 각 자격의 **지금 할 수 있는 단계 하나**.
+   접수중 > 접수예정 > 시험대기 순으로 하나만 고른다. 회차를 다 늘어놓으면 화면이
+   표가 되고, 학생이 지금 눌러야 할 것이 무엇인지 흐려진다.
+
+   같은 회차가 정기접수·빈자리접수 두 줄로 오는 경우가 있는데(실측: 기사 제3회),
+   이 정렬이 알아서 '지금 열려 있는 쪽' 을 먼저 집는다. */
 async function certSchedules(certNames, { year, today = todayStr() } = {}) {
   const names = [...new Set((certNames || []).filter(Boolean))];
-  if (!names.length) return { year: year || Number(today.slice(0, 4)), items: [], source: null };
+  const thisYear = Number(today.slice(0, 4));
+  const yr = year || thisYear;
+  if (!names.length) return { year: yr, items: [], source: null };
 
-  const yr = year || Number(today.slice(0, 4));
-  const { rounds, truncated } = await fetchYear(yr);
+  if (!key('DATA_GO_KR_SERVICE_KEY')) throw noKey();
 
-  const byCode = new Map();
-  rounds.forEach(r => {
-    if (!r.code) return;
-    if (!byCode.has(r.code)) byCode.set(r.code, []);
-    byCode.get(r.code).push(r);
-  });
-
-  const items = names.map(name => {
+  const items = [];
+  for (const name of names) {
     const meta = codeOf(name);
     if (!meta) {
-      /* 민간·해외자격(SQLD·AWS·CFA…)은 국가자격 시험일정에 없다. 없는 것을
-         '일정 없음' 으로 적으면 시험이 안 열리는 것처럼 읽히므로 이유를 밝힌다. */
-      return { name, code: null, matched: false,
-        note: '국가자격이 아니라 이 일정표에는 없어요. 시행기관 공지를 확인하세요.' };
+      /* ── '국가자격이 아니다' 라고 단정하지 않는다 ────────────────
+         못 찾는 이유가 두 가지인데 화면에서는 구분되지 않는다.
+           ① 정말 국가자격이 아니다 — SQLD·AWS SAA·CFA 같은 민간·해외자격
+           ② 국가자격인데 **우리 종목 목록에 구멍이 있다** — 큐넷 종목목록 API(613종)에
+              정보보안기사·컴퓨터활용능력이 빠져 있다(cert-catalog.js 머리주석에 기록된
+              기존 한계다). 실측으로 '정보보안기사' 가 여기 걸렸다.
+         ②를 "국가자격이 아니에요" 라고 적으면 **틀린 말을 자신 있게 하는 것**이 된다.
+         그래서 우리가 아는 사실(못 찾았다)만 적고 확인할 곳을 준다. */
+      items.push({ name, code: null, matched: false,
+        note: '종목 목록에서 못 찾아 일정을 붙이지 못했어요. 민간자격이거나 목록에 빠진 종목일 수 있어요 — 시행기관 공지를 확인하세요.' });
+      continue;
     }
-    const list = (byCode.get(meta.code) || [])
-      .map(r => ({ ...r, phase: phaseOf(r, today) }))
-      .filter(r => r.phase !== 'closed')
-      .sort((a, b) => (PHASE_ORDER[a.phase] - PHASE_ORDER[b.phase])
-        || String(a.regStart || '').localeCompare(String(b.regStart || '')));
 
-    const next = list[0] || null;
-    return {
+    /* 연말에는 올해 남은 회차가 없다. 그때 "없어요" 로 끝내면 내년 1월 접수를
+       놓치므로 다음 해를 한 번 더 본다. 다음 해가 아직 미공개면(실측: 2027년
+       0건) 그 사실을 그대로 적는다. */
+    let picked = null, pickedYear = yr;
+    for (const y of [yr, yr + 1]) {
+      const rounds = await fetchCert(meta.code, y);
+      const live = stagesOf(rounds, today)
+        /* ── 실기는 빼고 필기만 본다 ─────────────────────────────
+           실기 원서접수는 **필기 합격자만** 할 수 있다. 이 화면은 '아직 없는
+           자격증을 채우자' 는 자리라, 실기 접수일을 보여주면 지금 신청할 수 있는
+           일처럼 읽힌다 — 에러 없이 사람을 헛걸음시키는 부류다(작업정리 6-3).
+           실측으로 걸렸다: 2026-08-16 기준 정보처리기사가 '실기 9/21 접수' 로
+           떴는데, 정작 필기(제3회)는 접수가 이미 끝난 상태였다.
+           국가전문자격의 1·2·3차는 전부 doc(필기) 로 오므로 그대로 남는다. */
+        .filter(s => s.stage === '필기')
+        .filter(s => s.phase !== 'closed')
+        .sort((a, b) => (PHASE_ORDER[a.phase] - PHASE_ORDER[b.phase])
+          || String(a.regStart || a.examStart || '').localeCompare(String(b.regStart || b.examStart || '')));
+      if (live.length) { picked = live[0]; pickedYear = y; break; }
+    }
+
+    items.push({
       name, code: meta.code, matched: true,
-      round: next && {
-        ...next,
-        daysToRegEnd:   daysUntil(next.regEnd, today),
-        daysToRegStart: daysUntil(next.regStart, today),
+      round: picked && {
+        ...picked,
+        year: pickedYear,
+        daysToRegEnd:   daysUntil(picked.regEnd, today),
+        daysToRegStart: daysUntil(picked.regStart, today),
       },
-      note: next ? null : `${yr}년 남은 회차가 없어요. 다음 해 일정이 열리면 표시됩니다.`,
-    };
-  });
+      note: picked ? null
+        : `${yr}~${yr + 1}년에 남은 회차가 없어요. 다음 해 일정이 공개되면 표시됩니다.`,
+    });
+  }
 
-  return { year: yr, items, truncated: Boolean(truncated), source: '한국산업인력공단 국가자격 시험일정(data.go.kr)' };
+  return { year: yr, items, source: '한국산업인력공단 국가자격 시험일정(data.go.kr)' };
 }
 
 // ── 공모전 · 대외활동 ──────────────────────────────────────────
@@ -387,6 +443,6 @@ function toActivity(p, topic) {
 module.exports = {
   certSchedules, youthActivities,
   // 테스트·점검 스크립트가 쓰는 조각들
-  phaseOf, daysUntil, ymd, toRound, toActivity, codeOf, parseItems, gatewayError,
-  ACTIVITY_TOPICS, EXAM_API, EXAM_APPLY_URL, YOUTH_APPLY_URL,
+  phaseOf, daysUntil, ymd, toRound, stagesOf, toActivity, codeOf, parseItems, gatewayError,
+  ACTIVITY_TOPICS, EXAM_API, EXAM_APPLY_URL, YOUTH_APPLY_URL, EXAM_PER_PAGE,
 };

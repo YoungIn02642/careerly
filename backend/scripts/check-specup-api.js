@@ -6,11 +6,10 @@
    "키 문제인지, 활용신청 문제인지, 코드 문제인지" 를 갈라 준다. 이 저장소에서
    가장 많이 잡아먹은 시간이 그 셋을 구분하지 못한 시간이었다(작업정리 3-1).
 
-   ── 성공하면 원본 item 을 그대로 찍는다 ──
-   시험일정 API 는 활용신청 전이라 실제 응답을 아직 못 봤다. 공정위(entrprsNm)와
-   고용24(coNm) 는 **명세서 표가 틀려서** 한참 헤맸다. 그래서 여기서 첫 item 을
-   날것 그대로 출력한다. 승인되면 그 출력과 src/specup.js 의 toRound() 필드 이름을
-   맞춰 볼 것.
+   ── 원본 item 을 그대로 찍는다 ──
+   승인 전 명세서만 보고 짠 코드가 세 군데 틀렸는데, 이 출력 덕에 첫 호출에서 다
+   드러났다(specup.js 머리주석 '실호출로 바로잡은 것'). 규격이 또 바뀔 수 있으니
+   출력은 그대로 둔다 — 파서를 고치기 전에 여기부터 본다.
 */
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
@@ -31,8 +30,18 @@ async function checkExam() {
   }
   console.log(`  키: ${key.slice(0, 8)}… (${key.length}자)`);
 
+  /* 종목을 하나 걸어서 부른다. 응답에는 종목 정보가 없고 요청의 jmCd 로만 걸러지므로,
+     종목 없이 부르면 '이 자격의 일정' 인지 확인할 수가 없다. */
+  const PROBE = process.argv[3] || '정보처리기사';
+  const meta = specup.codeOf(PROBE);
+  if (!meta) {
+    console.log(`  ✗ '${PROBE}' 를 data/qnet-certs.json 에서 못 찾았습니다.`);
+    return;
+  }
+  console.log(`  대조 종목: ${PROBE} (jmCd=${meta.code})`);
+
   const url = `${specup.EXAM_API}?serviceKey=${encodeURIComponent(key)}`
-    + `&implYy=${YEAR}&numOfRows=3&pageNo=1&dataFormat=xml`;
+    + `&implYy=${YEAR}&jmCd=${meta.code}&numOfRows=${specup.EXAM_PER_PAGE}&pageNo=1&dataFormat=xml`;
   let res, body;
   try {
     res = await fetch(url);
@@ -57,19 +66,33 @@ async function checkExam() {
   }
 
   console.log(`  ✓ 승인됨 — ${YEAR}년 ${items.length}건 수신`);
-  console.log('\n  [원본 item 1건 — 이 필드 이름이 specup.js toRound() 와 맞는지 볼 것]');
+  console.log('\n  [원본 item 1건 — 파서를 고치기 전에 여기부터 볼 것]');
   console.log(JSON.stringify(items[0], null, 2).split('\n').map(l => '    ' + l).join('\n'));
 
-  const round = specup.toRound(items[0]);
-  console.log('\n  [해석 결과]');
-  if (!round) {
+  const rounds = items.map(specup.toRound).filter(Boolean);
+  console.log(`\n  [해석 결과] 회차 ${rounds.length}건 → 단계 ${specup.stagesOf(rounds).length}개`);
+  if (!rounds.length) {
     console.log('    ✗ 날짜를 하나도 못 읽었습니다 — 위 필드 이름과 toRound() 가 어긋납니다.');
-  } else {
-    console.log(`    종목코드 ${round.code ?? '(못 읽음)'} · ${round.name ?? '(이름 못 읽음)'}`);
-    console.log(`    필기접수 ${round.regStart ?? '?'} ~ ${round.regEnd ?? '?'} · `
-      + `시험 ${round.examStart ?? '?'} · 상태 ${specup.phaseOf(round)}`);
-    if (!round.code) console.log('    ⚠ 종목코드를 못 읽으면 자격증과 이어붙일 수 없습니다.');
+    return;
   }
+  specup.stagesOf(rounds).slice(0, 6).forEach(s =>
+    console.log(`    ${String(s.stage)} · ${s.label ?? '(라벨 없음)'}`
+      + ` · 접수 ${s.regStart ?? '-'}~${s.regEnd ?? '-'}`
+      + ` · 시험 ${s.examStart ?? '-'} · [${s.phase}]`));
+
+  /* 화면이 실제로 받는 모양까지 한 번 태워 본다 — 파싱은 됐는데 고르기에서
+     틀리는 경우를 여기서 잡는다. */
+  const view = await specup.certSchedules([PROBE, 'SQLD']);
+  console.log('\n  [화면에 내려가는 모양]');
+  view.items.forEach(i => {
+    if (!i.matched) return console.log(`    ${i.name}: ${i.note}`);
+    if (!i.round)   return console.log(`    ${i.name}: ${i.note}`);
+    const r = i.round;
+    console.log(`    ${i.name}: ${r.stage} ${r.label} · ${r.phase}`
+      + ` · 접수 ${r.regStart ?? '-'}~${r.regEnd ?? '-'}`
+      + (r.daysToRegEnd != null ? ` (마감 D-${r.daysToRegEnd})` : '')
+      + (r.daysToRegStart != null && r.phase === 'upcoming' ? ` (시작까지 ${r.daysToRegStart}일)` : ''));
+  });
 }
 
 async function checkYouth() {

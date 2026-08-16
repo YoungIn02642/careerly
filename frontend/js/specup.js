@@ -224,10 +224,12 @@ window.SpecUp = (() => {
     if (!item.round)   return `<div class="sup-sched sup-sched--none">${esc(item.note || '남은 회차가 없어요')}</div>`;
 
     const r = item.round;
+    const which = roundLabel(r);
+
     if (r.phase === 'open') {
       const d = r.daysToRegEnd;
       return `<div class="sup-sched sup-sched--open">
-        <b>지금 접수 중</b> · ${esc(r.regStart)} ~ ${esc(r.regEnd)}
+        <b>지금 ${esc(which)} 접수 중</b> · ${esc(r.regStart)} ~ ${esc(r.regEnd)}
         ${d != null ? `<span class="sup-dday">${d === 0 ? '오늘 마감' : `D-${d}`}</span>` : ''}
         ${r.examStart ? ` · 시험 ${esc(r.examStart)}` : ''}
       </div>`;
@@ -235,11 +237,24 @@ window.SpecUp = (() => {
     if (r.phase === 'upcoming') {
       const d = r.daysToRegStart;
       return `<div class="sup-sched sup-sched--soon">
-        접수 시작 ${esc(r.regStart)}${d != null ? ` (${d}일 뒤)` : ''}
+        ${esc(which)} 접수 시작 ${esc(r.regStart)}${d != null ? ` (${d}일 뒤)` : ''}
         ${r.examStart ? ` · 시험 ${esc(r.examStart)}` : ''}
       </div>`;
     }
-    return `<div class="sup-sched">접수 마감 · 시험 ${esc(r.examStart || r.examEnd || '미정')}</div>`;
+    /* 접수는 끝났고 시험을 기다리는 회차. 이번엔 못 넣는다는 뜻이므로 그렇게 적는다 —
+       '시험 8/7' 만 보여주면 아직 신청할 수 있는 것처럼 읽힌다. */
+    return `<div class="sup-sched">
+      ${esc(which)} 접수 마감${r.examStart ? ` · 시험 ${esc(r.examStart)}` : ''} · 다음 회차를 기다려야 해요
+    </div>`;
+  }
+
+  /* '국가기술자격 기사 (2026년도 제3회)' → '필기 2026년도 제3회'.
+     자격구분(국가기술자격/전문자격)은 자격증 이름에서 이미 드러나므로 접고, 회차만
+     남긴다 — 어느 회차인지가 안 보이면 날짜가 어디서 온 값인지 알 수 없다. */
+  function roundLabel(r) {
+    const inner = /\(([^)]+)\)\s*$/.exec(r.label || '');
+    const seq = inner ? inner[1] : (r.label || '').replace(/^(국가기술자격|전문자격)\s*/, '');
+    return [r.stage, seq].filter(Boolean).join(' ');
   }
 
   /* 일정을 못 받았을 때의 안내는 목록 아래에 **한 번만** 붙인다. 자격증마다 같은

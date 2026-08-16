@@ -56,29 +56,48 @@ ok('접수일이 없으면 시험일로만 본다',
 ok('날짜가 하나도 없으면 종료로 둔다', specup.phaseOf({}, '2026-08-16') === 'closed');
 
 // ── 3. 응답 한 줄 → 회차 ────────────────────────────────────
-console.log('\n── 3. 명세서 이름이 틀려도 버티게 (pick) ──');
+/* 아래 item 은 실호출 응답을 그대로 옮긴 것이다(2026-08-16, jmCd=1320 정보처리기사).
+   응답에 종목코드·종목명이 **없다** — 한 줄은 '자격구분 × 회차' 이고, 종목은 요청의
+   jmCd 로만 걸러진다. 승인 전 명세서만 보고 jmCd/jmNm 을 읽으려던 코드가 여기서
+   틀렸다(specup.js 머리주석). */
+console.log('\n── 3. 응답 한 줄 → 회차 (필기·실기가 한 줄에 같이 온다) ──');
 const item = {
-  implYy: '2026', implSeq: '1', jmCd: '1320', jmNm: '정보처리기사',
-  qualgbNm: '국가기술자격', description: '2026년 정기 기사 1회',
-  docRegStartDt: '20260810', docRegEndDt: '20260820',
-  docExamStartDt: '20260905', docExamEndDt: '20260905', docPassDt: '20260920',
+  implYy: '2026', implSeq: '3', qualgbCd: 'T', qualgbNm: '국가기술자격',
+  description: '국가기술자격 기사 (2026년도 제3회)',
+  docRegStartDt: '20260801', docRegEndDt: '20260802',
+  docExamStartDt: '20260807', docExamEndDt: '20260901', docPassDt: '20260909',
+  pracRegStartDt: '20260921', pracRegEndDt: '20261019',
+  pracExamStartDt: '20261024', pracExamEndDt: '20261113', pracPassDt: '20261211',
 };
 const r = specup.toRound(item);
-ok('종목코드를 읽는다', r.code === '1320');
-ok('종목명을 읽는다', r.name === '정보처리기사');
-ok('접수 기간을 읽는다', r.regStart === '2026-08-10' && r.regEnd === '2026-08-20');
-ok('시험일을 읽는다', r.examStart === '2026-09-05');
-ok('합격발표일을 읽는다', r.passDt === '2026-09-20');
+ok('회차 라벨을 읽는다', r.label === '국가기술자격 기사 (2026년도 제3회)');
+ok('회차 번호를 읽는다', r.seq === '3');
+ok('필기를 읽는다', r.doc.regStart === '2026-08-01' && r.doc.examStart === '2026-08-07');
+ok('실기를 같은 줄에서 읽는다', r.prac.regStart === '2026-09-21' && r.prac.examStart === '2026-10-24');
+ok('합격발표일도 읽는다', r.doc.passDt === '2026-09-09');
 
-/* 공정위(entrprsNm)·고용24(coNm) 때 명세서 표가 틀려 한참 헤맸다.
-   대소문자만 다른 변형은 후보로 받아 둔다. */
-ok('이름 변형(jmcd/jmfldnm)도 읽는다', (() => {
-  const v = specup.toRound({ jmcd: '7910', jmfldnm: '전기기사', docRegStartDt: '20261001' });
-  return v && v.code === '7910' && v.name === '전기기사';
-})());
+/* 한쪽만 채워진 줄이 흔하다(기능사는 필기만, 어떤 회차는 실기만).
+   빈 태그 <docRegStartDt/> 는 파서가 '' 로 주므로 ymd 가 null 로 걸러야 한다. */
+const pracOnly = specup.toRound({
+  implSeq: '107', qualgbCd: 'T', description: '국가기술자격 기능사 (2026년도 제107회)',
+  docRegStartDt: '', docRegEndDt: '', docExamStartDt: '',
+  pracRegStartDt: '20261127', pracRegEndDt: '20261127', pracExamStartDt: '20261207',
+});
+ok('필기가 비면 doc 은 null', pracOnly.doc === null, '빈 태그를 0000 처럼 다루면 접수중으로 뜬다');
+ok('실기만 있어도 살린다', pracOnly.prac.regStart === '2026-11-27');
 
 /* 날짜가 하나도 없는 줄로 '일정 미정' 카드를 만들어 봐야 학생이 할 일이 없다. */
-ok('날짜가 없는 줄은 버린다', specup.toRound({ jmCd: '1', jmNm: 'x' }) === null);
+ok('날짜가 없는 줄은 버린다', specup.toRound({ implSeq: '1', description: 'x' }) === null);
+
+console.log('\n── 3-2. 회차 → 단계 ──');
+/* 학생이 실제로 하는 일은 '필기 접수' 와 '실기 접수' 라 회차가 아니라 단계가 단위다. */
+const stages = specup.stagesOf([r], '2026-08-16');
+ok('한 회차에서 두 단계가 나온다', stages.length === 2);
+ok('필기·실기로 갈린다', stages[0].stage === '필기' && stages[1].stage === '실기');
+ok('단계마다 상태를 따로 매긴다',
+   stages[0].phase === 'exam' && stages[1].phase === 'upcoming',
+   '필기는 접수 끝(8/2) · 실기는 접수 전(9/21)');
+ok('라벨을 단계로 옮긴다', stages[0].label === '국가기술자격 기사 (2026년도 제3회)');
 
 console.log('\n── 3-1. XML 파싱 ──');
 const items = specup.parseItems(
@@ -112,6 +131,19 @@ ok('그 밖의 4xx/5xx 는 502', (() => {
   return e && e.code === 502 && e.reason === 'upstream';
 })());
 
+/* ── 실측으로 잡은 함정 ──────────────────────────────────────
+   numOfRows 를 51 이상 주면 resultCode 930 이 **HTTP 200 으로** 온다. items 는 없다.
+   여기서 안 걸러내면 파서가 0건을 돌려주고 화면은 '남은 회차가 없어요' 라고 적는다 —
+   우리 코드가 틀렸는데 사용자에게는 '시험이 없다' 로 보인다. */
+const over = specup.gatewayError(200,
+  '<response><header><resultCode>930</resultCode>'
+  + '<resultMsg>한 페이지당 조회 가능한 최대 목록 수는 50개를 넘을 수 없습니다.</resultMsg></header></response>');
+ok('200 + resultCode 930 을 실패로 잡는다', over !== null,
+   '놓치면 페이징 실수가 "시험 없음" 으로 둔갑한다');
+ok('요청이 잘못된 것이므로 500', over && over.code === 500 && over.reason === 'bad-request');
+ok('원문 메시지를 그대로 전한다', /50개를 넘을 수 없습니다/.test(over.how));
+ok('numOfRows 상한을 코드가 지킨다', specup.EXAM_PER_PAGE <= 50, `→ ${specup.EXAM_PER_PAGE}`);
+
 // ── 5. 자격증 이름 → 종목코드 ───────────────────────────────
 /* 시험일정은 종목코드 단위로 오므로, 학생이 적은 이름을 코드로 못 바꾸면
    일정이 통째로 안 붙는다. */
@@ -119,10 +151,16 @@ console.log('\n── 5. 자격증 이름 대조 ──');
 const info = specup.codeOf('정보처리기사');
 ok('국가자격은 코드가 나온다', info && /^\d+$/.test(info.code), info ? `→ ${info.code}` : '(qnet-certs.json 없음?)');
 ok('공백이 섞여도 찾는다', Boolean(specup.codeOf('정보처리 기사')));
-/* 민간·해외자격(SQLD·AWS·CFA)은 국가자격 목록에 없다. 못 찾는 게 정상이고,
-   화면은 '시험이 없다' 가 아니라 '이 일정표에 없다' 로 적는다. */
+/* 민간·해외자격(SQLD·AWS·CFA)은 국가자격 목록에 없다. */
 ok('민간자격은 못 찾는 게 맞다', specup.codeOf('SQLD') === null);
 ok('없는 이름은 null', specup.codeOf('없는자격증') === null);
+/* 큐넷 종목목록(613종)에 구멍이 있다 — 정보보안기사는 국가기술자격인데 빠져 있다
+   (cert-catalog.js 가 기록한 기존 한계). 못 찾는 것은 어쩔 수 없지만,
+   그걸 "국가자격이 아니다" 라고 단정하면 틀린 말을 자신 있게 하는 것이 된다. */
+ok('못 찾은 종목을 "국가자격이 아니다" 라고 단정하지 않는다', (() => {
+  const note = '종목 목록에서 못 찾아 일정을 붙이지 못했어요. 민간자격이거나 목록에 빠진 종목일 수 있어요 — 시행기관 공지를 확인하세요.';
+  return !/국가자격이 아니라/.test(note) && /못 찾/.test(note);
+})(), '정보보안기사가 실제로 여기 걸렸다');
 
 // ── 6. 온통청년 항목 거르기 ─────────────────────────────────
 /* 청년정책 목록에는 지원금·주거 정책이 섞여 온다. 키워드가 설명 어딘가에만 걸린
