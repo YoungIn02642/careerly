@@ -114,6 +114,35 @@ window.DB = (() => {
     return _jobsPromise;
   }
 
+  /* ── 스펙업 (자격증 시험일정 · 공모전/대외활동 모집) ────────────
+     다른 조회 함수들과 달리 **실패를 삼키지 않는다.** 자동완성은 안 떠도 직접
+     입력하면 되지만, 여기는 "왜 아무것도 안 뜨는지" 가 곧 화면 내용이다 —
+     키가 없거나 활용신청 전이면 그 사실과 할 일을 그대로 보여줘야 한다.
+     그래서 `{ ok, ... }` 로 성공·실패를 같은 모양으로 돌려준다. */
+  async function specupFetch(path) {
+    try {
+      const res = await fetch(path, { credentials: 'include' });
+      let data = null;
+      try { data = await res.json(); } catch { /* 본문 없음 */ }
+      if (res.ok) return { ok: true, ...(data || {}) };
+      return {
+        ok: false,
+        reason: data?.reason || 'unknown',
+        error: data?.error || `요청에 실패했습니다. (${res.status})`,
+        how: data?.how || null,
+      };
+    } catch (e) {
+      return { ok: false, reason: 'network', error: '서버에 연결하지 못했어요.', how: null };
+    }
+  }
+
+  const specupExams = (certs, year) => specupFetch(
+    `/api/specup/exams?certs=${encodeURIComponent((certs || []).join(','))}`
+    + (year ? `&year=${year}` : ''));
+
+  const specupActivities = topic => specupFetch(
+    `/api/specup/activities?topic=${encodeURIComponent(topic || 'contest')}`);
+
   /* 학과 검색. 회사명(suggestCompanies)·자격증(suggestCerts)과 같은 규약이다 —
      입력할 때마다 부르고(호출부가 debounce), { items } 를 받아 드롭다운에 그린다.
      실패는 빈 목록으로 삼켜서 자동완성만 안 뜨고 직접 입력은 계속되게 한다. */
@@ -357,6 +386,7 @@ window.DB = (() => {
     createUser, login, logout, withdraw, changePassword, completeOnboarding, confirmPayment, updateUser, requestRoleChange, upsertSpec, getProfile, updateProfile,
     classifyCompany, suggestCompanies, suggestCerts, suggestMajors, suggestUniversities, classifyMajor, jobCatalog,
     analyzeCas, coachJd, draftJd, companyAnalysis, companySectors,
+    specupExams, specupActivities,
     insightCategories, listInsights, getInsight, createInsight, updateInsight, deleteInsight,
     addInsightComment, deleteInsightComment,
     seedDemo, seedRandom, clearAll, deleteUser,

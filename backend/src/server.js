@@ -22,6 +22,7 @@ const companyAnalysisRouter = require("./routes/companyAnalysis");
 const { router: mentoringRouter } = require("./routes/mentoring");
 const { router: paymentsRouter } = require("./routes/payments");
 const { router: insightRouter } = require("./routes/insight");
+const specupRouter = require("./routes/specup");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -76,6 +77,9 @@ app.use("/api/jd", jdCoachRouter);
 /* 기업분석(뉴스+DART)은 /api/company/analysis 하나다. 같은 접두사의 classify·suggest 는
    아래쪽에 app.get 으로 따로 있는데, 경로가 겹치지 않아 순서 문제가 생기지 않는다. */
 app.use("/api/company", companyAnalysisRouter);
+/* 스펙업 — 자격증 시험일정·공모전 모집. 로그인은 필요 없다. 부족 판정은 프론트가
+   자기 스펙으로 하고, 여기는 공개 데이터만 되돌려 준다. */
+app.use("/api/specup", specupRouter);
 /* 멘토링·결제·인사이트는 라우터 안에서 req.user 를 보므로 세션을 먼저 붙여 준다
    (전역 requireAuth 는 아니다 — 가격표·게시판 읽기는 비로그인도 본다). */
 app.use(["/api/mentoring", "/api/payments", "/api/insights"], async (req, res, next) => {

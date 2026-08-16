@@ -525,9 +525,13 @@ function computeGaps(type, ctx) {
 }
 
 /* 판정을 할 수 있는 상태인가. 못 하면 '왜 못 하는지' 를 돌려준다 —
-   빈 목록만 보여주면 '부족한 게 없다' 로 읽힌다(정반대 뜻이다). */
-function gapContext() {
-  const ctx = window.CASDashboardContext;
+   빈 목록만 보여주면 '부족한 게 없다' 로 읽힌다(정반대 뜻이다).
+
+   ctx 를 받는 이유: 스펙업 화면(#specup)은 CAS 화면을 거치지 않고 바로 들어올 수
+   있어서 window.CASDashboardContext 가 비어 있거나 직전 사용자의 것일 수 있다.
+   그쪽은 CASHero.resolveContext() 로 자기 문맥을 직접 만들어 넘긴다. */
+function gapContext(explicit) {
+  const ctx = explicit || window.CASDashboardContext;
   if (!ctx || !ctx.agg) {
     return { ok: false, icon: '🔒', title: '아직 판정할 수 없어요',
              desc: DB.currentUser()
@@ -601,12 +605,21 @@ function renderGap(type) {
 }
 
 /* 세 탭을 통틀어 부족한 항목이 몇 개인지 — 아래 갈림길이 어느 쪽을 권할지 정한다. */
-function totalGapCount() {
-  const state = gapContext();
+function totalGapCount(explicit) {
+  const state = gapContext(explicit);
   if (!state.ok) return null;                       // 판정 불가 — '없다'와 구분한다
   return ['cert', 'activity', 'award']
     .reduce((n, t) => n + computeGaps(t, state.ctx).length, 0);
 }
+
+/* 스펙업 화면(js/specup.js)이 같은 판정을 다시 짜지 않게 내보낸다.
+   '무엇이 부족한가' 의 기준이 두 벌이 되면 CAS 에서 3개라던 것이 스펙업에서 5개가
+   되는 식으로 갈린다 — 판정 규칙은 여기가 단일 출처다. */
+window.Gap = {
+  computeGaps, gapContext, totalGapCount,
+  TYPES: ['cert', 'activity', 'award'],
+  RATE: GAP_RATE, MIN_PEERS: GAP_MIN_PEERS, OUTCOMES: GAP_OUTCOMES,
+};
 
 /* ════════════════════════════════════════════════════════════
    로드맵 2단계의 갈림길 — 스펙을 더 채울까, 지원할 회사를 찾을까
@@ -656,9 +669,15 @@ function renderRoadmapNext(mine, pct) {
       ? `${gapEsc(goal)} 선배들이 갖고 있는데 내게 없는 항목이에요. 다만 준비가 끝나야 지원할 수 있는 건 아니니, 공고를 먼저 봐도 좋아요.`
       : `${gapEsc(goal)} 선배들이 가진 것 중 빠진 게 없어요. 이제 어느 회사에 쓸지 정할 차례입니다.`;
 
+  /* ── '스펙 채우기' 의 목적지가 바뀌었다 ──────────────────────
+     예전에는 마이페이지 스펙 입력 폼(navigateTo('mypage','spec'))으로 갔다.
+     그런데 거기는 **이미 한 것을 적는 곳**이다. 방금 "채우면 좋을 항목이 3개 있어요"
+     를 읽고 누른 사람에게 빈 입력 폼을 주면 흐름이 거기서 끊긴다.
+     이제는 #specup 으로 간다 — 부족한 항목마다 지금 접수 중인 시험·모집 공고를
+     붙여 보여주는 화면이다(js/specup.js). */
   const fillBtn = `
     <button type="button" class="rm-next-btn ${lacking ? '' : 'rm-next-btn--ghost'}"
-            onclick="navigateTo('mypage','spec')">
+            onclick="navigate('specup')">
       <i class="ti ti-pencil-plus"></i> 스펙 채우기
     </button>`;
   const applyBtn = `

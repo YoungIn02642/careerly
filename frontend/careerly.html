@@ -708,6 +708,16 @@
   </div>
 </main>
 
+<!-- ══════════ SPEC-UP — 스펙 채우기 ══════════
+     로드맵 2단계(CAS)에서 갈라지는 곁가지. CAS 가 "무엇이 부족한지" 를 말해 주면
+     여기서 "그래서 지금 무엇을 신청할지" 를 고른다. 예전에는 이 자리가 마이페이지
+     스펙 입력 폼이었는데, 거기는 *이미 한 것을 적는* 곳이라 흐름이 끊겼다.
+     내용은 js/specup.js 가 만든다(스펙 입력·백오피스와 같은 방식). -->
+<main class="page page--doc" id="page-specup">
+  <div class="rm-bar-host" id="rm-bar-specup"></div>
+  <div class="wrap" id="specup-wrap"></div>
+</main>
+
 <!-- ══════════ MENTOR SEARCH ══════════ -->
 <main class="page page--doc" id="page-search">
   <div class="wrap">
@@ -1104,6 +1114,8 @@
 <script src="js/jd-coach.js"></script>
 <script src="js/company-cover.js"></script>
 <script src="js/insight.js"></script>
+<!-- specup 은 CASHero.resolveContext 와 mentoring.js 의 window.Gap 을 쓴다 — 둘 뒤에 둔다 -->
+<script src="js/specup.js"></script>
 <script src="js/app.js"></script>
 
 <!-- ══ TWEAKS PANEL ══ -->
