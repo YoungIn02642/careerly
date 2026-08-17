@@ -307,7 +307,16 @@ window.CompanyCover = (() => {
     }
   }
 
-  function back() { selected = null; analysis = null; businessText = null; error = null; paint(); }
+  /* 검색 화면으로. 뜨는 중이던 요청도 버려야 한다 — reqSeq 를 올리지 않으면
+     늦게 도착한 응답이 selected 가 null 인 채로 화면을 다시 그린다.
+     검색어·자동완성도 비운다. 남겨 두면 '회사 찾기' 를 눌렀는데 전에 치던 글자가
+     그대로 있어서, 돌아온 것이 아니라 되돌아가지 못한 것처럼 보인다. */
+  function back() {
+    reqSeq++;
+    selected = null; analysis = null; businessText = null; error = null;
+    loading = false; query = ''; suggestions = [];
+    paint();
+  }
 
   /* ── 근거 담기 ───────────────────────────────────────────── */
   function pick(item) {
@@ -597,6 +606,14 @@ window.CompanyCover = (() => {
     const ev = evidenceOf(selected.name);
 
     const head = `
+      <!-- 돌아가는 길. 예전에도 '다른 회사 검색' 버튼이 있긴 했는데 **왼쪽 사이드바
+           맨 아래**, 최근 본 회사·많이 찾는 회사 목록 뒤였다. 실측하니 화면 높이
+           812px 에서 top 955px — 스크롤을 내려야 나온다. 회사를 한 번 고르면
+           돌아갈 길이 없는 것처럼 보였고, 실제로 사용자가 그렇게 막혔다.
+           리포트 맨 위, 회사 이름 바로 앞에 둔다. -->
+      <button type="button" class="co-back" data-back>
+        <i class="ti ti-arrow-left"></i> 회사 찾기
+      </button>
       <div class="co-hero">
         <span class="wf-avatar wf-avatar--lg" style="--co-color:${accentOf(selected.name)}">${esc(selected.name.charAt(0))}</span>
         <div class="co-hero-t">
@@ -1067,8 +1084,9 @@ window.CompanyCover = (() => {
     box.querySelectorAll('[data-step]').forEach(el =>
       el.addEventListener('click', () => { step = el.dataset.step; paint(); }));
 
-    const backBtn = box.querySelector('[data-back]');
-    if (backBtn) backBtn.addEventListener('click', back);
+    /* 돌아가는 자리가 둘이다(리포트 맨 위 · 사이드바 아래). querySelector 로
+       하나만 잡으면 위엣것만 살고 사이드바 버튼이 죽는다. */
+    box.querySelectorAll('[data-back]').forEach(el => el.addEventListener('click', back));
 
     box.querySelectorAll('[data-tocoach]').forEach(el =>
       el.addEventListener('click', () => {
@@ -1147,6 +1165,18 @@ window.CompanyCover = (() => {
     if (!selected) paint();
   }
 
+  /* ── 이 화면으로 들어올 때 ──────────────────────────────────
+     ── 왜 늘 검색 화면부터인가 (사용자 지시) ──
+     예전에는 `if (selected) { paint(); return; }` 였다. 한 번 고른 회사를 기억해
+     두는 편이 친절하다고 봤는데, **다른 회사로 바꿀 방법이 사실상 없어졌다.**
+     CAS 에서 회사찾기를 눌러도 전에 보던 회사 리포트가 그대로 떴고, 사용자에게는
+     "한번 회사선택해두면 안 바뀌는 오류" 로 보였다.
+
+     잃는 것은 없다. 방금 보던 회사는 사이드바 '최근 본 회사' 맨 앞에 있어 한 번
+     누르면 돌아가고, 로드맵이 쓰는 회사는 Roadmap.setCompany 로 따로 들고 있다.
+
+     넘겨받은 회사(careerly_company_open)는 예외다 — 다른 화면이 "이 회사를 열어라"
+     하고 보낸 것이라 그대로 연다. */
   function onEnter() {
     Roadmap.mount('rm-bar-company', 'company');
     loadSectors();
@@ -1156,9 +1186,7 @@ window.CompanyCover = (() => {
       select(handoff);
       return;
     }
-    if (selected) { paint(); return; }
-    query = ''; suggestions = [];
-    paint();
+    back();
   }
 
   return { onEnter, select, evidenceOf };
