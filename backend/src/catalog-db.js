@@ -14,7 +14,6 @@
    ── 사용자 입력의 % 와 _ 는 반드시 이스케이프한다 ──
    LIKE 에서 그 둘은 와일드카드다. '100%' 로 검색하면 '100' 으로 시작하는 게 아니라
    **모든 행**이 걸린다. 이스케이프를 빼먹으면 검색이 조용히 이상해진다. */
-const JOB_GROUPS = require('./job-groups');
 const { query, queryOne } = require('./mysql');
 const { normalize, CORP_TYPE_ID, DEFAULT_TYPE } = require('./company-classify');
 const { RULES } = require('./major-catalog');
@@ -223,19 +222,6 @@ async function jobCatalog() {
       middles: midsByMajor.get(M.code) || [],
     })),
   };
-
-  /* ── 1차 분류를 '취업 시장의 말' 로 다시 묶은 층 ────────────────
-     KECO 대분류 10개는 통계 분류라 구직자가 쓰는 말이 아니다. 화면의 첫 칸은
-     채용 사이트의 '희망 직무' 결로 보여주고(job-groups.js), **트리 자체는 그대로
-     둔다** — 임금·legacy 매핑·CAS 벤치마크가 전부 KECO 코드에 붙어 있어서다.
-     그룹을 지우면 예전 화면으로 그대로 돌아간다. */
-  const grouped = JOB_GROUPS.build(_jobTree);
-  _jobTree.groups = grouped.groups;
-  if (grouped.missing.length) {
-    /* 카탈로그에 없는 직업 이름을 적어 두면 그 직업이 **조용히 빠진다.**
-       테스트가 잡지만, 운영에서 데이터가 바뀔 수도 있어 로그로도 남긴다. */
-    console.warn('[job-groups] 카탈로그에서 못 찾은 이름:', grouped.missing.join(', '));
-  }
   return _jobTree;
 }
 

@@ -35,25 +35,6 @@ window.KECO = (() => {
   const counts  = () => _data?.counts || { majors: 0, middles: 0, jobs: 0 };
   const meta    = () => _data || {};
 
-  /* ── 직무 그룹 (화면의 1차 분류) ────────────────────────────
-     서버가 KECO 대분류와 **따로** 얹어 준다(job-groups.js). 트리는 그대로고 이건
-     묶는 방법만 다른 층이라, 그룹이 없으면 화면이 예전처럼 대분류로 돌아간다. */
-  const GROUPS = () => _data?.groups || [];
-  const groupById = id => GROUPS().find(g => g.id === id) || null;
-
-  /* 그룹 안에서 이 2차 분류가 담고 있는 직업만 골라 돌려준다.
-     그룹은 한 2차 분류를 통째로 갖기도 하고(IT ← 정보통신 연구개발직) 일부만
-     갖기도 한다(인사/총무 ← 경영·행정·사무직의 6개). 화면이 그 차이를 몰라도
-     되게 여기서 잘라 준다. */
-  function groupJobs(groupId, majorCode, middleCode) {
-    const g = groupById(groupId);
-    const slot = (g?.middles || []).find(m => m.major === majorCode && m.code === middleCode);
-    if (!slot) return [];
-    const all = middleById(majorCode, middleCode)?.jobs || [];
-    const want = new Set(slot.jobCodes);
-    return all.filter(j => want.has(j.code));
-  }
-
   const byId = code => MAJORS().find(m => m.code === code) || null;
   const middleById = (majorCode, middleCode) =>
     (byId(majorCode)?.middles || []).find(m => m.code === middleCode) || null;
@@ -98,7 +79,6 @@ window.KECO = (() => {
 
   return {
     load, ready, MAJORS, counts, meta,
-    GROUPS, groupById, groupJobs,
     byId, middleById, jobById,
     middleMatcher, majorMatcher,
     wageText,

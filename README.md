@@ -99,7 +99,7 @@ C:road
 │  ├─ data                  # 수집 캐시 (NCS·공공기관·대기업·중견기업·자격증·임금)
 │  └─ scripts               # 수집(fetch-*) · 집계(build-*) · 점검(check-*) · 이관(migrate-*)
 ├─ docs                     # 설계·운영 문서
-└─ test                     # 테스트 666개 (18개 파일)
+└─ test                     # 테스트 640개 (17개 파일)
 ```
 
 저장소는 **MySQL 8** 입니다. `routes/careerData.js` 에 남은 SQLite 경로는 죽은 코드입니다.
@@ -179,7 +179,7 @@ Groq 모델이 폐기되면 `.env` 의 `GROQ_MODEL` 만
 
 ## 테스트
 
-저장소 루트에서, **셸에서** 실행합니다. 현재 666개입니다.
+저장소 루트에서, **셸에서** 실행합니다. 현재 640개입니다.
 
 ```bash
 for f in test/*.test.js; do node "$f" | tail -1; done
