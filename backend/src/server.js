@@ -17,6 +17,7 @@ const OAuth = require('./oauth');
 const NiceAuth = require('./nice-auth');
 const recommendationsRouter = require("./routes/recommendations");
 const casAnalyzeRouter = require("./routes/casAnalyze");
+const casFitRouter = require("./routes/casFit");
 const jdCoachRouter = require("./routes/jdCoach");
 const companyAnalysisRouter = require("./routes/companyAnalysis");
 const { router: mentoringRouter } = require("./routes/mentoring");
@@ -73,6 +74,8 @@ app.use(express.static(FRONTEND_DIR, {
 }));
 app.use("/api/recommendations", recommendationsRouter);
 app.use("/api/cas", casAnalyzeRouter);
+/* 직무 적합도 — 업무특성 기준 채점. AI 는 매칭만 하고 점수는 cas-fit.js 가 낸다. */
+app.use("/api/cas", casFitRouter);
 app.use("/api/jd", jdCoachRouter);
 /* 기업분석(뉴스+DART)은 /api/company/analysis 하나다. 같은 접두사의 classify·suggest 는
    아래쪽에 app.get 으로 따로 있는데, 경로가 겹치지 않아 순서 문제가 생기지 않는다. */

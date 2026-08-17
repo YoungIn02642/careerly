@@ -34,3 +34,6 @@ database/*.sqlite3
 backend/database/*.db
 backend/database/*.sqlite
 backend/database/*.sqlite3
+# 직업 업무특성 캐시 — 고른 직업만 그때 받아 쌓는 값이라 깃에 넣지 않는다.
+# 지워도 다음 조회 때 다시 받는다(backend/src/wage-traits.js).
+backend/data/wage-traits/
