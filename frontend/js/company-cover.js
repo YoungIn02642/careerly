@@ -130,7 +130,13 @@ window.CompanyCover = (() => {
 
   let selected = null;      // { name, industry }
   let analysis = null;      // DB.companyAnalysis 결과
-  let step     = 'issue';   // 지금 펼친 기업분석 단계 (카드 하나)
+  /* 지금 펼친 기업분석 단계 (카드 하나).
+     ── 왜 '개요' 로 시작하나 (사용자 지시) ──
+     예전 기본값은 '최근 이슈' 였다. 기사가 지원동기에 가장 자주 쓰이는 근거라
+     거기서 시작하게 뒀는데, **회사를 처음 연 사람에게는 순서가 뒤집힌 화면**이었다.
+     어떤 회사인지도 모르는 상태에서 그 회사의 8월 주가 기사부터 읽게 된다.
+     카드 번호도 01 개요 → 03 최근 이슈 순인데 세 번째가 열려 있었다. */
+  let step     = 'overview';
   let loading  = false;
   let error    = null;
   let query    = '';
@@ -180,7 +186,7 @@ window.CompanyCover = (() => {
     const featured = FEATURED.find(c => c.name === name);
     selected = { name, industry: featured?.industry || null };
     analysis = null; error = null; loading = true;
-    step = 'issue';           // 기사가 가장 자주 쓰이는 근거라 여기서 시작한다
+    step = 'overview';        // 회사를 처음 열면 '어떤 회사인가' 부터 (위 주석)
     suggestions = []; query = '';
     pushRecent(name);
     paint();
