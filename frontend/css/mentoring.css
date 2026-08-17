@@ -1016,3 +1016,82 @@ a.sup-card:hover .sup-card-cta { color: var(--brand); background: var(--brand-so
   .sup-rail-card { flex-basis: 82%; }
   .sup-tabs { gap: 14px; }
 }
+
+/* ════════════════════════════════════════════════════════════
+   직무 적합도 (#cas-fit) — 업무특성 기준 1000점
+   아래 선배 비교 카드와 나란히 놓이므로 같은 카드 결을 쓰되, 이건 '다른 질문에
+   답하는 칸' 이라 상단 띠로 구분한다.
+   ════════════════════════════════════════════════════════════ */
+.fit-card { padding: 22px 24px; margin-bottom: 18px; border-top: 3px solid var(--brand); }
+.fit-score-lab { font-size: 12.5px; color: var(--color-text-secondary); }
+.fit-score-row { display: flex; align-items: baseline; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.fit-score-num {
+  font-family: var(--font-num, inherit); font-size: 40px; font-weight: 800;
+  letter-spacing: -1px; color: var(--color-text-primary); font-feature-settings: "tnum";
+}
+.fit-score-max { font-size: 15px; color: var(--color-text-tertiary); }
+.fit-grade {
+  margin-left: 4px; padding: 3px 10px; border-radius: 99px;
+  background: var(--brand-soft); color: var(--brand-dark); font-size: 12.5px; font-weight: 700;
+}
+.fit-bar { height: 8px; border-radius: 99px; background: var(--color-background-tertiary); margin: 12px 0 10px; overflow: hidden; }
+.fit-bar i { display: block; height: 100%; background: var(--brand); border-radius: 99px; transition: width .5s cubic-bezier(.16,1,.3,1); }
+.fit-score-sub { font-size: 13px; line-height: 1.7; color: var(--color-text-secondary); }
+.fit-score-sub b { color: var(--color-text-primary); font-weight: 600; }
+.fit-notice {
+  margin-top: 10px; padding: 9px 12px; border-radius: var(--border-radius-sm);
+  background: var(--amber-soft); color: var(--amber); font-size: 12.5px;
+}
+
+.fit-axes { margin-top: 18px; border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); overflow: hidden; }
+.fit-axis { border-bottom: 0.5px solid var(--color-border-tertiary); }
+.fit-axis:last-child { border-bottom: 0; }
+.fit-axis-h {
+  width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+  background: none; border: 0; cursor: pointer; font: inherit; text-align: left;
+}
+.fit-axis-h:hover, .fit-axis.is-open .fit-axis-h { background: var(--color-background-secondary); }
+.fit-axis-t { flex: 1; min-width: 0; }
+.fit-axis-t b { display: block; font-size: 13.5px; font-weight: 600; }
+.fit-axis-t span { display: block; font-size: 12px; color: var(--color-text-tertiary); margin-top: 2px; }
+.fit-axis-n { font-family: var(--font-num, inherit); font-size: 14px; font-weight: 700; font-feature-settings: "tnum"; }
+.fit-axis-n small { font-size: 11.5px; color: var(--color-text-tertiary); font-weight: 500; }
+.fit-axis-bar { flex: 0 0 70px; height: 6px; border-radius: 99px; background: var(--color-background-tertiary); overflow: hidden; }
+.fit-axis-bar i { display: block; height: 100%; background: var(--brand); }
+.fit-axis-h i.ti { color: var(--color-text-tertiary); transition: transform .18s; }
+.fit-axis.is-open .fit-axis-h i.ti { transform: rotate(180deg); }
+.fit-axis-body { display: none; padding: 4px 14px 14px; }
+.fit-axis.is-open .fit-axis-body { display: block; }
+
+.fit-item { padding: 9px 0; border-top: 0.5px solid var(--color-border-tertiary); }
+.fit-item-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.fit-imp { font-size: 11.5px; color: var(--color-text-tertiary); }
+.fit-str { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 5px; }
+.fit-str.is-3 { background: var(--green-soft); color: var(--green-ink); }
+.fit-str.is-2 { background: var(--blue-soft); color: var(--blue-ink); }
+.fit-str.is-1 { background: var(--amber-soft); color: var(--amber); }
+.fit-str.is-0 { background: var(--color-background-tertiary); color: var(--color-text-tertiary); }
+.fit-ev { margin-top: 4px; font-size: 12.5px; line-height: 1.6; color: var(--color-text-secondary); }
+.fit-from { color: var(--color-text-tertiary); }
+
+.fit-gaps { margin-top: 18px; padding: 14px 16px; border-radius: var(--border-radius-md); background: var(--color-background-secondary); }
+.fit-gaps-h { font-size: 13.5px; font-weight: 700; margin-bottom: 10px; }
+.fit-gap-rows { display: flex; flex-direction: column; gap: 6px; }
+.fit-gap { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; }
+.fit-gap-name { font-weight: 600; color: var(--color-text-primary); }
+.fit-gap-axis { color: var(--color-text-tertiary); }
+.fit-gap-imp { margin-left: auto; color: var(--color-text-secondary); font-feature-settings: "tnum"; }
+.fit-hint { margin-top: 10px; font-size: 12.5px; line-height: 1.65; color: var(--color-text-secondary); }
+.fit-hint a { color: var(--brand); cursor: pointer; font-weight: 600; }
+.fit-src { margin-top: 14px; font-size: 11.5px; line-height: 1.65; color: var(--color-text-tertiary); }
+
+.fit-loading, .fit-empty { text-align: center; padding: 26px 20px; }
+.fit-empty-ic { font-size: 28px; }
+.fit-empty-t { font-size: 15px; font-weight: 700; margin-top: 6px; }
+.fit-empty-d { font-size: 13px; line-height: 1.7; color: var(--color-text-secondary); margin-top: 6px; max-width: 560px; margin-left: auto; margin-right: auto; }
+.fit-btn {
+  margin-top: 12px; padding: 10px 18px; border-radius: var(--border-radius-md);
+  background: var(--brand); color: #fff; border: 0; font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer;
+}
+.fit-note { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; line-height: 1.65; color: var(--amber); }
+.fit-note i { font-size: 18px; }

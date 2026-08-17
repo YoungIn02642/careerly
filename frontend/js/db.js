@@ -194,6 +194,15 @@ window.DB = (() => {
     return api('POST', '/api/cas/analyze', { text });
   }
 
+  /* 직무 적합도 — 이 직업의 업무특성과 내 스펙을 견줘 1000점으로 채점한다.
+     내 스펙을 같이 보내야 매칭이 되고, 안 보내면 근거 없는 바닥 점수만 나온다. */
+  async function casFit(jobCode, jobName) {
+    return api('POST', '/api/cas/fit', {
+      jobCode, jobName,
+      spec: _mySpec || null,
+    });
+  }
+
   /* 직무기술서(채용공고) → 요구역량 + 자소서 작성 가이드.
      내 활동을 함께 보내면 역량마다 "이 경험으로 쓰라"까지 붙는다. 로그인하지 않았거나
      스펙이 없으면 활동 없이 호출되고, 가이드는 일반 골격만 나온다(빈 화면이 되지 않는다). */
@@ -389,7 +398,7 @@ window.DB = (() => {
     checkUsername, verifyStatus, verifyRequest,
     createUser, login, logout, withdraw, changePassword, completeOnboarding, confirmPayment, updateUser, requestRoleChange, upsertSpec, getProfile, updateProfile,
     classifyCompany, suggestCompanies, suggestCerts, suggestMajors, suggestUniversities, classifyMajor, jobCatalog,
-    analyzeCas, coachJd, draftJd, companyAnalysis, companySectors,
+    analyzeCas, casFit, coachJd, draftJd, companyAnalysis, companySectors,
     specupExams, specupActivities,
     insightCategories, listInsights, getInsight, createInsight, updateInsight, deleteInsight,
     addInsightComment, deleteInsightComment,

@@ -290,6 +290,10 @@ window.CASHero = (() => {
        받는 동안 셀렉트는 '불러오는 중' 이고, 오면 다시 그린다. */
     ensureKeco();
 
+    /* 직무 적합도 칸 — 선배 비교와 다른 질문에 답하는 자리라, 아래 화면의
+       성공·실패와 무관하게 늘 그린다(선배가 0명이어도 적합도는 나온다). */
+    if (window.CASFit) CASFit.render();
+
     /* 셀렉트는 점수를 못 내는 상태에서도 반드시 칠한다 — 아래 showEmpty 갈래로
        빠져나가면서 이걸 건너뛴 것이 '비교 직무가 빈 칸' 의 직접 원인이었다. */
     paintJobSelect();
@@ -363,6 +367,8 @@ window.CASHero = (() => {
 
     Roadmap.switchMiddle(middle, major);
 
+    /* 직무가 바뀌면 적합도는 통째로 다른 직업의 점수가 된다 — 캐시를 버린다. */
+    if (window.CASFit) CASFit.reset();
     render();
     if (window.CASRadar) CASRadar.render();
     if (typeof window.animateDashboard === 'function') window.animateDashboard();
