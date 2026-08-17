@@ -18,6 +18,54 @@
    없는 칸은 왜 없는지를 적는다.
    ════════════════════════════════════════════════════════════ */
 window.CompanyCover = (() => {
+  /* ── 무엇을 하는 회사인가 ────────────────────────────────────
+     "부문별 매출 비중은 API 에 없다" 는 것은 그대로지만, DART 가 정형으로 주는 값
+     **둘**로 그 질문에 상당 부분 답할 수 있다(사용자 지시로 다시 뒤졌다).
+
+       사업부문 : 사업보고서 직원현황의 fo_bbm. 회사가 인력을 어디에 두고 있는지가
+                  곧 주력 사업이다. 부문이 하나뿐이면 '단일 사업' 이라는 정보다.
+       관계사   : 타법인 출자 중 **투자목적이 '경영 참여'** 인 곳. 본체 밖으로 사업을
+                  어디까지 벌려 뒀는지가 드러난다(해외 생산법인·소재 계열 등).
+                  단순 투자(시세차익)는 뺐다 — 무슨 일을 하는 회사인지 말해 주지 않는다.
+
+     매출 비중이 아니라 **인력과 지분**이라는 것을 화면에 적는다. 비중처럼 읽히면
+     우리가 없는 값을 지어낸 셈이 된다. */
+  function businessHtml() {
+    const emp = analysis?.dart?.employees;
+    const affs = analysis?.dart?.affiliates || [];
+    const segs = emp?.segments || [];
+    if (!segs.length && !affs.length) return '';
+
+    const single = segs.length === 1;
+    return `
+      <div class="co-biz">
+        <div class="co-biz-h">무엇을 하는 회사인가</div>
+        ${segs.length ? `
+          <div class="co-biz-row">
+            <div class="co-biz-l">사업부문<span>${emp.year}년 인력 배치 기준</span></div>
+            <div class="co-biz-v">
+              ${segs.map(g => `<span class="co-seg">
+                <b>${esc(g.name)}</b>
+                <span>${g.count.toLocaleString()}명${single ? '' : ` · ${g.pct}%`}</span>
+              </span>`).join('')}
+              ${single ? `<span class="co-biz-note">부문이 하나예요 — 이 사업 한 갈래에 집중한 회사입니다.</span>` : ''}
+            </div>
+          </div>` : ''}
+        ${affs.length ? `
+          <div class="co-biz-row">
+            <div class="co-biz-l">관계사<span>경영 참여 목적 출자</span></div>
+            <div class="co-biz-v">
+              ${affs.map(a => `<span class="co-aff">
+                <b>${esc(a.name)}</b>${a.stake != null ? `<span>${a.stake}%</span>` : ''}
+              </span>`).join('')}
+              <span class="co-biz-note">지분을 갖고 경영에 참여하는 회사예요 — 본체 밖으로 사업을 어디까지 벌려 뒀는지 보여줍니다.</span>
+            </div>
+          </div>` : ''}
+        <p class="co-biz-src">사업보고서의 <b>직원 현황(사업부문)</b>과 <b>타법인 출자현황</b>에서 가져온 값이에요.
+          매출 비중이 아니라 <b>인력과 지분</b> 기준입니다.</p>
+      </div>`;
+  }
+
   /* ── 스킴 없는 주소를 그대로 href 에 넣지 않는다 ─────────────
      DART 개황은 홈페이지를 'www.jevisco.com' 처럼 **스킴 없이** 준다. 그대로 넣으면
      브라우저가 상대경로로 읽어 http://localhost:3000/www.jevisco.com 으로 가고,
@@ -673,6 +721,7 @@ window.CompanyCover = (() => {
         ${p.irUrl ? `<div class="co-fact"><div class="co-fact-l">IR 자료</div>
           <div class="co-fact-v"><a href="${esc(p.irUrl)}" target="_blank" rel="noopener noreferrer">사업부문별 매출 보기</a></div></div>` : ''}
       </div>
+      ${businessHtml()}
       <p class="jd-hint"><b>사업부별 매출 비중은 API 로 받을 수 없습니다</b> — 전자공시(DART)와
         공공데이터포털 어느 쪽도 그 값을 열어두지 않았고, 사업보고서 본문에만 글로 적혀 있어요.
         ${p.irUrl

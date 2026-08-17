@@ -231,7 +231,10 @@ router.get('/analysis', async (req, res) => {
         sector: SECTORS.sectorOfCode(dart.profile.industryCode),
       },
       financials: summarizeFinancials(dart.financials),
-      employees: dart.employees,
+      employees: dart.employees,      // segments(사업부문)까지 들어 있다
+      /* 관계사 — 사업부문과 짝이다. 여기 안 실으면 화면의 '무엇을 하는 회사인가' 가
+         절반만 뜬다(실측으로 그렇게 됐다 — dart.js 에는 있는데 이 목록에서 빠졌었다). */
+      affiliates: dart.affiliates,
       labels: LABELS,
       competitors: dart.competitors,
       note: dart.note,
