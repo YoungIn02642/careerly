@@ -1044,22 +1044,40 @@ a.wf-btn { text-decoration: none; }
 .jd-coach-t span { display: block; margin-top: 3px; font-size: 12.5px; line-height: 1.55; color: var(--wf-body-mid); }
 .jd-si-state.is-todo { color: #a35a00; background: rgba(240,150,20,.16); }
 
-/* 무엇을 하는 회사인가 — 사업부문(인력)·관계사(지분). 매출 비중이 아니라는 것을
-   화면이 스스로 밝힌다(company-cover.js businessHtml 주석). */
-.co-biz { margin-top: 16px; padding: 16px 18px; border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-md); }
-.co-biz-h { font-size: 15px; font-weight: 500; color: var(--wf-ink); margin-bottom: 12px; }
-.co-biz-row { display: flex; gap: 16px; padding: 10px 0; border-top: 1px solid var(--wf-hairline); flex-wrap: wrap; }
-.co-biz-row:first-of-type { border-top: 0; padding-top: 0; }
-.co-biz-l { flex: 0 0 130px; font-size: 13px; font-weight: 500; color: var(--wf-body); }
-.co-biz-l span { display: block; font-size: 11.5px; font-weight: 400; color: var(--wf-mute); margin-top: 2px; }
-.co-biz-v { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.co-seg, .co-aff {
-  display: inline-flex; align-items: baseline; gap: 6px;
-  padding: 5px 11px; border-radius: 99px; background: var(--wf-surface-2, #f5f5f4);
-  font-size: 12.8px;
+/* 무엇을 하는 회사인가 — 제목 + 줄글 (사용자 지시).
+   예전에는 칩을 늘어놨는데, 칩으로는 "무엇을 만들어 파는 회사인가" 라는 문장이
+   안 나온다. 이제 덩이마다 제목 하나와 문단 몇 개다(company-cover.js businessHtml).
+   본문은 사업보고서 원문이라 **읽는 글**이다 — 줄간격을 넉넉히 준다. */
+.co-biz { margin-top: 16px; display: flex; flex-direction: column; gap: 2px; }
+.co-biz-block {
+  padding: 15px 18px; border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-md);
+  background: var(--wf-surface, #fff);
 }
-.co-seg b, .co-aff b { font-weight: 500; color: var(--wf-ink); }
-.co-seg span, .co-aff span { color: var(--wf-mute); font-variant-numeric: tabular-nums; }
-.co-biz-note { flex: 1 1 100%; font-size: 12px; line-height: 1.6; color: var(--wf-mute); }
-.co-biz-src { margin-top: 10px; font-size: 12px; line-height: 1.6; color: var(--wf-mute); }
-.co-biz-src b { font-weight: 500; color: var(--wf-body); }
+.co-biz-block + .co-biz-block { margin-top: 8px; }
+.co-biz-block h4 {
+  margin: 0 0 8px; font-size: 14.5px; font-weight: 600; color: var(--wf-ink);
+  letter-spacing: -.01em;
+}
+.co-biz-block p {
+  margin: 0 0 9px; font-size: 13.6px; line-height: 1.82; color: var(--wf-body);
+  /* 원문 문단은 길다. 한국어는 어절 단위로 끊어야 읽힌다. */
+  word-break: keep-all; overflow-wrap: anywhere;
+}
+.co-biz-block p:last-of-type { margin-bottom: 0; }
+.co-biz-block p b { font-weight: 600; color: var(--wf-ink); }
+.co-biz-block.is-wait p, .co-biz-block.is-none p { color: var(--wf-mute); font-size: 13px; }
+.co-biz-block.is-none p span { display: block; margin-top: 4px; font-size: 12.5px; }
+
+/* 어느 보고서 어느 절에서 왔는지. 본문과 확실히 갈라 놔야 원문과 우리 말이 안 섞인다. */
+.co-biz-from {
+  margin-top: 11px; padding-top: 9px; border-top: 1px solid var(--wf-hairline);
+  font-size: 12px; line-height: 1.65; color: var(--wf-mute);
+}
+.co-biz-from b { font-weight: 500; color: var(--wf-body); }
+.co-biz-more {
+  display: inline-flex; align-items: center; gap: 4px; margin-left: 6px;
+  color: var(--wf-accent, #7a3dff); font-weight: 500; text-decoration: none;
+}
+.co-biz-more:hover { text-decoration: underline; }
+.co-biz-more .ti { font-size: 13px; }
+.co-biz-block.is-none .co-biz-more { margin-left: 0; margin-top: 8px; }

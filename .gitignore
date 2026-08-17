@@ -37,3 +37,8 @@ backend/database/*.sqlite3
 # 직업 업무특성 캐시 — 고른 직업만 그때 받아 쌓는 값이라 깃에 넣지 않는다.
 # 지워도 다음 조회 때 다시 받는다(backend/src/wage-traits.js).
 backend/data/wage-traits/
+
+# 사업보고서에서 뽑은 '무엇을 하는 회사인가' 줄글. 원문 ZIP 이 회사마다 5~14MB 라
+# 열어 본 회사만 그때 뽑아 쌓는 값이다. 지워도 다음 조회 때 다시 만든다
+# (backend/src/dart-report.js). 접수번호가 파일명이라 새 보고서가 나오면 새 파일이 된다.
+backend/data/dart-report/

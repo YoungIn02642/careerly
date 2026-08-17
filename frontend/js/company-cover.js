@@ -19,50 +19,128 @@
    ════════════════════════════════════════════════════════════ */
 window.CompanyCover = (() => {
   /* ── 무엇을 하는 회사인가 ────────────────────────────────────
-     "부문별 매출 비중은 API 에 없다" 는 것은 그대로지만, DART 가 정형으로 주는 값
-     **둘**로 그 질문에 상당 부분 답할 수 있다(사용자 지시로 다시 뒤졌다).
+     ── 왜 칩을 걷어내고 줄글로 바꿨나 (사용자 지시) ──
+     예전에는 '도료 212명 · 50%' 같은 **키워드 칩**만 늘어놨다. 정형 API 로 받을 수
+     있는 것이 그것뿐이었기 때문인데, 학생이 알고 싶은 것은 인력 배치가 아니라
+     "무엇을 만들어 누구에게 팔아 돈을 버는 회사인가" 다. 칩을 아무리 읽어도 그
+     문장이 안 나온다.
 
-       사업부문 : 사업보고서 직원현황의 fo_bbm. 회사가 인력을 어디에 두고 있는지가
-                  곧 주력 사업이다. 부문이 하나뿐이면 '단일 사업' 이라는 정보다.
-       관계사   : 타법인 출자 중 **투자목적이 '경영 참여'** 인 곳. 본체 밖으로 사업을
-                  어디까지 벌려 뒀는지가 드러난다(해외 생산법인·소재 계열 등).
-                  단순 투자(시세차익)는 뺐다 — 무슨 일을 하는 회사인지 말해 주지 않는다.
+     그 문장은 사업보고서 본문 「II. 사업의 내용」 에만 글로 있고, 어느 정형 API 도
+     주지 않는다. 그래서 원문(document.xml)을 직접 열어 문단을 가져온다 —
+     backend/src/dart-report.js.
 
-     매출 비중이 아니라 **인력과 지분**이라는 것을 화면에 적는다. 비중처럼 읽히면
+     ── 세 덩이로 나눈다 ──
+       1) 무엇을 하는 회사인가 / 무엇을 팔아 버는가  ← 보고서 원문 줄글 (제목+본문)
+       2) 사람을 어디에 두는가                      ← 직원현황 fo_bbm
+       3) 밖으로 벌려 둔 사업                       ← 타법인 출자(경영 참여)
+     2·3 도 칩 대신 문장으로 적는다. 다만 **우리가 만든 문장**이라는 것이 드러나게
+     숫자 그대로만 말한다(모델에게 다시 쓰게 하지 않는다 — 작업정리 6장·9장).
+
+     매출 비중이 아니라 인력과 지분이라는 것은 그대로 적는다. 비중처럼 읽히면
      우리가 없는 값을 지어낸 셈이 된다. */
   function businessHtml() {
     const emp = analysis?.dart?.employees;
     const affs = analysis?.dart?.affiliates || [];
     const segs = emp?.segments || [];
-    if (!segs.length && !affs.length) return '';
+    const rep = businessText;
 
-    const single = segs.length === 1;
+    if (!segs.length && !affs.length && !rep) return '';
+
     return `
       <div class="co-biz">
-        <div class="co-biz-h">무엇을 하는 회사인가</div>
-        ${segs.length ? `
-          <div class="co-biz-row">
-            <div class="co-biz-l">사업부문<span>${emp.year}년 인력 배치 기준</span></div>
-            <div class="co-biz-v">
-              ${segs.map(g => `<span class="co-seg">
-                <b>${esc(g.name)}</b>
-                <span>${g.count.toLocaleString()}명${single ? '' : ` · ${g.pct}%`}</span>
-              </span>`).join('')}
-              ${single ? `<span class="co-biz-note">부문이 하나예요 — 이 사업 한 갈래에 집중한 회사입니다.</span>` : ''}
-            </div>
-          </div>` : ''}
-        ${affs.length ? `
-          <div class="co-biz-row">
-            <div class="co-biz-l">관계사<span>경영 참여 목적 출자</span></div>
-            <div class="co-biz-v">
-              ${affs.map(a => `<span class="co-aff">
-                <b>${esc(a.name)}</b>${a.stake != null ? `<span>${a.stake}%</span>` : ''}
-              </span>`).join('')}
-              <span class="co-biz-note">지분을 갖고 경영에 참여하는 회사예요 — 본체 밖으로 사업을 어디까지 벌려 뒀는지 보여줍니다.</span>
-            </div>
-          </div>` : ''}
-        <p class="co-biz-src">사업보고서의 <b>직원 현황(사업부문)</b>과 <b>타법인 출자현황</b>에서 가져온 값이에요.
-          매출 비중이 아니라 <b>인력과 지분</b> 기준입니다.</p>
+        ${bizReportHtml(rep)}
+        ${bizSegmentHtml(emp, segs)}
+        ${bizAffiliateHtml(affs)}
+      </div>`;
+  }
+
+  /* 보고서 원문 줄글. 아직 안 왔으면 '가져오는 중' 을 보여준다 — 나중에 채워지는
+     칸이라 아무것도 안 그리면 학생이 이 회사만 정보가 없는 줄 안다. */
+  /* 이름 앞에 biz 를 붙인 이유: 이 파일에는 이미 화면 전체를 그리는 reportHtml()
+     이 있다. 같은 이름으로 두면 나중 선언이 이겨서 businessHtml → reportHtml →
+     businessHtml 로 무한 재귀가 된다(실측: Maximum call stack size exceeded 로
+     리포트가 통째로 안 떴다). */
+  function bizReportHtml(rep) {
+    if (!rep) return `
+      <div class="co-biz-block is-wait">
+        <h4>무엇을 하는 회사인가</h4>
+        <p>사업보고서 원문에서 가져오는 중이에요…</p>
+      </div>`;
+
+    if (!rep.ok) return `
+      <div class="co-biz-block is-none">
+        <h4>무엇을 하는 회사인가</h4>
+        <p>${esc(rep.message || '사업 내용을 가져오지 못했어요.')}
+          ${rep.help ? `<span>${esc(rep.help)}</span>` : ''}</p>
+        ${rep.viewer ? `<a class="co-biz-more" href="${esc(rep.viewer)}" target="_blank" rel="noopener">
+          사업보고서 원문 열기 <i class="ti ti-external-link"></i></a>` : ''}
+      </div>`;
+
+    return rep.blocks.map(b => `
+      <div class="co-biz-block">
+        <h4>${esc(b.title)}</h4>
+        ${b.paragraphs.map(p => `<p>${esc(p)}</p>`).join('')}
+        <div class="co-biz-from">
+          ${esc(rep.report.name)} 「${esc(b.section)}」
+          ${b.more ? `<a class="co-biz-more" href="${esc(rep.viewer)}" target="_blank" rel="noopener">
+            표·나머지 내용은 원문에서 <i class="ti ti-external-link"></i></a>` : ''}
+        </div>
+      </div>`).join('');
+  }
+
+  /* '부문' 이 아니라 '안 나눴다' 는 뜻인 이름들.
+     ── 왜 필요한가 (실측) ──
+     카카오의 직원현황 fo_bbm 은 '전사' 한 줄이다. 이걸 부문으로 읽으면 화면이
+     "직원 3,922명이 모두 전사 한 부문에 있어요. 사업을 한 갈래로 모아 둔 회사입니다"
+     라고 말하는데, **바로 위 문단에서 회사가 플랫폼·콘텐츠 두 부문이라고 적어 뒀다.**
+     신고 양식의 빈칸을 회사의 사업 구조로 착각한 것이라, 있는 그대로 "나누지
+     않았다" 고 적는다. */
+  const NO_SPLIT = /^(전사|전체|합계|계|공통|본사|본점|일반|해당없음|-)$/;
+
+  /* 인력 배치 → 문장. 상위 세 부문까지만 말한다. 부문이 여덟 개인 회사에서
+     전부 나열하면 문장이 표가 된다. */
+  function bizSegmentHtml(emp, segs) {
+    if (!segs.length) return '';
+    const total = segs.reduce((n, g) => n + g.count, 0);
+    const top = segs.slice(0, 3);
+    const rest = segs.length - top.length;
+
+    let body;
+    if (segs.length === 1 && NO_SPLIT.test(segs[0].name.trim())) {
+      body = `직원 ${total.toLocaleString()}명을 부문으로 나누지 않고
+        '${esc(segs[0].name)}' 한 줄로만 신고했어요. 사람을 어느 사업에 얼마나 두고 있는지는
+        이 표로는 알 수 없습니다 — 위의 사업 내용을 보세요.`;
+    } else if (segs.length === 1) {
+      body = `직원 ${total.toLocaleString()}명이 모두 <b>${esc(segs[0].name)}</b> 한 부문에 있어요.
+        사업을 한 갈래로 모아 둔 회사입니다.`;
+    } else {
+      body = `직원 ${total.toLocaleString()}명 가운데 ${top.map((g, i) =>
+          `${i ? '' : '가장 많은 '}<b>${esc(g.name)}</b>에 ${g.count.toLocaleString()}명(${g.pct}%)`
+        ).join(', ')}이 있어요${rest > 0 ? `, 나머지 ${rest}개 부문에 남은 인원이 흩어져 있습니다` : ''}.
+        회사가 사람을 어디에 몰아 뒀는지가 곧 지금의 주력 사업이에요.`;
+    }
+
+    return `
+      <div class="co-biz-block">
+        <h4>사람을 어디에 두고 있나</h4>
+        <p>${body}</p>
+        <div class="co-biz-from">${emp.year}년 사업보고서 「직원 현황」 · 매출이 아니라 <b>인력</b> 기준</div>
+      </div>`;
+  }
+
+  function bizAffiliateHtml(affs) {
+    if (!affs.length) return '';
+    const top = affs.slice(0, 5);
+    const rest = affs.length - top.length;
+    const names = top.map(a => `<b>${esc(a.name)}</b>${a.stake != null ? `(${a.stake}%)` : ''}`).join(', ');
+
+    return `
+      <div class="co-biz-block">
+        <h4>밖으로 벌려 둔 사업</h4>
+        <p>지분을 갖고 경영에 참여하는 회사가 ${affs.length}곳이에요 — ${names}${rest > 0 ? ` 외 ${rest}곳` : ''}.
+          본체가 하는 일 말고 어디까지 손을 뻗어 뒀는지가 여기서 드러나요(해외 생산법인·소재 계열 등).</p>
+        <div class="co-biz-from">사업보고서 「타법인 출자현황」 중 투자목적이 <b>경영 참여</b>인 곳 ·
+          시세차익 목적 단순 투자는 뺐어요</div>
       </div>`;
   }
 
@@ -130,6 +208,9 @@ window.CompanyCover = (() => {
 
   let selected = null;      // { name, industry }
   let analysis = null;      // DB.companyAnalysis 결과
+  /* 사업보고서 원문 줄글. analysis 와 따로 온다(원문이 5~14MB 라 같이 묶으면
+     리포트 전체가 늦다). null = 아직 오는 중 · { ok:false } = 못 가져온 이유 있음. */
+  let businessText = null;
   /* 지금 펼친 기업분석 단계 (카드 하나).
      ── 왜 '개요' 로 시작하나 (사용자 지시) ──
      예전 기본값은 '최근 이슈' 였다. 기사가 지원동기에 가장 자주 쓰이는 근거라
@@ -186,6 +267,7 @@ window.CompanyCover = (() => {
     const featured = FEATURED.find(c => c.name === name);
     selected = { name, industry: featured?.industry || null };
     analysis = null; error = null; loading = true;
+    businessText = null;
     step = 'overview';        // 회사를 처음 열면 '어떤 회사인가' 부터 (위 주석)
     suggestions = []; query = '';
     pushRecent(name);
@@ -201,6 +283,18 @@ window.CompanyCover = (() => {
       }).catch(() => {});
     }
 
+    /* 사업 내용 줄글도 같은 방식이다. 보고서 원문이 5~14MB 라 리포트 전체를
+       붙들면 안 된다 — 먼저 그리고 오는 대로 채운다.
+       실패해도 화면에 사유를 남긴다. 조용히 지우면 "왜 이 회사만 설명이 없지" 가
+       되고, 그건 우리가 안 보여주는 것인지 회사가 안 낸 것인지 알 수 없다. */
+    DB.companyBusiness(name)
+      .then(r => { if (seq === reqSeq && selected?.name === name) { businessText = r; paint(); } })
+      .catch(e => {
+        if (seq !== reqSeq || selected?.name !== name) return;
+        businessText = { ok: false, message: '사업 내용을 가져오지 못했어요.', help: e.message };
+        paint();
+      });
+
     try {
       const a = await DB.companyAnalysis(name);
       if (seq !== reqSeq || selected?.name !== name) return;
@@ -213,7 +307,7 @@ window.CompanyCover = (() => {
     }
   }
 
-  function back() { selected = null; analysis = null; error = null; paint(); }
+  function back() { selected = null; analysis = null; businessText = null; error = null; paint(); }
 
   /* ── 근거 담기 ───────────────────────────────────────────── */
   function pick(item) {

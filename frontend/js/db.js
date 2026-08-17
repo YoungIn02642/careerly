@@ -244,6 +244,13 @@ window.DB = (() => {
     return api('GET', '/api/company/analysis?name=' + encodeURIComponent(name));
   }
 
+  /* '무엇을 하는 회사인가' 줄글 — 사업보고서 원문에서 뽑는다. 위 analysis 와 따로
+     부르는 이유는 원문 ZIP 이 5~14MB 라 같이 묶으면 리포트 전체가 그만큼 늦기
+     때문이다(routes/companyAnalysis.js 의 /business 주석). */
+  async function companyBusiness(name) {
+    return api('GET', '/api/company/business?name=' + encodeURIComponent(name));
+  }
+
   /* ── 커리어 인사이트(커뮤니티 게시판) ─────────────────────────
      읽기는 비로그인도 된다(가격표와 같은 원칙 — mentoring.js FORMATS 주석).
      글쓰기·댓글·삭제만 로그인이 필요하고, 그 판단은 서버가 401/404 로 한다. */
@@ -398,7 +405,7 @@ window.DB = (() => {
     checkUsername, verifyStatus, verifyRequest,
     createUser, login, logout, withdraw, changePassword, completeOnboarding, confirmPayment, updateUser, requestRoleChange, upsertSpec, getProfile, updateProfile,
     classifyCompany, suggestCompanies, suggestCerts, suggestMajors, suggestUniversities, classifyMajor, jobCatalog,
-    analyzeCas, casFit, coachJd, draftJd, companyAnalysis, companySectors,
+    analyzeCas, casFit, coachJd, draftJd, companyAnalysis, companyBusiness, companySectors,
     specupExams, specupActivities,
     insightCategories, listInsights, getInsight, createInsight, updateInsight, deleteInsight,
     addInsightComment, deleteInsightComment,
