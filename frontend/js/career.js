@@ -103,10 +103,28 @@ window.CareerPage = (() => {
 
      여기 한 곳으로 모으는 이유: render() 에는 중간에 빠져나가는 갈래가 넷이라
      각자 innerHTML 을 쓰면 한두 곳을 빠뜨린다. */
-  function paint(main, html, toTop) {
+  function paint(main, html, opts = {}) {
+    const { toTop = false, anchor = null } = opts;
     const keep = toTop ? 0 : main.scrollTop;
     main.innerHTML = html;
-    main.scrollTop = keep;                 // 내용이 짧아졌으면 브라우저가 알아서 줄인다
+    main.scrollTop = keep;
+
+    /* ── 자리를 지키는 것만으로는 모자란 경우 ────────────────────
+       '자리 지키기' 는 내용이 그대로거나 길어질 때만 성립한다. 내용이 **짧아지면**
+       브라우저가 스크롤을 최대값으로 끌어내리는데, 화면에서는 그게 '페이지가 위로
+       튄 것' 으로 보인다(실측: 2차 분류를 바꿀 때 2103 → 809).
+
+       2차 분류를 바꾸면 아래 로드맵 섹션이 통째로 사라져서 항상 이렇게 된다.
+       그때 어디에 있어야 하느냐면 **방금 나타난 직업 목록** 앞이다. 그래서 자리를
+       지키는 대신 그 자리로 데려간다. */
+    if (anchor) {
+      const el = main.querySelector(anchor);
+      if (el) {
+        const delta = el.getBoundingClientRect().top - main.getBoundingClientRect().top;
+        main.scrollTop += delta - 8;       // 제목이 상단에 딱 붙지 않게 살짝 띄운다
+      }
+    }
+
     syncTopbarCompact(main);               // 되돌린 위치 기준으로 상단바를 접는다
     bindTopbarScroll(main);
   }
@@ -115,6 +133,7 @@ window.CareerPage = (() => {
     const main = document.getElementById('career-main');
     if (!main) return;
     const toTop = Boolean(opts && opts.toTop);
+    const anchor = (opts && opts.anchor) || null;
 
     /* 스텝바는 어느 상태에서든 맨 위에 있어야 한다 — 직무를 고르기 전에도
        "여기가 4단계 중 1단계" 라는 것이 보여야 흐름으로 읽힌다. */
@@ -123,7 +142,7 @@ window.CareerPage = (() => {
     // 분류가 아직 없으면 받아오고, 그동안은 상태를 보여준다
     if (!KECO.ready()) {
       ensureLoaded();
-      paint(main, shell(loadError ? loadErrorBlock() : loadingBlock()), true);
+      paint(main, shell(loadError ? loadErrorBlock() : loadingBlock()), { toTop: true });
       return;
     }
     /* 지난번에 고른 직무가 있으면 그 자리에서 다시 시작한다. 로드맵은 하루에
@@ -139,13 +158,13 @@ window.CareerPage = (() => {
     if (!painted || activeId !== (currentMajor ?? null)) paintSidebar();
 
     if (!currentMajor) {
-      paint(main, shell(welcomeBlock()), true);
+      paint(main, shell(welcomeBlock()), { toTop: true });
       return;
     }
 
     const major = KECO.byId(currentMajor);
     if (!major) {
-      paint(main, placeholderBlock(), true);
+      paint(main, placeholderBlock(), { toTop: true });
       return;
     }
     const middle = currentMiddle
@@ -175,7 +194,7 @@ window.CareerPage = (() => {
         ${middle ? jobSelect(middle) : ''}
         ${job ? renderRoadmap(major, middle, job) : ''}
       </div>
-    `, toTop);
+    `, { toTop, anchor });
     animateBars();
   }
 
@@ -735,12 +754,14 @@ window.CareerPage = (() => {
     render,
     /* 2차 분류를 바꾸면 고른 직업은 그 분류에 없는 코드가 되므로 반드시 같이 비운다.
        안 비우면 breadcrumb 에 남의 갈래 직업 이름이 남는다. */
+    /* 2차 분류를 고르면 아래 로드맵이 사라져 내용이 짧아진다 — 자리를 지키려 해도
+       브라우저가 끌어올린다(paint 의 anchor 주석). 방금 열린 직업 목록으로 보낸다. */
     selectMiddle(code) {
       currentMiddle = code;
       currentJob = null;
       jobPage = 1;
       specTab = 'quant';
-      render();
+      render({ anchor: '.job-grid, .empty-block' });
     },
     /* 직업을 고르는 순간이 로드맵 1단계의 결론이다. 여기서 흐름 상태에 심어 두면
        CAS·회사 찾기·자소서 코치가 같은 직무를 본다(roadmap.js 머리주석). */
@@ -766,7 +787,7 @@ window.CareerPage = (() => {
     goToCas() { navigate('dashboard'); },
     goJobPage(n) {
       jobPage = Math.max(1, n);
-      render();
+      render({ anchor: '.job-grid' });
     },
     /* 01 로 되돌아가는 것은 '처음부터 다시' 라서 맨 위로 올린다.
        02·03 은 지금 보던 목록 위에서 범위만 좁히는 이동이라 자리를 지킨다. */
