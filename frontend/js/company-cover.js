@@ -18,6 +18,18 @@
    없는 칸은 왜 없는지를 적는다.
    ════════════════════════════════════════════════════════════ */
 window.CompanyCover = (() => {
+  /* ── 스킴 없는 주소를 그대로 href 에 넣지 않는다 ─────────────
+     DART 개황은 홈페이지를 'www.jevisco.com' 처럼 **스킴 없이** 준다. 그대로 넣으면
+     브라우저가 상대경로로 읽어 http://localhost:3000/www.jevisco.com 으로 가고,
+     우리 서버의 404 JSON 이 뜬다(실측). 스킴이 없으면 https 를 붙인다. */
+  function httpUrl(u) {
+    const s = String(u || '').trim();
+    if (!s) return '';
+    if (/^https?:\/\//i.test(s)) return s;
+    if (/^\/\//.test(s)) return 'https:' + s;
+    return 'https://' + s.replace(/^\/+/, '');
+  }
+
   const esc = s => String(s ?? '').replace(/[&<>"']/g,
     c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -475,7 +487,7 @@ window.CompanyCover = (() => {
     }
     if (!analysis) return head;
 
-    return head + cardsHtml() + detailHtml() + evidenceHtml();
+    return head + cardsHtml() + detailHtml();
   }
 
   /* ── 기업분석 5단계 카드 ─────────────────────────────────────
@@ -657,7 +669,7 @@ window.CompanyCover = (() => {
         ${facts.map(([l, v]) => `<div class="co-fact">
           <div class="co-fact-l">${esc(l)}</div><div class="co-fact-v">${esc(v)}</div></div>`).join('')}
         ${p.homepage ? `<div class="co-fact"><div class="co-fact-l">홈페이지</div>
-          <div class="co-fact-v"><a href="${esc(p.homepage)}" target="_blank" rel="noopener noreferrer">바로가기</a></div></div>` : ''}
+          <div class="co-fact-v"><a href="${esc(httpUrl(p.homepage))}" target="_blank" rel="noopener noreferrer">바로가기</a></div></div>` : ''}
         ${p.irUrl ? `<div class="co-fact"><div class="co-fact-l">IR 자료</div>
           <div class="co-fact-v"><a href="${esc(p.irUrl)}" target="_blank" rel="noopener noreferrer">사업부문별 매출 보기</a></div></div>` : ''}
       </div>
@@ -864,40 +876,9 @@ window.CompanyCover = (() => {
   }
 
 
-  /* 담은 근거 — 리포트 위쪽에 둔다. 담는 순간 결과가 보여야 계속 담는다. */
-  /* 담은 공고 — 이 화면의 결과물이다. 담기는 채용공고 칸에만 있으므로
-     여기 쌓이는 것도 공고 하나뿐이고, 넘어가면 자소서 코치가 그대로 받는다. */
-  function evidenceHtml() {
-    const ev = evidenceOf(selected.name);
-    return `<div class="co-sec">
-      <div class="co-sec-h">
-        <h2>담은 공고</h2>
-        <span class="co-src">자소서 코치로 그대로 넘어갑니다</span>
-      </div>
-      ${ev.length ? `
-        <div class="co-picked">
-          ${ev.map(e => `<div class="co-picked-item">
-            <span>
-              <b>${esc(e.text)}</b>
-              ${[e.region, e.career, e.edu].filter(Boolean).length
-                ? `<br><span style="color:var(--wf-mute)">${[e.region, e.career, e.edu].filter(Boolean).map(esc).join(' · ')}</span>`
-                : ''}
-              ${e.dday !== '' && e.dday != null ? ` <span class="wf-badge wf-badge--mute">D-${esc(String(e.dday))}</span>` : ''}
-            </span>
-            <button type="button" data-unpick="${esc(e.id)}" aria-label="공고 빼기">
-              <i class="ti ti-x"></i></button>
-          </div>`).join('')}
-        </div>
-        <div class="co-sec" style="margin-top:14px">
-          <button type="button" class="wf-btn wf-btn--primary" data-tocoach>
-            이 공고로 자소서 쓰러 가기
-          </button>
-        </div>`
-        : `<p class="co-picked-empty">아직 담은 공고가 없어요. <b>채용공고</b> 칸에서
-             <b>이 공고로 자소서 쓰기</b>를 누르면 여기에 담기고, 자소서 코치의 회사·공고 칸이
-             자동으로 채워집니다.</p>`}
-    </div>`;
-  }
+  /* '담은 공고' 칸은 없앴다 (사용자 지시) — 리포트 맨 위에 '이 회사 자소서 쓰러 가기'
+     버튼이 이미 있어서, 같은 이동을 아래에서 한 번 더 묻는 칸이었다. 담는 동작 자체는
+     채용공고 칸에 그대로 있고, 담으면 자소서 코치의 회사·공고 칸이 채워진다. */
 
   /* ── 이벤트 ──────────────────────────────────────────────── */
   /* 회사를 고르는 버튼만 따로 묶는다 — 드롭다운은 입력 도중 자기만 다시 그려서

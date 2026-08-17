@@ -293,6 +293,10 @@ a.wf-btn { text-decoration: none; }
 .co-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
 .co-card {
   display: flex; flex-direction: column; gap: 8px; min-height: 148px; padding: 16px;
+  /* 추이 스파크라인(.co-spark)이 카드 밖으로 그려지던 것을 막는다 — SVG 가
+     flex:none 이라 칸이 좁아지면 넘쳐 나갔다(실측: 재무 카드에서 빨간 선이
+     카드 오른쪽 아래로 삐져나왔다). */
+  overflow: hidden;
   border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-md); background: var(--wf-canvas);
   font: inherit; text-align: left; cursor: pointer;
   transition: border-color .14s ease, box-shadow .16s ease;
@@ -311,7 +315,7 @@ a.wf-btn { text-decoration: none; }
 .co-card-d--down { color: var(--wf-error); }
 .co-card-d--flat { color: var(--wf-mute); }
 .co-card-none { font-size: 13px; line-height: 1.5; color: var(--wf-mute-soft); }
-.co-spark { flex: none; margin-left: auto; }
+.co-spark { flex: none; margin-left: auto; max-width: 100%; }
 
 /* 고른 칸의 자세한 내용 */
 .co-detail { margin-top: 12px; padding: 24px; border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-md); }

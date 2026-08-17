@@ -125,8 +125,6 @@ window.CareerPage = (() => {
       }
     }
 
-    syncTopbarCompact(main);               // 되돌린 위치 기준으로 상단바를 접는다
-    bindTopbarScroll(main);
   }
 
   function render(opts) {
@@ -225,22 +223,10 @@ window.CareerPage = (() => {
     jobPage = 1;
   }
 
-  /* 스크롤해서 breadcrumb 가 상단에 붙어 있을 때는 작게 접는다 — 맨 위에 있을 때와
-     똑같은 크기면 본문을 계속 가리는 느낌이 든다. render() 가 innerHTML 로 매번
-     새로 그리므로, 다시 그릴 때마다 지금 스크롤 위치를 그대로 반영해 맞춰 둔다. */
-  function syncTopbarCompact(main) {
-    const topbar = main.querySelector('.topbar');
-    if (topbar) topbar.classList.toggle('is-compact', main.scrollTop > 4);
-  }
-
-  /* 리스너는 한 번만 붙인다 — render() 는 #career-main 의 자식(innerHTML)만
-     바꾸고 main 자체는 그대로 두므로, 매번 다시 붙이면 스크롤할 때마다
-     같은 처리가 여러 번 겹쳐 불린다. */
-  function bindTopbarScroll(main) {
-    if (main.dataset.topbarScrollBound) return;
-    main.dataset.topbarScrollBound = '1';
-    main.addEventListener('scroll', () => syncTopbarCompact(main));
-  }
+  /* 상단 경로줄(.topbar)을 고정하고 스크롤하면 접던 코드는 없앴다 (사용자 지시).
+     그 접기가 **화면이 위로 튀는 원인**이었다 — 직무를 고를 때마다 블록을 다시 그리고
+     스크롤 위치를 되돌리는데, 그 직후 접기가 걸리며 높이가 12px 줄어 본문이 그만큼
+     딸려 올라갔다(실측 809 → 797). 고정은 로드맵 스텝바로 옮겼다(main.css). */
 
   /* ── 이 화면 안의 작은 단계 ──────────────────────────────────
      위에 로드맵 전체 스텝바(Roadmap.stepBar)가 있으므로, 여기는 **1단계 안의
