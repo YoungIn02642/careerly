@@ -311,12 +311,29 @@ async function affiliates(corpCode, year) {
     .slice(0, 8);
 }
 
-async function employees(corpCode, year) {
-  const d = await callDart('empSttus.json', {
-    corp_code: corpCode, bsns_year: String(year), reprt_code: REPORT_ANNUAL,
-  });
-  const rows = d && Array.isArray(d.list) ? d.list : [];
-  if (!rows.length) return null;
+/* ── 직원현황 응답 → 화면이 쓰는 값 ──────────────────────────
+   순수 함수로 떼어 둔다. 아래 employees() 는 네트워크를 타서 테스트가 못 부르는데,
+   실제로 틀렸던 것은 호출이 아니라 **이 접기 규칙**이었다(합계 줄 이중계산).
+   고정 응답을 넣어 검증할 수 있어야 같은 실수를 다시 잡는다. */
+function foldEmployees(all, year) {
+  if (!Array.isArray(all) || !all.length) return null;
+
+  /* ── 합계 줄을 걷어낸다 ─────────────────────────────────────
+     회사에 따라 부문별 줄 **뒤에 합계 줄을 한 번 더** 붙여서 신고한다. 그대로 더하면
+     인원이 정확히 두 배가 된다. 실측(삼성전자 2025):
+       DX 남 38,119 · DX 여 12,698 · DS 남 56,154 · DS 여 21,910
+       성별합계 남 94,273 · 성별합계 여 34,608   ← 위 넷의 합
+     화면에는 257,762명(실제 128,881명의 두 배)이 떴고, 사업부문에도 '성별합계 50%'
+     라는 없는 부문이 1위로 올라왔다.
+
+     '전사'·'전체' 는 합계가 아니다 — 부문을 나누지 않은 회사가 쓰는 유일한 줄이라
+     빼면 인원이 0이 된다(카카오·NAVER). 부문으로서 쓸모없다는 것은 화면이 따로
+     말한다(company-cover.js NO_SPLIT).
+
+     합계 줄만 온 회사에서는 걷어낼 것이 없으니 원본을 그대로 쓴다. */
+  const TOTAL_ROW = /^(성별\s*)?(합계|총계|소계|계)$/;
+  const detailed = all.filter(r => !TOTAL_ROW.test(String(r.fo_bbm || '').trim()));
+  const rows = detailed.length ? detailed : all;
 
   /* 응답은 사업부문 × 성별로 여러 줄이 온다. 인원은 더하고, 근속연수·급여는
      **인원으로 가중평균** 한다 — 줄마다 단순평균하면 3명짜리 부문과 3만명짜리 부문이
@@ -367,10 +384,18 @@ async function employees(corpCode, year) {
     contract: contract || null,
     tenureYears: tenureN ? Math.round((tenureW / tenureN) * 10) / 10 : null,
     avgPay: payN ? Math.round(payW / payN) : null,
-    /* 부문이 하나뿐이면 '단일 사업' 이라는 뜻이라 그것도 정보다. 그대로 넘긴다. */
+    /* 부문이 하나뿐이면 '단일 사업' 이라는 뜻이라 그것도 정보다. 그대로 넘긴다.
+       다만 이름이 '전사' 처럼 나누지 않았다는 뜻일 수 있어, 그 판단은 화면이 한다. */
     segments,
     year,
   };
+}
+
+async function employees(corpCode, year) {
+  const d = await callDart('empSttus.json', {
+    corp_code: corpCode, bsns_year: String(year), reprt_code: REPORT_ANNUAL,
+  });
+  return foldEmployees(d && Array.isArray(d.list) ? d.list : [], year);
 }
 
 /* ── 경쟁사 ──────────────────────────────────────────────────
@@ -509,6 +534,7 @@ function reloadCache() { _corps = null; _byName = null; return status(); }
 
 module.exports = {
   isConfigured, analyze, findCorp, profile, financials, competitors, employees, affiliates,
+  foldEmployees,              // 직원현황 접기 규칙 — 테스트가 고정 응답으로 검증한다
   status, reloadCache, callDart, toNumber, allCorps, CORPS_PATH, INDUSTRY_PATH,
   SIZE_LOW, SIZE_HIGH,        // 경쟁사 규모 배수 — 테스트가 대칭인지 확인한다
 };
