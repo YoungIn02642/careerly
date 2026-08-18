@@ -21,6 +21,7 @@
 const fs = require('fs');
 const path = require('path');
 const DART = require('./dart');
+const CLASSIFY = require('./company-classify');
 
 const DATA = path.join(__dirname, '..', 'data');
 
@@ -42,6 +43,19 @@ const SECTORS = [
   ['전문서비스',          [70, 71, 72, 73, 74, 75, 76]],
   ['에너지·환경',         [5, 6, 7, 8, 35, 36, 37, 38, 39]],
   ['의료·교육·기타서비스', [55, 56, 85, 86, 87, 90, 91, 94, 95, 96]],
+  /* ── 지주회사는 업종이 아니라 회사의 형태다 ────────────────────
+     코드는 붙이지 않는다. 아래 holdingOf() 가 5자리 코드를 보고 따로 넣는다.
+
+     ── 왜 빼내야 했나 (실측) ──
+     KSIC 는 지주회사를 **금융업(64992)** 으로 분류한다. 통계 분류로는 맞지만,
+     그대로 두면 '금융·보험' 68곳 중 33곳이 지주회사가 된다. 학생이 금융을 고르면
+     농심홀딩스·오리온홀딩스·하림지주(식품) · 노루홀딩스(도료) · 코오롱(화학) ·
+     한진칼(항공) · 롯데지주(유통)가 나온다. 순수 금융사는 29곳뿐이다.
+
+     훑어보는 목록일 때는 칩 몇 개 섞인 정도였지만, **산업을 고르는 축이 되는 순간
+     화면이 거짓말을 한다.** 지주회사라고 그대로 적고 따로 세운다 —
+     '무엇을 하는 회사인지는 자회사에 있다' 는 것이 이 회사들에 대한 정확한 설명이다. */
+  ['지주회사', []],
 ];
 
 const SECTOR_OF = new Map();
@@ -285,6 +299,50 @@ function readJson(file) {
 const asArray = j => (Array.isArray(j) ? j
   : (j && (j.companies || j.groups || Object.values(j).find(Array.isArray))) || []);
 
+/* ── 지주회사 판정 ──────────────────────────────────────────
+   ── 코드로 아는 것과 이름으로 짐작하는 것을 갈라 둔다 ──
+   · 64992 는 KSIC 상 **지주회사** 세분류다. 실측 29곳이 전부 지주회사였다(롯데지주·
+     농심홀딩스·한진칼·코오롱…). 코드가 그렇다고 말하므로 그대로 쓴다.
+   · 649 로 **3자리만 온 회사**가 6곳 있다. '기타 금융업' 이라는 뜻이라 지주회사인지
+     아닌지 코드로는 알 수 없다 — 실제로 그 안에 미래에셋벤처투자(벤처캐피탈)가 섞여
+     있다. 이때만 이름을 본다(홀딩스·지주로 끝나는 4곳).
+
+   **이름 규칙을 전체에 적용하지 않는 것이 요점이다.** '효성' 처럼 이름에 흔적이 없는
+   지주회사는 금융·보험에 남지만, 그건 우리가 모르는 것이라 모른 채로 두는 편이 맞다.
+   이름으로 다 훑으면 '○○홀딩스' 라는 이름의 사업회사까지 같이 옮긴다. */
+const HOLDING_CODE = '64992';
+const HOLDING_NAME = /(홀딩스|지주)$/;
+
+function holdingOf(corp) {
+  const code = String(corp?.industry || '');
+  if (code === HOLDING_CODE) return '지주회사';
+  if (code === '649' && HOLDING_NAME.test(String(corp?.name || '').trim())) return '지주회사';
+  return null;
+}
+
+/* ── 회사 하나의 기업규모 ────────────────────────────────────
+   1단계에서 고른 기업분류(대·중견·중소·공)로 이 목록을 거르려면, 목록의 회사마다
+   같은 축의 값이 있어야 한다. company-classify.js 가 이미 그 판정을 한다 —
+   여기서 기준을 새로 세우면 스펙 저장 때 붙는 분류와 목록의 분류가 갈린다.
+
+   **모르면 null 이다.** DEFAULT_TYPE(중소기업)으로 떨어뜨리면 안 되는데, 그건
+   "중소기업이다" 가 아니라 "명단에 없다" 는 뜻이기 때문이다. 화면이 그 둘을
+   같은 배지로 적으면 학생은 확인된 사실로 읽는다.
+   (실측으로는 아래 목록 778곳이 전부 matched 다 — known 이 곧 분류 명단이라서다.
+    그래도 null 경로를 남겨 둔다: known 이 넓어지면 바로 생긴다.) */
+function sizeOf(name) {
+  const r = CLASSIFY.classify(name);
+  return r.matched ? (CLASSIFY.CORP_TYPE_ID[r.type] || null) : null;
+}
+
+/* 규모별 곳수. 화면이 필터 칩에 숫자를 달고, **0곳인 칩은 아예 안 만든다** —
+   눌러 봤자 빈 목록이 나오는 칩은 고장으로 읽힌다. */
+function countSizes(list) {
+  const out = {};
+  for (const c of list) if (c.size) out[c.size] = (out[c.size] || 0) + 1;
+  return out;
+}
+
 let _cache = null;
 
 /* 캐시를 한 번 만들고 재사용한다. 파일 셋을 매 요청마다 읽고 785곳을 다시 묶을 이유가
@@ -314,15 +372,15 @@ function build() {
   for (const c of corps) {
     const key = norm(c.name);
     if (!c.industry || !known.has(key) || taken.has(key)) continue;
-    const ksic = parseInt(String(c.industry).slice(0, 2), 10);
-    const sector = SECTOR_OF.get(ksic);
+    const sector = holdingOf(c) || SECTOR_OF.get(parseInt(String(c.industry).slice(0, 2), 10));
     if (!sector) continue;
+    const ksic = parseInt(String(c.industry).slice(0, 2), 10);
     taken.add(key);
     /* 회사마다 KSIC 중분류 2자리를 남긴다. 계열(15개)은 화면에 올리려고 넓게 묶은
        것이라, 직업 단위 보정처럼 **정확히 그 업종만** 보여줘야 할 때 되짚을 것이
        없으면 안 된다 — 실측: '교장' 이 교육(85)으로 좁혀졌는데도 계열 버킷을 통째로
        보여주는 바람에 강원랜드(카지노 91)가 같이 떴다. */
-    buckets.get(sector).push({ name: c.name, stock: c.stock || null, ksic });
+    buckets.get(sector).push({ name: c.name, stock: c.stock || null, ksic, size: sizeOf(c.name) });
   }
 
   /* 가나다순으로 둔다. 매출 순이 더 좋겠지만 785곳의 재무를 받아오려면 DART 를
@@ -334,12 +392,93 @@ function build() {
     }))
     .filter(s => s.companies.length);
 
-  return { sectors, total: sectors.reduce((n, s) => n + s.companies.length, 0), reason: null };
+  const all = sectors.flatMap(s => s.companies);
+  return { sectors, total: all.length, sizes: countSizes(all), reason: null };
 }
 
 function sectors() {
   if (!_cache) _cache = build();
   return _cache;
+}
+
+/* ══ 공공기관 ═══════════════════════════════════════════════
+   ── 왜 계열 목록에 못 얹는가 (실측) ──
+   위 build() 는 **업종코드가 있는 회사**만 계열에 넣는다. 업종코드는 상장사
+   3,981곳에만 채워져 있고(16-9), 공공기관은 대부분 비상장이라 코드가 없다.
+   공공기관 명단 1,667곳 중 계열에 들어간 곳은 **4곳뿐이다**
+   (한국전력공사·강원랜드·한전KPS·한국가스공사).
+
+   1단계에서 '공공기관' 을 고른 학생에게 4곳을 내미는 것은 목록이 아니라 사고다.
+   그래서 공공기관은 계열(업종)이 아니라 **기관 유형**으로 묶어 따로 낸다 —
+   지원자가 실제로 쓰는 구분이기도 하다(공기업 / 준정부기관 / 지방공기업…).
+
+   ── 이 목록이 오히려 유리한 점 ──
+   민간과 달리 공공기관은 채용공고를 잡알리오에서 정형으로 받아올 수 있다(18장).
+   즉 여기서 고른 회사는 리포트의 '채용공고' 칸이 실제로 채워질 확률이 높다. */
+const PUBLIC_LANES = [
+  { name: '공기업',           match: raw => raw.startsWith('공기업') },
+  { name: '준정부기관',       match: raw => raw.startsWith('준정부기관') },
+  { name: '기타공공기관',     match: raw => raw.startsWith('기타공공기관') },
+];
+
+let _publicCache = null;
+
+function buildPublic() {
+  /* asArray 를 쓰지 않는다 — local-public-orgs.json 에는 organizations 말고
+     sourceFiles(문자열 배열)도 있어서, "처음 걸리는 배열" 규칙이 **파일 이름 두 줄**을
+     기관 목록으로 집어 왔다(실측: 1,312곳이 통째로 사라지고 예외도 안 났다).
+     키를 아는 파일은 키로 읽는다. */
+  const orgsOf = f => (readJson(f)?.organizations || []);
+  const central = orgsOf('public-orgs.json');
+  const local = orgsOf('local-public-orgs.json');
+  if (!central.length && !local.length) {
+    return { lanes: [], total: 0, reason: '공공기관 명단이 없습니다. backend/scripts/fetch-public-orgs.js 와 fetch-local-public-orgs.js 를 실행하세요.' };
+  }
+
+  const buckets = new Map();
+  const taken = new Set();
+  const put = (lane, item) => {
+    const key = norm(item.name);
+    /* 같은 기관이 중앙 명단과 지방 명단에 겹쳐 올라온 경우 — 먼저 온 쪽만 남긴다.
+       계열 목록에서 동명 법인을 다루는 규칙과 같다(목록에 보이는 것과 눌러서
+       열리는 것이 같아야 한다). */
+    if (!key || taken.has(key)) return;
+    taken.add(key);
+    if (!buckets.has(lane)) buckets.set(lane, []);
+    buckets.get(lane).push(item);
+  };
+
+  for (const o of central) {
+    const raw = String(o.raw || '');
+    const lane = PUBLIC_LANES.find(l => l.match(raw));
+    if (!lane) continue;                       // 모르는 유형은 억지로 끼우지 않는다
+    put(lane.name, {
+      name: CLASSIFY.displayName(o.name), size: 'public',
+      /* 유형 원문('공기업(시장형)')과 소관부처를 같이 남긴다. 레인 이름만으로는
+         시장형·준시장형이 뭉개지는데, 지원자에게는 그 차이가 크다. */
+      note: [raw, o.ministry].filter(Boolean).join(' · ') || null,
+    });
+  }
+
+  for (const o of local) {
+    const lane = o.kind === '지방공기업' ? '지방공기업' : '지방출자출연기관';
+    put(lane, {
+      name: CLASSIFY.displayName(o.name), size: 'public',
+      note: [o.region, o.raw].filter(Boolean).join(' · ') || null,
+    });
+  }
+
+  const order = [...PUBLIC_LANES.map(l => l.name), '지방공기업', '지방출자출연기관'];
+  const lanes = order
+    .map(name => ({ name, companies: (buckets.get(name) || []).sort((a, b) => a.name.localeCompare(b.name, 'ko')) }))
+    .filter(l => l.companies.length);
+
+  return { lanes, total: lanes.reduce((n, l) => n + l.companies.length, 0), reason: null };
+}
+
+function publicOrgs() {
+  if (!_publicCache) _publicCache = buildPublic();
+  return _publicCache;
 }
 
 /* 회사 하나가 어느 계열인지 — 리포트 화면에서 업종코드(264) 대신 보여준다. */
@@ -349,8 +488,8 @@ function sectorOfCode(industryCode) {
 }
 
 module.exports = {
-  sectors, sectorOfCode, sectorFocus, sectorsOfSections,
+  sectors, publicOrgs, sectorOfCode, sectorFocus, sectorsOfSections,
   SECTORS, SECTORS_BY_MIDDLE, UNIVERSAL_MIDDLES,
   KSIC_SECTIONS, SECTIONS_BY_JOB,
-  _build: build,
+  _build: build, _buildPublic: buildPublic,
 };

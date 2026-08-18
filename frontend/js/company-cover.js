@@ -76,16 +76,27 @@ window.CompanyCover = (() => {
           사업보고서 원문 열기 <i class="ti ti-external-link"></i></a>` : ''}
       </div>`;
 
-    return rep.blocks.map(b => `
+    /* 절마다 담기를 하나 둔다. 문단마다 두면 버튼이 글보다 많아지고, 절 전체를
+       담아야 "무엇을 하는 회사인가" 한 덩어리가 온전히 넘어간다.
+       담는 것은 **원문 그대로**다 — 요약하면 회사가 한 말이 아니라 우리가 지어낸
+       말이 되는데 화면에는 '사업보고서에서' 라고 적힌다(20-5). */
+    return rep.blocks.map((b, i) => {
+      const source = `${rep.report.name} 「${b.section}」`;
+      return `
       <div class="co-biz-block">
         <h4>${esc(b.title)}</h4>
         ${b.paragraphs.map(p => `<p>${esc(p)}</p>`).join('')}
         <div class="co-biz-from">
-          ${esc(rep.report.name)} 「${esc(b.section)}」
+          ${esc(source)}
           ${b.more ? `<a class="co-biz-more" href="${esc(rep.viewer)}" target="_blank" rel="noopener">
             표·나머지 내용은 원문에서 <i class="ti ti-external-link"></i></a>` : ''}
         </div>
-      </div>`).join('');
+        ${pickBtn({
+          id: `biz-${i}-${b.section}`, kind: 'biz',
+          text: b.paragraphs.join(' '), source, url: rep.viewer || '',
+        })}
+      </div>`;
+    }).join('');
   }
 
   /* '부문' 이 아니라 '안 나눴다' 는 뜻인 이름들.
@@ -148,6 +159,11 @@ window.CompanyCover = (() => {
      DART 개황은 홈페이지를 'www.jevisco.com' 처럼 **스킴 없이** 준다. 그대로 넣으면
      브라우저가 상대경로로 읽어 http://localhost:3000/www.jevisco.com 으로 가고,
      우리 서버의 404 JSON 이 뜬다(실측). 스킴이 없으면 https 를 붙인다. */
+  /* 주소에서 언론사 자리(호스트)만. www 는 뗀다. */
+  function hostOf(url) {
+    try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; }
+  }
+
   function httpUrl(u) {
     const s = String(u || '').trim();
     if (!s) return '';
@@ -182,7 +198,6 @@ window.CompanyCover = (() => {
   ];
 
   const LS_RECENT   = 'careerly_recent_companies_v1';
-  const LS_EVIDENCE = 'careerly_company_evidence_v1';
 
   const readJson = (key, fallback) => {
     try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
@@ -194,17 +209,22 @@ window.CompanyCover = (() => {
     localStorage.setItem(LS_RECENT, JSON.stringify(list));
   }
 
-  /* 담은 근거 — 회사별로 나눠 담는다. 자소서 코치가 같은 키를 읽는다. */
-  const allEvidence = () => readJson(LS_EVIDENCE, {});
-  const evidenceOf = name => allEvidence()[name] || [];
-  function saveEvidence(name, list) {
-    const all = allEvidence();
-    if (list.length) all[name] = list; else delete all[name];
-    localStorage.setItem(LS_EVIDENCE, JSON.stringify(all));
-  }
-  /* 담는 대상은 '지원할 공고' 하나다(채용공고 칸에만 담기가 있다). 예전에는 기사·
-     실적·직원수에도 담기가 있어 '근거 n/5' 로 셌는데, 담은 것들이 서로 다른 종류라
-     자소서 코치로 넘어가서 무엇에 쓰라는 것인지 알 수 없었다. */
+  /* ── 담은 근거는 Roadmap 이 들고 있다 ────────────────────────
+     3단계에서 담고 4단계가 쓰는 값이라 흐름 상태다. 예전에는 이 파일과 jd-coach.js
+     가 같은 localStorage 키를 각자 파싱했다 — 한쪽에서 모양을 바꾸면 다른 쪽이
+     조용히 빈 목록을 보게 되는 배치였다.
+
+     ── 담는 대상을 다시 넓혔다 (사용자 지시) ──
+     한동안 '지원할 공고' 하나만 담았다. 기사·실적·직원수에도 담기가 있던 시절에
+     "담은 것들이 서로 다른 종류라 자소서에서 무엇에 쓸지 알 수 없다" 는 문제로
+     걷어낸 것이다. 그런데 공고는 **대부분의 회사에서 0건이다** — 대기업 공채는
+     자사 사이트로만 올라와서 워크넷·잡알리오에 안 잡힌다. 결국 리포트를 다 읽어도
+     4단계에 빈손으로 넘어가는 일이 보통이 됐다.
+
+     그래서 다시 넓히되, 옛 문제를 같이 고친다: 담을 때 **종류(kind)** 를 붙이고
+     종류마다 **어느 문항에 쓰는지**를 화면이 말한다(Roadmap.EVIDENCE_KINDS).
+     넓히기만 하고 쓰임을 안 밝히면 예전 상태로 돌아간다. */
+  const evidenceOf = name => Roadmap.evidenceOf(name);
 
   let selected = null;      // { name, industry }
   let analysis = null;      // DB.companyAnalysis 결과
@@ -228,6 +248,35 @@ window.CompanyCover = (() => {
   let sectorData = null;
   let sectorErr = null;
   let openSector = null;    // 펼친 계열 이름
+
+  /* ── 기업규모 필터 ────────────────────────────────────────────
+     로드맵 1단계에서 고른 대·중견·중소·공을 여기서 받는다(Roadmap.corpType).
+     **null 이면 지금까지처럼 전체를 보여준다** — 1단계에 그 칸이 아직 없어도
+     이 화면은 멀쩡히 돌아가야 한다.
+
+     화면 안에서 바꿀 수도 있게 둔다. 1단계에서 대기업을 골랐어도 목록을 보다가
+     중견을 보고 싶어지는 건 자연스러운 일이고, 그때 1단계로 돌아가게 만들면
+     사람들은 그냥 포기한다(스텝바를 잠그지 않는 것과 같은 판단 — 17-7). */
+  let sizeFilter = null;
+  let sizeTouched = false;  // 화면에서 직접 바꿨나 — 그랬으면 로드맵 값으로 되돌리지 않는다
+
+  /* ── 산업(계열) 선택 ──────────────────────────────────────────
+     흐름이 "산업 선택 후 회사 고르기" 라 산업은 **고르는 것**이어야 한다(사용자 지시).
+     예전에는 15개 계열이 아코디언으로 전부 깔려 있었는데, 그건 훑어보기지 고르기가
+     아니다 — 어느 산업을 보고 있는 중인지가 화면 어디에도 없었다.
+
+     ── 자동으로 골라 주지 않는다 ──
+     직무로 좁혀지는 계열이 보통 서너 개다(백엔드 개발자 → 4개). 그중 하나를 우리가
+     찍어 고르면 나머지 셋을 학생이 못 본 채로 넘어간다. 추천 표시만 붙이고 고르기는
+     맡긴다. */
+  let industry = null;
+  let industryOpen = false;   // 고른 산업의 회사를 전부 펼쳤나
+
+  /* 공공기관은 계열 목록과 축이 다르다(업종이 아니라 기관 유형). 1,667곳이라
+     공공기관을 볼 때만 받아온다. */
+  let publicData = null;
+  let publicErr = null;
+  let publicLoading = false;
 
   const root = () => document.getElementById('company-root');
 
@@ -318,15 +367,32 @@ window.CompanyCover = (() => {
     paint();
   }
 
+  /* 담기 버튼 한 벌. 종류마다 담는 자리가 다르지만 **버튼은 하나여야 한다** —
+     칸마다 따로 만들면 담긴 표시나 문구가 칸마다 어긋난다.
+
+     · id     : 그 항목을 가리키는 값. 같은 것을 두 번 담지 않는 기준이다
+     · kind   : Roadmap.EVIDENCE_KINDS 의 키 — 4단계가 어느 문항에 쓸지 정하는 축
+     · text   : 자소서에 인용할 문장 그대로
+     · source : 어디서 온 말인지. **비워 두지 않는다** — 출처 없는 사실은 면접에서 무너진다 */
+  function pickBtn({ id, kind, text, source, url }) {
+    if (isPicked(id)) {
+      return `<button type="button" class="co-take is-on" data-unpick="${esc(id)}">
+        <i class="ti ti-check"></i> 담김
+      </button>`;
+    }
+    return `<button type="button" class="co-take" data-take="${esc(id)}" data-kind="${esc(kind)}"
+      data-text="${esc(text)}" data-source="${esc(source || '')}" data-url="${esc(url || '')}">
+      <i class="ti ti-plus"></i> 자소서에 담기
+    </button>`;
+  }
+
   /* ── 근거 담기 ───────────────────────────────────────────── */
   function pick(item) {
-    const list = evidenceOf(selected.name);
-    if (list.some(e => e.id === item.id)) return;
-    saveEvidence(selected.name, [...list, item]);
+    Roadmap.addEvidence(selected.name, item);
     paint();
   }
   function unpick(id) {
-    saveEvidence(selected.name, evidenceOf(selected.name).filter(e => e.id !== id));
+    Roadmap.removeEvidence(selected.name, id);
     paint();
   }
   const isPicked = id => evidenceOf(selected.name).some(e => e.id === id);
@@ -342,7 +408,7 @@ window.CompanyCover = (() => {
   /* ── 상태 1 · 검색 우선 ──────────────────────────────────── */
   function searchHtml() {
     const rec = recent();
-    const evAll = allEvidence();
+    const evAll = Roadmap.allEvidence();
 
     const tile = (c, sub) => `
       <button type="button" class="co-tile" data-pick="${esc(c.name)}">
@@ -353,7 +419,7 @@ window.CompanyCover = (() => {
         <span class="co-tile-sub">${esc(c.industry || sub || '기업 리포트 보기')}</span>
         <span class="co-tile-foot">${
           (evAll[c.name] || []).length
-            ? `<span class="wf-badge wf-badge--ok">공고 ${evAll[c.name].length}건 담김</span>`
+            ? `<span class="wf-badge wf-badge--ok">근거 ${evAll[c.name].length}건 담김</span>`
             : `<span class="wf-badge wf-badge--mute">기업 리포트</span>`}</span>
       </button>`;
 
@@ -376,160 +442,143 @@ window.CompanyCover = (() => {
           ${suggestHtml()}
         </div>
 
+        ${sizeFilterHtml()}
+
         <div class="co-lanes">
-          ${jobFocusHtml()}
+          <!-- 산업 고르기가 이 화면의 본 흐름이다("산업 선택 후 회사 고르기").
+               최근 본 회사·많이 찾는 회사는 **지름길**이라 그 아래로 내린다 —
+               위에 두면 목록을 고르러 온 사람이 아는 회사 8곳만 보고 나간다. -->
+          ${sizeFilter === 'public' ? publicHtml() : industryHtml()}
           ${rec.length ? `
             <section>
               <div class="co-lane-h"><h2>최근 본 회사</h2><span>${rec.length}곳</span></div>
               <div class="co-lane-grid">${rec.slice(0, 4).map(n => tile({ name: n }, '다시 열기')).join('')}</div>
             </section>` : ''}
           <section>
-            <div class="co-lane-h"><h2>많이 찾는 회사</h2><span>골라서 바로 시작할 수 있어요</span></div>
+            <div class="co-lane-h"><h2>많이 찾는 회사</h2>
+              <!-- 이 8곳은 손으로 적어 둔 목록이라 규모 판정이 붙어 있지 않다.
+                   규모 필터를 걸어 놓고 이 줄만 그대로 두면 '중견기업만 보는 중' 인데
+                   삼성전자가 나란히 있는 화면이 되어, 필터가 고장 난 것처럼 읽힌다.
+                   걸러 내지 않는 대신 **거르지 않았다고 적는다** — 이 줄은 목록이
+                   아니라 '바로 시작하는 자리' 라서 지울 이유는 없다. -->
+              <span>${sizeFilter ? '규모와 상관없이 · 골라서 바로 시작할 수 있어요' : '골라서 바로 시작할 수 있어요'}</span>
+            </div>
             <div class="co-lane-grid">${FEATURED.slice(0, 8).map(c => tile(c)).join('')}</div>
           </section>
-
-          ${sectorsHtml()}
         </div>
       </div>`;
   }
 
-  /* ── 로드맵 3단계 · 이 직무를 주로 뽑는 계열 ────────────────
-     직무를 골라 온 학생에게 778곳을 가나다순으로 통째로 내밀면 고를 근거가 없다.
-     서버가 직무(KECO 2차 분류) → 계열 매핑을 준다(company-sectors.js sectorFocus).
+  /* ── 규모 필터 ────────────────────────────────────────────────
+     ── 0곳인 칩은 만들지 않는다 ──
+     이 목록은 **상장사 ∩ (공정위 대규모기업집단 ∪ 고용24 공채기업)** 이라
+     중소기업이 한 곳도 없다(실측 778곳 = 대기업 306 · 중견 469 · 공공 3).
+     누르면 빈 화면이 나오는 칩은 필터 탓인지 자료 탓인지 알 수 없어서 고장으로 읽힌다.
 
-     ── 무엇인지 정확히 적는다 ──
-     이건 **"이 회사가 그 직무를 지금 뽑고 있다"가 아니다.** 업종 수준의 연결이고,
-     실제 채용 여부는 회사 리포트의 공고 칸에서 확인한다. 그렇게 안 적으면 학생이
-     '채용 중'으로 읽는다 — 없는 것을 있는 척하지 않는다는 이 화면의 원칙(머리주석)
-     이 여기에도 그대로 적용된다.
+     ── 그런데 1단계에서 중소기업을 고른 사람은? ──
+     칩을 안 만든다고 그 사람을 없는 셈 칠 수는 없다. 그때는 **왜 목록에 없는지와
+     대신 무엇을 할 수 있는지**를 적는다 — 회사 이름만 알면 위 검색창에서 바로
+     열린다(회사 색인은 공시대상 11만 곳이라 중소기업도 리포트는 나온다). */
+  function sizeFilterHtml() {
+    if (!sectorData && !sectorErr) return '';
+    const counts = sectorData?.sizes || {};
+    const goal = Roadmap.corpType();
 
-     ── 좁히지 못하는 직무는 좁히지 않는다 ──
-     경영·사무직과 영업·판매직은 전 업종이 뽑는다. 계열 몇 개를 억지로 골라 주면
-     나머지를 후보에서 지워 버린다. 그때는 그 사실을 그대로 말하고 아래 계열 목록
-     전체를 쓰게 둔다. */
-  function jobFocusHtml() {
-    const rm = Roadmap.get();
-    if (!rm) return '';
+    /* 공공기관은 계열 목록이 아니라 별도 명단에서 온다(1,667곳). 여기 counts 에
+       잡히는 3곳은 상장 공기업뿐이라 그 숫자를 쓰면 안 된다. */
+    const chips = [
+      { id: null,      label: '전체',       n: sectorData?.total || 0 },
+      { id: 'large',   label: '대기업',     n: counts.large || 0 },
+      { id: 'mid',     label: '중견기업',   n: counts.mid || 0 },
+      { id: 'public',  label: '공공기관',   n: publicData?.total || null },
+    ].filter(c => c.id === null || c.id === 'public' || c.n > 0);
 
-    const focus = sectorData?.focus;
-    const name = rm.jobName || rm.middleName;
-    const goal = esc(name);
-    /* 조사는 이름의 받침에 따라 갈린다 — '개발자를' / '기술직을'. '을(를)' 로 두면
-       데이터로 만든 문장이라는 티가 그대로 난다(roadmap.js josa 주석). */
-    const goalEul = Roadmap.withJosa(name, '을');
-    const goalEun = Roadmap.withJosa(name, '은');
-    const note = t => `<section><div class="co-note"><i class="ti ti-info-circle"></i> ${t}</div></section>`;
-
-    if (!sectorData) return `<section><div class="co-loading">${goal} 관련 계열을 찾는 중…</div></section>`;
-    if (!focus || !focus.matched) return '';
-
-    if (focus.universal) {
-      return note(`<b>${goalEun}</b> <b>업종을 가리지 않는 직무</b>예요.
-        특정 계열로 좁히면 나머지 업종의 회사를 후보에서 지우게 되니 좁히지 않았어요 —
-        아래 계열 목록에서 관심 있는 산업을 골라 보세요.`);
-    }
-    /* 업종은 아는데(KSIC 대분류) 그 업종에 상장사가 없는 경우 — 공무원이 그렇다.
-       '모른다' 와 '알지만 민간에 없다' 는 다른 말이라, 아는 만큼은 말해 준다. */
-    if (!focus.sectors.length) {
-      const why = focus.sections?.length
-        ? `<b>${esc(focus.sections.map(x => x.label).join(' · '))}</b>이라 상장 기업 목록에 해당하는 회사가 없어요.`
-        : '공무원·군인 채용 경로라 민간 기업 계열로 이어지지 않아요.';
-      return note(`<b>${goalEun}</b> ${why}
-        그래도 회사를 정해 자소서를 쓰려면 아래에서 직접 찾아 주세요.`);
-    }
-
-    /* ── 직업으로 좁혔으면 그 업종의 회사만 남긴다 ───────────────
-       계열(15개)은 화면에 올리려고 넓게 묶은 것이라, 그대로 보여주면 좁힌 뜻이
-       흐려진다 — 실측: '교장' 을 교육 서비스업(85)으로 좁혀 놓고 계열 버킷을 통째로
-       띄우는 바람에 강원랜드(카지노 91)가 같이 떴다. 16곳 → 9곳.
-       2차 분류로 정한 경우(by:'middle')는 원래 넓게 보여주는 것이 맞으므로 그대로 둔다. */
-    const exact = focus.by === 'job' && focus.sections?.length
-      ? new Set(focus.sections.flatMap(x => x.codes || []))
-      : null;
-    const picked = (sectorData.sectors || [])
-      .filter(s => focus.sectors.includes(s.name))
-      .map(s => (exact
-        ? { ...s, companies: s.companies.filter(c => exact.has(c.ksic)) }
-        : s))
-      .filter(s => s.companies.length);
-    const total = picked.reduce((n, s) => n + s.companies.length, 0);
-    if (!total) return '';
+    const note = goal === 'small'
+      ? `<div class="co-note co-note--tight"><i class="ti ti-info-circle"></i>
+           1단계에서 <b>중소기업</b>을 고르셨는데, 아래 목록에는 중소기업이 없어요 —
+           <b>상장사 가운데 공채를 내는 회사</b>만 모은 목록이라서요.
+           회사 이름을 알고 있다면 <b>위 검색창</b>에 적으면 바로 리포트가 열립니다.</div>`
+      : '';
 
     return `
-      <section class="co-focus">
+      <section class="co-sizes">
         <div class="co-lane-h">
-          <h2>${goalEul} 주로 뽑는 계열</h2>
-          <span>${picked.length}개 계열 · ${total.toLocaleString()}곳</span>
+          <h2>어느 규모를 볼까요?</h2>
+          <span>${goal && goal !== 'small'
+            ? '1단계에서 고른 기업분류로 맞춰 뒀어요 — 여기서 바꿔도 됩니다'
+            : '고르면 아래 목록이 그 규모만 남습니다'}</span>
         </div>
-        <div class="co-note co-note--tight">
-          <i class="ti ti-info-circle"></i>
-          ${focus.by === 'job' && focus.sections?.length
-            ? `이 직업은 한국표준산업분류상 <b>${esc(focus.sections.map(x => x.label).join(' · '))}</b>에 속해서 그 업종으로 좁혔어요. `
-            : ''}<b>업종 기준</b>이에요 — "이 회사가 지금 ${goalEul} 뽑는다"는 뜻은 아닙니다.
-          실제 채용 여부는 회사를 열면 나오는 <b>채용공고</b> 칸에서 확인하세요.
+        <div class="co-sizechips">
+          ${chips.map(c => `
+            <button type="button" class="co-sizechip ${sizeFilter === c.id ? 'is-on' : ''}"
+                    data-size="${c.id || ''}">
+              ${esc(c.label)}${c.n ? `<b>${c.n.toLocaleString()}</b>` : ''}
+            </button>`).join('')}
         </div>
-        <div class="co-sectors">
-          ${picked.map(s => {
-            const open = openSector === s.name;
-            const list = open ? s.companies : s.companies.slice(0, SECTOR_PREVIEW);
-            return `<div class="co-sector is-focus ${open ? 'is-open' : ''}">
-              <button type="button" class="co-sector-h" data-sector="${esc(s.name)}">
-                <b>${esc(s.name)}</b>
-                <span class="wf-badge wf-badge--ok">${s.companies.length}곳</span>
-                <i class="ti ti-chevron-down"></i>
-              </button>
-              <div class="co-sector-body">
-                ${list.map(c => `<button type="button" class="co-chip" data-pick="${esc(c.name)}">${esc(c.name)}</button>`).join('')}
-                ${!open && s.companies.length > SECTOR_PREVIEW
-                  ? `<button type="button" class="co-chip co-chip--more" data-sector="${esc(s.name)}">+${s.companies.length - SECTOR_PREVIEW}곳 더</button>`
-                  : ''}
-              </div>
-            </div>`;
-          }).join('')}
-        </div>
+        ${note}
       </section>`;
   }
 
-  /* ── 계열별 기업 ───────────────────────────────────────────
-     "이미 아는 회사 8곳" 만 보여주면 학생은 아는 데만 지원한다. 계열로 묶어 펼치면
-     **몰랐던 회사**를 만난다 — 이 화면을 만든 이유가 그것이다.
-     한 계열에 많게는 145곳이라 처음에는 접어 두고, 눌러야 펼친다. */
+  /* 지금 보고 있는 규모만 남긴다. 필터가 없으면 손대지 않는다. */
+  function bySize(companies) {
+    if (!sizeFilter || sizeFilter === 'public') return companies;
+    return companies.filter(c => c.size === sizeFilter);
+  }
+
+  /* 공공기관 레인이 한 번에 펼치는 기관 수. 지방출자출연기관은 890곳이라
+     통째로 깔면 화면이 목록으로 덮인다. */
   const SECTOR_PREVIEW = 12;
 
-  function sectorsHtml() {
-    if (sectorErr) {
-      return `<section><div class="co-note"><i class="ti ti-info-circle"></i> ${esc(sectorErr)}</div></section>`;
-    }
-    if (!sectorData) return `<section><div class="co-loading">계열별 기업을 불러오는 중…</div></section>`;
-    if (!sectorData.sectors?.length) return '';
+  const SIZE_LABEL = { large: '대기업', mid: '중견', small: '중소', public: '공공' };
 
-    /* 위 '주로 뽑는 계열' 에 이미 나온 것은 여기서 뺀다. 같은 계열이 두 번 뜨면
-       목록이 길어지는 것보다 나쁜 일이 생긴다 — 펼침 상태(openSector)를 이름으로
-       기억하므로 한쪽을 펼치면 다른 쪽도 같이 펼쳐져 고장으로 보인다. */
-    const focused = new Set(sectorData.focus?.sectors || []);
-    const rest = sectorData.sectors.filter(s => !focused.has(s.name));
-    if (!rest.length) return '';
-    const restTotal = rest.reduce((n, s) => n + s.companies.length, 0);
+  /* 회사 칩 한 벌. 규모를 배지로 단다 — 이름만 늘어놓으면 학생이 고를 근거가 없다
+     (이 화면을 고친 이유가 그것이다).
+
+     **규모 필터가 켜져 있으면 배지를 뺀다.** 모든 칩에 '중견' 이 똑같이 붙어 있으면
+     정보가 아니라 잡음이고, 그 말은 이미 필터 칩이 하고 있다. */
+  const companyChip = c => `<button type="button" class="co-chip" data-pick="${esc(c.name)}">
+      ${esc(c.name)}${!sizeFilter && c.size && SIZE_LABEL[c.size]
+        ? `<em class="co-chip-size co-chip-size--${esc(c.size)}">${SIZE_LABEL[c.size]}</em>` : ''}
+    </button>`;
+
+  /* ── 공공기관 ─────────────────────────────────────────────────
+     계열(업종)이 아니라 **기관 유형**으로 묶는다. 공공기관은 대부분 비상장이라
+     업종코드가 없어서 계열 목록에는 4곳밖에 못 들어간다(company-sectors.js).
+     지원자가 실제로 쓰는 구분이기도 하다 — 공기업이냐 준정부기관이냐로 채용 일정과
+     경쟁률이 갈린다. */
+  function publicHtml() {
+    if (publicErr) {
+      return `<section><div class="co-note"><i class="ti ti-info-circle"></i> ${esc(publicErr)}</div></section>`;
+    }
+    if (!publicData) return `<section><div class="co-loading">공공기관 목록을 불러오는 중…</div></section>`;
+    if (!publicData.lanes?.length) return '';
 
     return `<section>
       <div class="co-lane-h">
-        <h2>${focused.size ? '다른 계열도 둘러보기' : '계열로 둘러보기'}</h2>
-        <span>상장사 ${restTotal.toLocaleString()}곳 · 이름을 못 들어본 회사를 찾아보세요</span>
+        <h2>기관 유형으로 둘러보기</h2>
+        <span>${publicData.total.toLocaleString()}곳 · 중앙 공공기관과 지방 공기업·출자출연기관</span>
+      </div>
+      <div class="co-note co-note--tight">
+        <i class="ti ti-info-circle"></i>
+        공공기관은 채용공고가 <b>잡알리오</b>에 정형으로 올라와서, 여기서 고른 기관은
+        리포트의 <b>채용공고</b> 칸이 실제로 채워질 확률이 높아요.
       </div>
       <div class="co-sectors">
-        ${rest.map(s => {
-          const open = openSector === s.name;
-          const list = open ? s.companies : s.companies.slice(0, SECTOR_PREVIEW);
+        ${publicData.lanes.map(l => {
+          const open = openSector === l.name;
+          const list = open ? l.companies : l.companies.slice(0, SECTOR_PREVIEW);
           return `<div class="co-sector ${open ? 'is-open' : ''}">
-            <button type="button" class="co-sector-h" data-sector="${esc(s.name)}">
-              <b>${esc(s.name)}</b>
-              <span class="wf-badge wf-badge--mute">${s.companies.length}곳</span>
+            <button type="button" class="co-sector-h" data-sector="${esc(l.name)}">
+              <b>${esc(l.name)}</b>
+              <span class="wf-badge wf-badge--mute">${l.companies.length.toLocaleString()}곳</span>
               <i class="ti ti-chevron-down"></i>
             </button>
             <div class="co-sector-body">
-              ${list.map(c => `<button type="button" class="co-chip" data-pick="${esc(c.name)}">${esc(c.name)}</button>`).join('')}
-              ${!open && s.companies.length > SECTOR_PREVIEW
-                ? `<button type="button" class="co-chip co-chip--more" data-sector="${esc(s.name)}">+${s.companies.length - SECTOR_PREVIEW}곳 더</button>`
+              ${list.map(c => `<button type="button" class="co-chip co-chip--org" data-pick="${esc(c.name)}">
+                  <b>${esc(c.name)}</b>${c.note ? `<small>${esc(c.note)}</small>` : ''}
+                </button>`).join('')}
+              ${!open && l.companies.length > SECTOR_PREVIEW
+                ? `<button type="button" class="co-chip co-chip--more" data-sector="${esc(l.name)}">+${(l.companies.length - SECTOR_PREVIEW).toLocaleString()}곳 더</button>`
                 : ''}
             </div>
           </div>`;
@@ -537,6 +586,147 @@ window.CompanyCover = (() => {
       </div>
     </section>`;
   }
+
+  /* ══ 산업 고르기 ══════════════════════════════════════════════
+     ── 왜 아코디언을 걷어냈나 (사용자 지시) ──
+     예전에는 계열 15개가 아코디언으로 **전부 깔려 있었다.** 그건 훑어보기지
+     고르기가 아니다 — 지금 어느 산업을 보고 있는 중인지가 화면 어디에도 없었고,
+     흐름은 "산업 선택 후 회사 고르기" 인데 선택이라는 동작 자체가 없었다.
+     칩 한 줄로 고르고, 고른 산업의 회사만 아래에 편다.
+
+     ── 이 분류는 어디서 왔나 (실측으로 확인) ──
+     산업 축을 실제로 주는 데이터는 **DART 기업개황의 업종코드(KSIC)** 하나뿐이다.
+     임금직업정보시스템은 직업 축(10대분류→461개)이고, 잡알리오 공고는 NCS 직무
+     축(ncsCdNmLst)이라 둘 다 산업이 아니다. 회사 778곳이 KSIC 중분류 55종에
+     걸쳐 있고, 계열 16개가 그것을 빠짐없이 덮는다(company-sectors.js SECTORS).
+
+     ── '이 직무를 주로 뽑는 계열' 은 표시만 한다 ──
+     직무로 좁히면 보통 서너 개가 남는다(백엔드 개발자 → 4개). 그중 하나를 우리가
+     찍어서 골라 두면 나머지를 학생이 못 본 채로 넘어간다. 앞으로 당기고 표시만
+     붙인다. 그리고 이건 **"이 회사가 그 직무를 지금 뽑는다"가 아니다** — 업종
+     수준의 연결이라, 실제 채용 여부는 회사 리포트의 공고 칸에서 확인하게 한다. */
+  function industryHtml() {
+    if (sectorErr) {
+      return `<section><div class="co-note"><i class="ti ti-info-circle"></i> ${esc(sectorErr)}</div></section>`;
+    }
+    if (!sectorData) return `<section><div class="co-loading">산업 목록을 불러오는 중…</div></section>`;
+
+    const rm = Roadmap.get();
+    const focus = sectorData.focus;
+    /* 직업으로 좁혔으면 그 업종의 회사만 센다. 계열(16개)은 화면에 올리려고 넓게 묶은
+       것이라, 좁힌 뜻이 곳수에도 반영돼야 한다 — 실측: '교장' 을 교육 서비스업으로
+       좁혀 놓고 계열 버킷을 통째로 세면 강원랜드(카지노)까지 들어간다. */
+    const exact = focus?.by === 'job' && focus.sections?.length
+      ? new Set(focus.sections.flatMap(x => x.codes || []))
+      : null;
+
+    const picked = new Set(focus?.matched && !focus.universal ? focus.sectors : []);
+    const list = (sectorData.sectors || [])
+      .map(s => ({
+        name: s.name,
+        /* 규모 필터가 켜져 있으면 곳수도 그 규모 기준이어야 한다. 전체 곳수를 적어
+           두고 눌렀을 때 절반만 나오면 숫자를 믿을 수 없게 된다. */
+        companies: bySize(exact && picked.has(s.name)
+          ? s.companies.filter(c => exact.has(c.ksic))
+          : s.companies),
+        focus: picked.has(s.name),
+      }))
+      .filter(s => s.companies.length);
+
+    if (!list.length) return '';
+
+    /* 추천 계열을 앞으로. 그 안에서는 곳수가 많은 쪽이 먼저다(고를 것이 많은 쪽). */
+    list.sort((a, b) => (b.focus - a.focus) || (b.companies.length - a.companies.length));
+
+    return `
+      <section class="co-inds">
+        <div class="co-lane-h">
+          <h2>어느 산업을 볼까요?</h2>
+          <span>${rm && picked.size
+            ? `${Roadmap.withJosa(rm.jobName || rm.middleName, '을')} 주로 뽑는 계열에 <b>추천</b> 표시를 붙였어요`
+            : '고르면 그 업종의 회사가 아래에 나옵니다'}</span>
+        </div>
+        ${jobFocusNoteHtml(focus, rm)}
+        <div class="co-indchips">
+          ${list.map(s => `
+            <button type="button" class="co-indchip ${industry === s.name ? 'is-on' : ''} ${s.focus ? 'is-focus' : ''}"
+                    data-ind="${esc(s.name)}">
+              ${s.focus ? '<i class="ti ti-star-filled"></i>' : ''}${esc(s.name)}<b>${s.companies.length.toLocaleString()}</b>
+            </button>`).join('')}
+        </div>
+      </section>
+      ${industryCompaniesHtml(list)}`;
+  }
+
+  /* 직무로 좁힐 수 없는 경우를 말로 남긴다. 칸을 지우면 학생은 우리가 안 해 준 것인지
+     원래 안 되는 것인지 알 수 없다(16-5 와 같은 원칙). */
+  function jobFocusNoteHtml(focus, rm) {
+    if (!rm || !focus?.matched) return '';
+    const name = rm.jobName || rm.middleName;
+    const goalEun = Roadmap.withJosa(name, '은');
+    const note = t => `<div class="co-note co-note--tight"><i class="ti ti-info-circle"></i> ${t}</div>`;
+
+    if (focus.universal) {
+      return note(`<b>${goalEun}</b> <b>업종을 가리지 않는 직무</b>예요.
+        특정 계열로 좁히면 나머지 업종의 회사를 후보에서 지우게 되니 추천을 붙이지 않았어요 —
+        관심 있는 산업을 직접 골라 보세요.`);
+    }
+    /* 업종은 아는데(KSIC 대분류) 그 업종에 상장사가 없는 경우 — 공무원이 그렇다.
+       '모른다' 와 '알지만 민간에 없다' 는 다른 말이라, 아는 만큼은 말해 준다. */
+    if (!focus.sectors.length) {
+      const why = focus.sections?.length
+        ? `<b>${esc(focus.sections.map(x => x.label).join(' · '))}</b>이라 상장 기업 목록에 해당하는 회사가 없어요.`
+        : '공무원·군인 채용 경로라 민간 기업 계열로 이어지지 않아요.';
+      return note(`<b>${goalEun}</b> ${why} 그래도 회사를 정해 자소서를 쓰려면 아래에서 직접 찾아 주세요.`);
+    }
+    return note(`${focus.by === 'job' && focus.sections?.length
+      ? `이 직업은 한국표준산업분류상 <b>${esc(focus.sections.map(x => x.label).join(' · '))}</b>에 속해서 그 업종으로 좁혔어요. `
+      : ''}<b>업종 기준</b>이에요 — "이 회사가 지금 뽑는다"는 뜻은 아닙니다.
+      실제 채용 여부는 회사를 열면 나오는 <b>채용공고</b> 칸에서 확인하세요.`);
+  }
+
+  /* 한 번에 보여줄 회사 수. 화학·소재는 144곳이라 통째로 깔면 화면이 목록으로 덮인다. */
+  const IND_PREVIEW = 24;
+
+  function industryCompaniesHtml(list) {
+    if (!industry) {
+      return `<section><div class="co-indempty">
+        <i class="ti ti-arrow-up"></i>
+        <b>산업을 하나 고르세요.</b>
+        <span>고른 산업의 회사가 여기에 나옵니다. 회사 이름을 이미 안다면 맨 위 검색창이 빠릅니다.</span>
+      </div></section>`;
+    }
+    const s = list.find(x => x.name === industry);
+    /* 규모를 바꿔서 고른 산업이 목록에서 사라진 경우 — setSize 가 풀어 주지만,
+       늦게 온 응답으로 목록이 바뀌는 길도 있어서 여기서도 막는다. */
+    if (!s) return '';
+
+    const shown = industryOpen ? s.companies : s.companies.slice(0, IND_PREVIEW);
+    const rest = s.companies.length - shown.length;
+
+    return `
+      <section>
+        <div class="co-lane-h">
+          <h2>${esc(industry)}</h2>
+          <span>${s.companies.length.toLocaleString()}곳${
+            sizeFilter ? ` · ${esc(Roadmap.CORP_TYPES.find(c => c.id === sizeFilter)?.label || '')}만` : ''}
+            · 이름을 못 들어본 회사를 눌러 보세요</span>
+        </div>
+        ${industry === '지주회사' ? `
+          <div class="co-note co-note--tight"><i class="ti ti-info-circle"></i>
+            지주회사는 <b>업종이 아니라 회사의 형태</b>예요. 표준산업분류가 지주회사를
+            금융업으로 묶어 두는 바람에 예전에는 '금융·보험' 에 섞여 있었는데,
+            실제 사업은 <b>자회사</b>에 있습니다 — 리포트의 <b>밖으로 벌려 둔 사업</b> 칸을 보세요.
+          </div>` : ''}
+        <div class="co-indlist">
+          ${shown.map(companyChip).join('')}
+          ${rest > 0
+            ? `<button type="button" class="co-chip co-chip--more" data-indmore>+${rest.toLocaleString()}곳 더</button>`
+            : ''}
+        </div>
+      </section>`;
+  }
+
 
   function suggestHtml() {
     if (!suggestions.length) return '<div class="co-suggest" hidden></div>';
@@ -563,13 +753,13 @@ window.CompanyCover = (() => {
 
   function sideHtml() {
     const rec = recent();
-    const evAll = allEvidence();
+    const evAll = Roadmap.allEvidence();
     const row = name => `
       <button type="button" class="co-side-item ${name === selected.name ? 'is-on' : ''}" data-pick="${esc(name)}">
         <span class="wf-avatar wf-avatar--sm" style="--co-color:${accentOf(name)}">${esc(name.charAt(0))}</span>
         <span class="co-side-t">
           <b>${esc(name)}</b>
-          <small>${(evAll[name] || []).length ? `공고 ${(evAll[name] || []).length}건 담김` : '기업 리포트'}</small>
+          <small>${(evAll[name] || []).length ? `근거 ${(evAll[name] || []).length}건 담김` : '기업 리포트'}</small>
         </span>
       </button>`;
 
@@ -629,13 +819,22 @@ window.CompanyCover = (() => {
         </div>
         <div class="co-gauge">
           <div class="co-gauge-h">
-            <span class="wf-eyebrow">담은 공고</span>
+            <span class="wf-eyebrow">담은 근거</span>
             <b>${ev.length}<span>건</span></b>
           </div>
           <div class="co-bar ${ev.length ? 'co-bar--ok' : ''}"><i style="width:${ev.length ? 100 : 0}%"></i></div>
+          <!-- ── 종류를 나눠 센다 ──────────────────────────────
+               예전에는 '근거 n/5' 한 숫자였는데, 담은 것들의 종류가 섞여 있어서
+               4단계로 넘어가도 무엇을 어디에 쓰라는 것인지 알 수 없었다(그래서
+               한동안 공고만 담게 좁혔었다). 숫자 하나가 아니라 **종류와 쓰임**을
+               보여주는 것이 그 문제의 답이다. -->
+          ${ev.length ? `<div class="co-gauge-kinds">
+            ${Roadmap.evidenceByKind(selected.name).map(g =>
+              `<span class="co-gauge-kind"><b>${esc(g.label)}</b> ${g.items.length}</span>`).join('')}
+          </div>` : ''}
           <p class="co-gauge-note">${ev.length
-            ? '자소서 코치로 넘어가면 회사·공고 칸이 채워져 있어요.'
-            : '<b>채용공고</b> 칸에서 지원할 공고를 담으세요.'}</p>
+            ? `자소서 코치의 <b>${esc([...new Set(Roadmap.evidenceByKind(selected.name).flatMap(g => g.use))].join(' · '))}</b> 문항에 그대로 붙습니다.`
+            : '아래 칸에서 <b>자소서에 담기</b>를 누르면 4단계로 그대로 넘어가요.'}</p>
           <!-- 다음 행동. 예전에는 5번 카드를 눌러야 나왔는데, 그 칸까지 가는 사람이
                드물어서 게이지 바로 아래로 올렸다 — 리포트 어디를 보고 있든 눈에 든다. -->
           <button type="button" class="wf-btn wf-btn--primary wf-btn--sm wf-btn--block"
@@ -788,8 +987,9 @@ window.CompanyCover = (() => {
       ? `${p.established.slice(0, 4)}.${p.established.slice(4, 6)}.${p.established.slice(6, 8)}`
       : '—';
     /* 규모 지표는 위에 크게 세운다(A-1 안의 지표 카드와 같은 얼개) — 자소서에
-       "몇 명 규모의 회사에서 무엇을 하고 싶다"고 쓸 때 바로 인용하는 값들이다.
-       담기 버튼을 붙여 근거로 가져갈 수 있게 한다. */
+       회사를 고를 때 규모를 가늠하는 값이다. **담기는 붙이지 않는다**(사용자 지시) —
+       자소서에 인용할 말이 아니라 고를 때 보는 값이라, id·text 도 두지 않는다.
+       안 쓰는 필드를 남겨 두면 다음 사람이 담기가 있었던 자리로 읽는다. */
     const won = n => n >= 1e8 ? `${(n / 1e8).toFixed(1)}억원`
       : n >= 1e4 ? `${Math.round(n / 1e4).toLocaleString()}만원` : `${n.toLocaleString()}원`;
 
@@ -798,17 +998,14 @@ window.CompanyCover = (() => {
       stats.push({
         label: '직원 수', value: emp.count.toLocaleString(), unit: '명',
         sub: emp.regular ? `정규직 ${emp.regular.toLocaleString()}명` : `${emp.year}년 기준`,
-        id: 'emp-count', text: `직원 수 ${emp.count.toLocaleString()}명 (${emp.year}년 사업보고서)`,
       });
       if (emp.tenureYears) stats.push({
         label: '평균 근속연수', value: emp.tenureYears, unit: '년',
-        sub: '길수록 이직이 적다는 뜻', id: 'emp-tenure',
-        text: `평균 근속연수 ${emp.tenureYears}년 (${emp.year}년 사업보고서)`,
+        sub: '길수록 이직이 적다는 뜻',
       });
       if (emp.avgPay) stats.push({
         label: '1인 평균 급여', value: won(emp.avgPay), unit: '',
-        sub: `${emp.year}년 연간 기준`, id: 'emp-pay',
-        text: `1인 평균 급여 ${won(emp.avgPay)} (${emp.year}년 사업보고서)`,
+        sub: `${emp.year}년 연간 기준`,
       });
     }
 
@@ -822,11 +1019,15 @@ window.CompanyCover = (() => {
     ];
 
     return `
+      <!-- ── 여기에는 담기를 두지 않는다 (사용자 지시) ──────────────
+           직원 수·근속연수·평균 급여는 **회사를 고를 때 보는 값**이지 자소서에 인용할
+           말이 아니다. "직원 627명인 회사에 지원합니다" 는 지원동기가 되지 않는다.
+           담을 만한 숫자는 재무 칸의 매출·영업이익 추이 쪽이고, 담기는 거기 있다. -->
       ${stats.length ? `<div class="co-stats">
-        ${stats.map(s => `<div class="co-stat">
-          <div class="co-stat-l">${esc(s.label)}</div>
-          <div class="co-stat-v">${esc(String(s.value))}${s.unit ? `<small>${esc(s.unit)}</small>` : ''}</div>
-          <div class="co-stat-sub">${esc(s.sub)}</div>
+        ${stats.map(x => `<div class="co-stat">
+          <div class="co-stat-l">${esc(x.label)}</div>
+          <div class="co-stat-v">${esc(String(x.value))}${x.unit ? `<small>${esc(x.unit)}</small>` : ''}</div>
+          <div class="co-stat-sub">${esc(x.sub)}</div>
         </div>`).join('')}
       </div>` : ''}
 
@@ -910,7 +1111,11 @@ window.CompanyCover = (() => {
               ? `<span class="wf-badge ${j.dday <= 7 ? 'wf-badge--error' : 'wf-badge--mute'}">D-${j.dday}</span>`
               : `<span class="wf-badge wf-badge--mute">상시</span>`}
             ${isPicked(id)
-              ? `<span class="wf-badge wf-badge--ok"><i class="ti ti-check"></i> 담김</span>`
+              ? `<button type="button" class="co-take is-on" data-unpick="${esc(id)}">
+                   <i class="ti ti-check"></i> 담김</button>`
+              /* 공고만 따로 dataset 이 길다 — 자격요건·우대사항까지 넘겨야 4단계가
+                 공고 본문을 조립할 수 있기 때문이다(applyPickedJob). 나머지 종류는
+                 text 한 줄이면 충분해서 pickBtn 을 쓴다. */
               : `<button type="button" class="wf-btn wf-btn--xs wf-btn--primary"
                    data-add="${esc(id)}" data-title="${esc(j.title)}" data-url="${esc(j.url || '')}"
                    data-career="${esc(j.career || '')}" data-edu="${esc(j.edu || '')}"
@@ -941,11 +1146,13 @@ window.CompanyCover = (() => {
       return `<div class="co-note"><i class="ti ti-info-circle"></i>
         재무 자료가 없습니다 — ${esc(analysis.dartReason || analysis.dart?.note || s.note)}</div>`;
     }
+    /* 값 자체보다 **방향**이 자소서의 재료다("역성장 구간에서 무엇을 하려는
+       회사인가"). 그래서 담는 문장에 전년비를 같이 넣는다 — 숫자 하나만 담아 가면
+       4단계에서 그게 늘어난 값인지 줄어든 값인지 알 수 없다. */
     const rows = Object.entries(fin.accounts).map(([key, acc]) => {
       const t = acc.trend;
       const label = analysis.dart.labels[key] || key;
       const now = acc.series?.[0];
-      const id = `fin-${key}`;
       const text = t
         ? `${label} ${now?.readable || ''} · 전년비 ${t.direction === 'up' ? '+' : t.direction === 'down' ? '−' : ''}${Math.abs(t.pct)}%`
         : `${label} ${now?.readable || ''}`;
@@ -953,13 +1160,17 @@ window.CompanyCover = (() => {
         <th>${esc(label)}</th>
         ${acc.series.map(x => `<td>${x.readable ? esc(x.readable) : '—'}<span>${x.year}</span></td>`).join('')}
         <td class="co-trend--${t ? t.direction : 'none'}">${t ? `${arrowOf(t.direction)} ${Math.abs(t.pct)}%` : '—'}</td>
+        <td class="co-tbl-take">${pickBtn({
+          id: `fin-${key}`, kind: 'fact', text,
+          source: `${fin.baseYear}년 사업보고서 · ${fin.fsDiv === 'CFS' ? '연결' : '개별'} 기준`,
+        })}</td>
       </tr>`;
     }).join('');
 
     return `
       <div class="co-tblwrap">
         <table class="co-tbl">
-          <thead><tr><th style="text-align:left">계정</th><th>당기</th><th>전기</th><th>전전기</th><th>전년비</th></tr></thead>
+          <thead><tr><th style="text-align:left">계정</th><th>당기</th><th>전기</th><th>전전기</th><th>전년비</th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
@@ -1016,13 +1227,23 @@ window.CompanyCover = (() => {
 
     return `
       <div class="co-news">
-        ${items.map((it, i) => {
+        ${items.map(it => {
+          /* 제목과 링크만 담는다. 기사 본문을 요약해 담으면 지어낸 사실이 자소서로
+             흘러간다 — 이 화면이 AI 에게 기사를 요약시키지 않는 것과 같은 이유
+             (news.js 머리주석). 학생은 원문을 읽고 자기 말로 쓴다. */
           const id = `news-${(it.url || it.title).slice(-40)}`;
           return `<div class="co-news-item">
             <div class="co-news-t">
               <a href="${esc(it.url || '#')}" target="_blank" rel="noopener noreferrer">${esc(it.title)}</a>
-              <div class="co-news-meta">${esc(it.date || '')}</div>
+              <div class="co-news-meta">${[it.date, hostOf(it.url)].filter(Boolean).map(esc).join(' · ')}</div>
             </div>
+            ${pickBtn({
+              id, kind: 'news', text: it.title, url: it.url || '',
+              /* 검색 API 는 언론사 이름을 안 준다. 주소의 호스트를 쓴다 — 지어낸 값이
+                 아니라 링크에 이미 들어 있는 사실이고, 날짜만 적힌 출처보다는
+                 "어디 기사인가" 를 알 수 있다. */
+              source: [it.date, hostOf(it.url)].filter(Boolean).join(' · ') || '뉴스 검색',
+            })}
           </div>`;
         }).join('')}
       </div>
@@ -1058,9 +1279,21 @@ window.CompanyCover = (() => {
     bindPick(box);
     box.querySelectorAll('[data-unpick]').forEach(el =>
       el.addEventListener('click', () => unpick(el.dataset.unpick)));
+    /* 공고 말고는 전부 이쪽이다(사업 내용·회사 숫자·기사). */
+    box.querySelectorAll('[data-take]').forEach(el =>
+      el.addEventListener('click', () => pick({
+        id: el.dataset.take,
+        kind: el.dataset.kind,
+        text: el.dataset.text,
+        source: el.dataset.source || '',
+        url: el.dataset.url || '',
+      })));
+
     box.querySelectorAll('[data-add]').forEach(el =>
       el.addEventListener('click', () => pick({
         id: el.dataset.add,
+        kind: 'job',
+        source: '채용공고',
         text: el.dataset.title,
         url: el.dataset.url || '',
         career: el.dataset.career || '',
@@ -1073,7 +1306,17 @@ window.CompanyCover = (() => {
         preference: el.dataset.pref || '',
       })));
 
-    // 계열 펼치기/접기
+    // 기업규모 필터
+    box.querySelectorAll('[data-size]').forEach(el =>
+      el.addEventListener('click', () => setSize(el.dataset.size || null)));
+
+    // 산업 고르기
+    box.querySelectorAll('[data-ind]').forEach(el =>
+      el.addEventListener('click', () => setIndustry(el.dataset.ind)));
+    const indMore = box.querySelector('[data-indmore]');
+    if (indMore) indMore.addEventListener('click', () => { industryOpen = true; paint(); });
+
+    // 공공기관 레인 펼치기/접기
     box.querySelectorAll('[data-sector]').forEach(el =>
       el.addEventListener('click', () => {
         openSector = openSector === el.dataset.sector ? null : el.dataset.sector;
@@ -1165,6 +1408,44 @@ window.CompanyCover = (() => {
     if (!selected) paint();
   }
 
+  /* 공공기관 목록 — 규모 필터를 공공기관으로 돌릴 때만 받는다.
+     한 번 받으면 다시 받지 않는다(계열 목록과 같은 규약). */
+  async function loadPublic() {
+    if (publicData || publicLoading) return;
+    publicLoading = true;
+    try {
+      publicData = await DB.companyPublicOrgs();
+      publicErr = (!publicData.lanes?.length && publicData.reason) ? publicData.reason : null;
+    } catch (e) {
+      publicErr = e.message;
+    } finally {
+      publicLoading = false;
+      if (!selected) paint();
+    }
+  }
+
+  /* 규모를 고른다. 로드맵 1단계의 값과 이 화면의 칩이 같은 자리에 쓰인다.
+     화면에서 고른 값은 로드맵에 되쓰지 않는다 — 1단계에서 정한 목표를 3단계의
+     둘러보기가 조용히 바꿔 놓으면, 다음에 1단계로 돌아갔을 때 내가 고른 것이
+     아닌 값이 선택돼 있다(17-9 ①과 같은 부류). 여기서는 보는 범위만 바꾼다. */
+  function setSize(id) {
+    sizeFilter = id || null;
+    sizeTouched = true;
+    openSector = null;                   // 펼쳐 둔 계열이 필터에서 사라질 수 있다
+    /* 고른 산업에 그 규모의 회사가 한 곳도 없을 수 있다. 그대로 두면 "산업은 골랐는데
+       아무것도 없는" 화면이 되므로, 규모를 바꾸면 산업 선택은 푼다. */
+    industry = null;
+    industryOpen = false;
+    if (sizeFilter === 'public') loadPublic();
+    paint();
+  }
+
+  function setIndustry(name) {
+    industry = industry === name ? null : (name || null);   // 다시 누르면 해제
+    industryOpen = false;
+    paint();
+  }
+
   /* ── 이 화면으로 들어올 때 ──────────────────────────────────
      ── 왜 늘 검색 화면부터인가 (사용자 지시) ──
      예전에는 `if (selected) { paint(); return; }` 였다. 한 번 고른 회사를 기억해
@@ -1179,7 +1460,11 @@ window.CompanyCover = (() => {
      하고 보낸 것이라 그대로 연다. */
   function onEnter() {
     Roadmap.mount('rm-bar-company', 'company');
+    /* 1단계에서 고른 기업분류를 받아 온다. 화면에서 직접 바꾼 적이 없을 때만 —
+       바꿔 놓고 나갔다 돌아왔는데 원래대로 돌아가 있으면 고장으로 읽힌다. */
+    if (!sizeTouched) sizeFilter = Roadmap.corpType();
     loadSectors();
+    if (sizeFilter === 'public') loadPublic();
     const handoff = localStorage.getItem('careerly_company_open');
     if (handoff) {
       localStorage.removeItem('careerly_company_open');

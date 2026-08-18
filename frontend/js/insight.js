@@ -43,12 +43,28 @@ window.Insight = (() => {
 
   function root() { return document.getElementById('insight-root'); }
 
+  /* 다른 화면이 "이 글을 열어라" 하고 넘길 때 쓰는 자리. 홈의 커리어 인사이트
+     카드가 쓴다. 회사 찾기의 `careerly_company_open` 과 같은 규약이다 —
+     navigate() 와 onEnter() 의 순서에 기대지 않으려고 키로 주고받는다. */
+  const LS_OPEN = 'careerly_insight_open';
+
   async function onEnter() {
     if (!categories.length) {
       try { categories = (await DB.insightCategories()).categories; }
       catch { categories = []; }
     }
     view = 'list'; page = 1; category = ''; q = ''; scope = 'all';
+
+    /* 넘겨받은 글이 있으면 목록 대신 그 글부터 연다. 키는 한 번 쓰고 지운다 —
+       남겨 두면 다음에 인사이트를 눌렀을 때도 같은 글이 열려서, 목록으로
+       돌아갈 수 없는 것처럼 보인다(회사 찾기에서 실제로 겪은 문제와 같다). */
+    let handoff = null;
+    try {
+      handoff = localStorage.getItem(LS_OPEN);
+      if (handoff) localStorage.removeItem(LS_OPEN);
+    } catch { /* 프라이빗 모드 */ }
+
+    if (handoff) { await openPost(handoff); return; }
     await loadList();
   }
 
@@ -216,7 +232,10 @@ window.Insight = (() => {
           <span>${fmtDate(post.createdAt)}</span>
           <span><i class="ti ti-eye"></i> ${post.viewCount}</span>
         </div>
-        <div class="insight-post-body">${esc(post.body)}</div>
+        <!-- 본문은 마크다운이다(사용자 지시). Markdown.render 가 **escape 를 먼저 하고**
+             아는 문법만 태그로 바꾼다 — 여기서 esc() 를 한 번 더 씌우면 태그가 글자로 보인다.
+             안전성의 근거는 test/markdown.test.js 의 XSS 절이다. -->
+        <div class="insight-post-body insight-md">${Markdown.render(post.body)}</div>
         ${mine ? `<div class="insight-post-actions">
           <button class="topbar-link" id="insight-delete-post"><i class="ti ti-trash"></i> 삭제</button>
         </div>` : ''}
@@ -268,6 +287,13 @@ window.Insight = (() => {
         </select>
         <input type="text" id="insight-write-title" maxlength="200" placeholder="제목" />
         <textarea id="insight-write-body" rows="10" placeholder="내용을 적어주세요"></textarea>
+        <!-- 쓸 수 있는 문법을 적어 둔다. 마크다운이 되는지 모르면 아무도 안 쓰고,
+             모르고 쓴 별표가 굵게로 바뀌면 그건 그것대로 놀란다. -->
+        <p class="insight-md-hint">
+          <b>마크다운</b>으로 쓸 수 있어요 —
+          <code>## 제목</code> · <code>**굵게**</code> · <code>- 목록</code> ·
+          <code>&gt; 인용</code> · <code>---</code> · <code>[글자](https://…)</code>
+        </p>
         ${DB.currentUser()?.isAdmin ? `
           <label class="insight-notice-toggle">
             <input type="checkbox" id="insight-write-notice" />
@@ -367,5 +393,5 @@ window.Insight = (() => {
     }));
   }
 
-  return { onEnter };
+  return { onEnter, LS_OPEN };
 })();

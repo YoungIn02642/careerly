@@ -250,11 +250,14 @@
 
   /* 회사 리포트 화면(company-cover.js)에서 담은 근거를 같은 키로 읽는다.
      지원동기 문항은 공고가 아니라 이 사실들로 쓴다. */
+  /* 담은 근거는 Roadmap 이 들고 있다(흐름 상태). 예전에는 이 파일이 localStorage
+     키를 직접 파싱했는데, 3단계에서 모양을 바꾸면 여기는 조용히 빈 목록을 봤다. */
   function evidenceFor(company) {
-    if (!company) return [];
-    try { return (JSON.parse(localStorage.getItem('careerly_company_evidence_v1')) || {})[company] || []; }
-    catch { return []; }
+    return Roadmap.evidenceOf(company);
   }
+  /* 채용공고만 — 아래 applyPickedJob 은 '지원할 공고' 하나를 쓴다.
+     사업 내용·기사까지 섞여 들어오면 공고 칸에 기사 제목이 들어간다. */
+  const pickedJobs = company => evidenceFor(company).filter(e => e.kind === 'job');
 
   const SAMPLE = `[주요업무]
 - 채널별 마케팅 성과 데이터 분석 및 리포트 작성
@@ -364,7 +367,18 @@
        분석을 돌릴 수 있는지도 같이 알린다. 버튼을 눌러 보고 나서 "공고를 넣으세요"를
        만나면 늦다. */
     const done = STEPS.filter(s => valueOf(s.input)).length;
-    const canRun = valueOf('#jd-text').length >= 30;
+    /* ── '공고 필수' 를 풀었다 ────────────────────────────────────
+       예전에는 공고 30자가 없으면 아무것도 못 했다. 그런데 **공고를 못 구하는 것이
+       보통이다** — 대기업 공채는 자사 채용 사이트로만 올라와서 워크넷·잡알리오에
+       안 잡히고, 3단계에서 회사를 골라 와도 넘어오는 것은 회사 이름뿐인 일이 많다.
+       그 상태로 입구를 잠가 두면 로드맵 3→4 가 대부분의 경우 거기서 끊긴다.
+
+       대신 **무엇으로 시작했는지에 따라 나오는 것이 다르다**고 화면이 말한다.
+       공고가 있으면 역량까지, 회사 근거만 있으면 지원동기까지. 같은 버튼이 같은
+       결과를 낸다고 믿게 두면 안 된다. */
+    const hasPosting = valueOf('#jd-text').length >= 30;
+    const evCount = evidenceFor(valueOf('#jd-company')).length;
+    const canRun = hasPosting || evCount > 0;
 
     const bar = $('#jd-ready-fill');
     if (bar) {
@@ -373,10 +387,13 @@
     }
     const ready = $('#jd-ready');
     if (ready) {
-      ready.innerHTML = canRun
+      ready.innerHTML = hasPosting
         ? `${STEPS.length}개 중 <b>${done}개</b> 입력됨.${
             valueOf('#jd-questions') ? '' : ' 문항까지 넣으면 문항별 배분까지 나와요.'}`
-        : `<b>채용공고</b>를 넣어야 분석할 수 있어요.`;
+        : evCount
+          ? `담아 온 회사 근거 <b>${evCount}건</b>으로 <b>지원동기</b>부터 쓸 수 있어요.
+             공고를 넣으면 <b>직무역량</b> 문항까지 분석합니다.`
+          : `<b>채용공고</b>를 넣거나, 회사 리포트에서 <b>근거를 담아</b> 오세요.`;
     }
   }
 
@@ -434,26 +451,42 @@
 
     if (!company) {
       box.innerHTML = `<p class="jd-hint" style="padding:0 16px 16px">회사명을 적으면 초안이 회사별로 나뉘어 저장돼요.
-        회사 리포트에서 공고를 담아 오면 여기에 나타나고, 아래 채용공고 칸도 함께 채워집니다.</p>`;
+        회사 리포트에서 근거를 담아 오면 여기에 나타나고, 아래 채용공고 칸도 함께 채워집니다.</p>`;
       return;
     }
+
+    /* ── 종류별로 나눠 보여준다 ──────────────────────────────────
+       한 통에 섞어 놓으면 "담긴 건 알겠는데 무엇을 어디에 쓰라는 거지" 가 된다 —
+       담기를 한 번 좁혔던 이유가 정확히 그것이었다. 종류마다 **어느 문항에 쓰는지**를
+       같이 적는 것이 넓히기의 전제 조건이다. */
+    const groups = Roadmap.evidenceByKind(company);
     box.innerHTML = `
       <div style="padding:0 16px 16px">
-        <span class="wf-eyebrow">${esc(company)} · 담은 공고 ${list.length}건</span>
-        ${list.length ? `
-          <div class="co-picked" style="margin-top:8px">
-            ${list.map(e => `<div class="co-picked-item"><span>
-              <b>${esc(e.text)}</b>
-              ${e.qualification || e.preference
-                ? ` <span class="wf-badge wf-badge--ok">지원자격 포함</span>` : ''}
-              ${[e.region, e.career, e.edu].filter(Boolean).length
-                ? `<br><span style="color:var(--wf-mute)">${[e.region, e.career, e.edu].filter(Boolean).map(esc).join(' · ')}</span>`
-                : ''}
-              ${e.url ? ` <a href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">공고 열기</a>` : ''}
-            </span></div>`).join('')}
+        <span class="wf-eyebrow">${esc(company)} · 담은 근거 ${list.length}건</span>
+        ${groups.length ? `
+          <div class="jd-ev-groups">
+            ${groups.map(g => `
+              <div class="jd-ev-group">
+                <div class="jd-ev-h">
+                  <b>${esc(g.label)}</b>
+                  <span class="wf-badge wf-badge--mute">${g.items.length}건</span>
+                  <span class="jd-ev-use">${esc(g.use.join(' · '))} 문항에 씁니다</span>
+                </div>
+                <div class="co-picked">
+                  ${g.items.map(e => `<div class="co-picked-item"><span>
+                    <b>${esc(e.text.length > 160 ? e.text.slice(0, 160) + '…' : e.text)}</b>
+                    ${e.qualification || e.preference
+                      ? ` <span class="wf-badge wf-badge--ok">지원자격 포함</span>` : ''}
+                    ${[e.source, ...[e.region, e.career, e.edu]].filter(Boolean).length
+                      ? `<br><span style="color:var(--wf-mute)">${[e.source, e.region, e.career, e.edu].filter(Boolean).map(esc).join(' · ')}</span>`
+                      : ''}
+                    ${e.url ? ` <a href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">원문 열기</a>` : ''}
+                  </span></div>`).join('')}
+                </div>
+              </div>`).join('')}
           </div>`
-          : `<p class="jd-hint">아직 없어요. <b>회사 리포트에서 근거 담기</b>를 눌러
-               지원할 공고를 담아 오세요.</p>`}
+          : `<p class="jd-hint">아직 없어요. <b>회사 리포트</b>의 개요·재무·최근 이슈·채용공고 칸에서
+               <b>자소서에 담기</b>를 누르면 여기로 넘어옵니다.</p>`}
       </div>`;
   }
 
@@ -477,7 +510,7 @@
      반환값으로 '어디까지 채웠는지'를 알려준다. 호출부가 안내 문구를 고르는 데 쓴다 —
      본문이 들어갔는데도 "본문을 붙여넣으세요"라고 하면 안 된다. */
   function applyPickedJob(company) {
-    const job = evidenceFor(company)[0];
+    const job = pickedJobs(company)[0];
     const ta = $('#jd-text');
     if (!job || !ta || ta.value.trim()) return null;
 
@@ -651,10 +684,19 @@
     const resultEl = $('#jd-result');
     const text = analysisText();
 
+    /* 공고가 없으면 담아 온 회사 근거로 간다. 서버는 역량 추출을 건너뛰고
+       안내 문구(disclaimer·checklist)만 준다 — 그 문장들의 단일 출처가 서버라
+       프론트에 복사해 두면 한쪽만 고쳐진다. */
     if (text.length < 30) {
-      statusEl.textContent = '채용공고를 30자 이상 넣어 주세요.';
-      openStep(1, true);
-      return;
+      const company = valueOf('#jd-company');
+      if (!evidenceFor(company).length) {
+        statusEl.textContent = company
+          ? '채용공고를 30자 이상 넣거나, 회사 리포트에서 근거를 담아 오세요.'
+          : '채용공고를 30자 이상 넣어 주세요.';
+        openStep(1, true);
+        return;
+      }
+      return runFromEvidence(company);
     }
 
     btn.disabled = true;
@@ -671,6 +713,50 @@
       render(_last);
       /* 결과가 나오면 입력칸을 접는다 — 다 쓴 입력이 화면을 차지하고 있으면
          결과를 보려고 매번 그만큼을 스크롤해서 지나가야 한다. */
+      STEPS.forEach(s => blockOf(s)?.classList.remove('is-open'));
+      STEPS.forEach(paintBlock);
+      paintProgress();
+      resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (e) {
+      statusEl.textContent = '';
+      resultEl.hidden = false;
+      resultEl.innerHTML = `<div class="jd-err">${esc(e.message)}</div>`;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  /* ── 공고 없이 시작하기 ──────────────────────────────────────
+     담아 온 회사 근거만으로 지원동기부터 쓴다. 서버는 작성 기준만 주고 역량은
+     주지 않는다 — 역량은 공고에서 나오는 값이라, 없는데 지어 주면 근거 없는
+     목록이 된다(routes/jdCoach.js /guide 주석).
+
+     ── 문항이 없으면 하나를 깔아 준다 ──
+     문항 칸이 비어 있으면 탭이 없어서 "쓸 문항이 없어요" 만 뜬다. 회사 근거를
+     담아 온 사람에게 그건 막다른 길이라, 지원동기 문항 하나를 기본으로 깐다.
+     사용자가 자기 문항을 넣으면 그것으로 바뀐다. */
+  const DEFAULT_MOTIVE_Q = '지원 동기와 입사 후 포부를 기술해 주십시오.';
+
+  async function runFromEvidence(company) {
+    const btn = $('#jd-run');
+    const statusEl = $('#jd-status');
+    const resultEl = $('#jd-result');
+
+    btn.disabled = true;
+    statusEl.textContent = '담아 온 근거로 작성 기준을 준비하는 중…';
+    resultEl.hidden = true;
+
+    try {
+      _last = await DB.guideJd(company);
+      statusEl.textContent = '';
+      _focused = 0; _tab = 0;
+      /* 문항 칸이 비어 있으면 기본 문항을 실제로 **써 넣는다**. 화면에만 띄우고
+         입력칸을 비워 두면, 사용자가 문항을 고치려 할 때 어디를 고쳐야 할지 모른다. */
+      if (!parseQuestions().length && $('#jd-questions')) {
+        $('#jd-questions').value = DEFAULT_MOTIVE_Q;
+        paintBlock(STEPS[3]);
+      }
+      render(_last);
       STEPS.forEach(s => blockOf(s)?.classList.remove('is-open'));
       STEPS.forEach(paintBlock);
       paintProgress();
@@ -920,17 +1006,36 @@
     }
 
     const company = valueOf('#jd-company');
-    const ev = evidenceFor(company);
-    /* 지원동기 문항은 공고가 아니라 회사 소식이 근거다. 없는 소재를 지어내지 않고
-       "어디서 가져오라"까지만 말한다. */
+    /* 지원동기 문항은 공고가 아니라 **회사 근거**가 재료다. 담아 온 것 중 이 문항
+       유형에 쓰는 것만 고른다 — 종류를 안 가리고 다 올리면 지원동기 칸에 채용공고
+       제목이 섞여서, 담기를 넓힌 만큼 도리어 헷갈린다(3단계 담기의 옛 실패와 같은 부류).
+       무엇이 어느 문항에 쓰이는지의 단일 출처는 Roadmap.EVIDENCE_KINDS 다. */
     const isMotive = tab.type?.pick === 'news';
+    const ev = tab.type ? Roadmap.evidenceFor(company, tab.type.label) : [];
 
     const source = isMotive
       ? `<div class="jd-qprompt-comps">
            ${ev.length
-             ? ev.slice(0, 3).map(e => `<span class="wf-badge wf-badge--soft">${esc(e.text.slice(0, 28))}${e.text.length > 28 ? '…' : ''}</span>`).join('')
+             ? ev.slice(0, 4).map(e => `<span class="wf-badge wf-badge--soft" title="${esc(e.source || '')}">${esc(e.text.slice(0, 28))}${e.text.length > 28 ? '…' : ''}</span>`).join('')
              : `<span class="wf-badge wf-badge--warn">회사 리포트에서 근거를 먼저 담으세요</span>`}
-         </div>`
+         </div>
+         <!-- ── 지원동기 AI 초안 (사용자 결정) ────────────────────
+              역량 문항의 AI 초안은 왼쪽 역량 카드마다 붙어 있는데, 지원동기 문항은
+              왼쪽에 붙을 카드가 없다(역량이 아니라 회사 근거가 재료라서). 그래서
+              문항 프롬프트 바로 아래에 둔다.
+
+              **근거가 없으면 버튼을 만들지 않는다.** 근거 없이 부르면 모델이 회사
+              이야기를 통째로 지어내는데, 그건 '대괄호로 비운다' 규칙으로도 못 막는다 —
+              지어낼 재료가 프롬프트 밖(모델의 사전지식)에 있기 때문이다. -->
+         ${ev.length ? `<div class="jd-motive-ai">
+           <button type="button" class="wf-btn wf-btn--sm wf-btn--primary" data-motive>
+             <i class="ti ti-sparkles"></i> 담은 근거로 지원동기 초안 쓰기
+           </button>
+           <span class="jd-draft-state" data-motive-state></span>
+           <p class="jd-hint">담아 온 <b>${ev.length}건</b>만 사실로 씁니다 —
+             그 밖의 회사 이야기는 대괄호로 비워서 직접 확인하게 해요.</p>
+           <div data-motive-notes></div>
+         </div>` : ''}`
       : `<div class="jd-qprompt-comps">
            ${tab.comps.map(c => {
              const i = r.items.indexOf(c);
@@ -1155,13 +1260,18 @@
     if (!box) return;
     box.hidden = false;
 
-    if (!r.items?.length) {
+    /* 역량이 비는 경우가 둘인데 뜻이 정반대다.
+         · 공고를 넣었는데 못 뽑았다      → 공고를 다시 넣어야 한다
+         · 애초에 공고 없이 시작했다      → 정상이다. 지원동기부터 쓰면 된다
+       빈 목록 하나로 두 경우를 같이 처리하면, 근거를 담아 온 사람이 "실패했다" 는
+       화면을 보게 된다(16-5 · 17-5 와 같은 원칙 — 빈칸의 뜻을 갈라 적는다). */
+    if (!r.items?.length && r.mode !== 'company') {
       box.innerHTML = `<div class="wf-card"><div class="jd-empty">공고에서 역량을 뽑아내지 못했어요.
         모집분야·자격요건이 들어간 본문을 넣어 주세요.</div></div>`;
       return;
     }
 
-    _focused = Math.min(_focused, r.items.length - 1);
+    _focused = Math.max(0, Math.min(_focused, r.items.length - 1));
     const tabs = tabsOf(r);
     _lastTabs = tabs;
     _tab = Math.min(_tab, Math.max(0, tabs.length - 1));
@@ -1178,15 +1288,19 @@
       });
     });
 
-    const src = r.provider === 'rule'
-      ? '공고 키워드로 직접 추출 (AI 미사용)'
-      : `공고 키워드 + AI 보강 (${esc(r.model || r.provider)})`;
+    const src = r.mode === 'company'
+      ? '공고 없이 시작 — 담아 온 회사 근거 기준'
+      : r.provider === 'rule'
+        ? '공고 키워드로 직접 추출 (AI 미사용)'
+        : `공고 키워드 + AI 보강 (${esc(r.model || r.provider)})`;
 
     box.innerHTML = `
       <div class="jd-workspace">
         <div class="jd-ws-bar">
           <h2>분석 결과</h2>
-          <span class="jd-ws-src">공고 문장 ${r.jdSentences}개를 읽었어요 · ${src}</span>
+          <span class="jd-ws-src">${r.mode === 'company'
+            ? src
+            : `공고 문장 ${r.jdSentences}개를 읽었어요 · ${src}`}</span>
           <span class="jd-ws-end">
             ${r.notice ? `<span class="jd-notice">${esc(r.notice)}</span>` : ''}
             <button type="button" class="wf-btn wf-btn--sm" data-reopen>입력 다시 보기</button>
@@ -1198,9 +1312,17 @@
 
         <div class="jd-split">
           <div class="jd-comp-pane">
-            ${keysHtml(r)}
+            ${r.items.length ? keysHtml(r) : ''}
             <div class="jd-comp-list">
-              ${r.items.map((it, i) => compHtml(it, i, qMap)).join('')}
+              ${r.items.length
+                ? r.items.map((it, i) => compHtml(it, i, qMap)).join('')
+                : `<div class="jd-empty jd-empty--soft">
+                     <b>요구 역량은 공고에서 나옵니다.</b>
+                     <p>지금은 담아 온 회사 근거로 <b>지원동기</b>를 쓰는 중이에요.
+                        위 <b>채용공고</b> 칸에 공고 본문을 붙여넣고 다시 누르면
+                        이 자리에 요구 역량과 내 경험 배정이 나옵니다.</p>
+                     <button type="button" class="wf-btn wf-btn--sm" data-reopen>공고 넣으러 가기</button>
+                   </div>`}
             </div>
           </div>
           ${draftHtml(r, tabs)}
@@ -1237,6 +1359,10 @@
       const i = Number(el.dataset.ai);
       el.addEventListener('click', () => insertAiDraft(r.items[i], i, r));
     });
+
+    // 지원동기 초안 — 담아 온 회사 근거로 문단을 만든다
+    const motiveBtn = box.querySelector('[data-motive]');
+    if (motiveBtn) motiveBtn.addEventListener('click', () => insertMotiveDraft(r, tabs));
 
     const reopen = box.querySelector('[data-reopen]');
     if (reopen) reopen.addEventListener('click', () => {
@@ -1331,6 +1457,85 @@
     } finally {
       btn.disabled = false;
     }
+  }
+
+  /* ── 지원동기 초안 ────────────────────────────────────────────
+     insertAiDraft 와 하는 일은 같지만(문단을 만들어 커서 자리에 끼운다) 재료가
+     다르다 — 저기는 내 STAR, 여기는 담아 온 회사 근거다. 그래서 STAR 가 비었는지
+     묻지 않는다. 지원동기는 STAR 없이도 쓰는 문항이다.
+
+     덮어쓰지 않고 **커서 자리에 끼워 넣는 것**은 같다. 이미 쓰던 글이 있으면
+     그게 사용자의 문장이고, AI 문장으로 지우면 되돌릴 방법이 없다. */
+  async function insertMotiveDraft(r, tabs) {
+    const ta = $('#jd-draft');
+    const btn = document.querySelector('[data-motive]');
+    const stateEl = document.querySelector('[data-motive-state]');
+    if (!ta || !btn) return;
+
+    const company = valueOf('#jd-company');
+    const tab = (tabs || _lastTabs || [])[_tab];
+    const ev = tab?.type ? Roadmap.evidenceFor(company, tab.type.label) : [];
+    if (!ev.length) {
+      if (stateEl) stateEl.textContent = '담아 온 근거가 없어요.';
+      return;
+    }
+
+    btn.disabled = true;
+    if (stateEl) stateEl.textContent = '담은 근거를 읽고 쓰는 중… (1분 이상 걸릴 수 있어요)';
+
+    try {
+      const out = await DB.motiveJd({
+        company,
+        jobTitle: r?.market?.bucket || Roadmap.get()?.jobName || '',
+        question: tab?.kind === 'question' ? tab.text : '',
+        /* 서버가 필요한 것만 보낸다 — id·url 은 프롬프트에 쓸모가 없고,
+           보내 봤자 프롬프트만 길어져 뒤쪽 규칙이 밀린다. */
+        evidence: ev.map(e => ({ kind: e.kind, text: e.text, source: e.source || '' })),
+        limit: 600,
+      });
+
+      const at = ta.selectionStart ?? ta.value.length;
+      const pad = ta.value.trim() && at > 0 ? '\n\n' : '';
+      const text = pad + out.draft;
+      ta.value = ta.value.slice(0, at) + text + ta.value.slice(ta.selectionEnd ?? at);
+      ta.focus();
+      ta.setSelectionRange(at + text.length, at + text.length);
+      ta.dispatchEvent(new Event('input'));
+
+      /* 빈칸 0개는 '완성됐다' 가 아니라 **그대로 내면 안 되는 상태**다.
+         대괄호가 대필 방지 장치라, 없으면 그 장치가 안 걸린 문단이다(16-2).
+         '넣었어요' 로 끝내면 학생은 다 됐다고 읽는다. */
+      if (stateEl) {
+        stateEl.innerHTML = out.blankCount
+          ? `<b>빈칸 ${out.blankCount}개</b>를 본인 사실로 채우세요`
+          : '<b>빈칸 없이 나왔어요</b> — 수치·상황을 본인 사실로 바꿔 쓰세요';
+      }
+      paintMotiveNotes(out);
+    } catch (e) {
+      if (stateEl) stateEl.textContent = e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  /* 초안 옆에 '무엇을 채워야 하는지'·'약한 지점'과 **어느 근거로 썼는지**를 적는다.
+     출처를 안 적으면 학생은 이 문단의 회사 이야기가 어디서 온 것인지 알 수 없고,
+     그러면 면접에서 되물었을 때 답할 수 없다(3단계가 출처를 같이 담는 이유와 같다). */
+  function paintMotiveNotes(out) {
+    const host = document.querySelector('[data-motive-notes]');
+    if (!host) return;
+    const list = (arr, title) => arr?.length
+      ? `<div class="jd-comp-sec"><span class="wf-eyebrow">${title}</span>
+           <ul class="jd-list">${arr.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`
+      : '';
+    const used = (out.usedEvidence || []).length
+      ? `<div class="jd-comp-sec"><span class="wf-eyebrow">이 초안이 쓴 사실</span>
+           <ul class="jd-list">${out.usedEvidence.map(e =>
+             `<li>${esc(e.text.slice(0, 90))}${e.text.length > 90 ? '…' : ''}
+              ${e.source ? `<span style="color:var(--wf-mute)"> — ${esc(e.source)}</span>` : ''}</li>`).join('')}</ul>
+         </div>`
+      : '';
+    host.innerHTML = used + list(out.blanks, '채워야 할 빈칸') + list(out.review, '채용담당자가 볼 약한 지점');
   }
 
   /* 모델이 같이 준 '무엇을 채워야 하는지'와 '채용담당자가 볼 약한 지점'.

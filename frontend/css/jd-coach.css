@@ -955,6 +955,123 @@ a.wf-btn { text-decoration: none; }
 .co-chip:hover { border-color: var(--wf-ink); color: var(--wf-ink); }
 .co-chip--more { color: var(--wf-mute); border-style: dashed; }
 
+/* ── 지원동기 AI 초안 ───────────────────────────────────────
+   역량 문항의 AI 초안은 왼쪽 역량 카드에 붙지만, 지원동기는 붙을 카드가 없다
+   (재료가 역량이 아니라 회사 근거라서). 문항 프롬프트 아래에 자리를 만든다. */
+.jd-motive-ai { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--wf-hairline); }
+.jd-motive-ai .jd-hint { margin-top: 6px; }
+.jd-motive-ai .jd-draft-state { margin-left: 8px; font-size: 12px; color: var(--wf-mute); }
+
+/* 공고 없이 시작했을 때 왼쪽 역량 칸에 들어가는 안내.
+   '실패' 가 아니라 '아직 안 넣었다' 라는 것이 읽혀야 한다. */
+.jd-empty--soft { text-align: left; padding: 20px; }
+.jd-empty--soft b { display: block; margin-bottom: 6px; color: var(--wf-ink); }
+.jd-empty--soft p { margin-bottom: 12px; font-size: 13px; line-height: 1.7; color: var(--wf-mute); }
+
+/* ── 산업 고르기 ────────────────────────────────────────────
+   규모 칩(위)과 같은 부품처럼 보이되, 고른 것이 무엇인지는 더 또렷해야 한다 —
+   이 선택이 아래 목록 전체를 정하기 때문이다. */
+.co-inds { margin-bottom: 4px; }
+.co-indchips { display: flex; flex-wrap: wrap; gap: 8px; }
+.co-indchip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 14px; border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-sm);
+  background: var(--wf-canvas); font: inherit; font-size: 14px; color: var(--wf-body); cursor: pointer;
+}
+.co-indchip:hover { border-color: var(--wf-ink); color: var(--wf-ink); }
+.co-indchip b { font-size: 12px; font-weight: 500; color: var(--wf-mute); }
+.co-indchip i { font-size: 13px; color: var(--wf-purple, #7a3dff); }
+/* 직무로 좁혀진 계열 — 고르라고 강요하지 않고 표시만 한다. */
+.co-indchip.is-focus {
+  border-color: color-mix(in srgb, var(--wf-purple, #7a3dff) 45%, transparent);
+  background: color-mix(in srgb, var(--wf-purple, #7a3dff) 5%, transparent);
+}
+.co-indchip.is-on {
+  border-color: var(--wf-ink); background: var(--wf-ink); color: var(--wf-canvas);
+}
+.co-indchip.is-on b, .co-indchip.is-on i { color: var(--wf-canvas); opacity: .72; }
+
+.co-indlist { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* 아직 안 골랐을 때. 빈 화면으로 두면 목록이 없는 것처럼 보인다. */
+.co-indempty {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 32px 20px; border: 1px dashed var(--wf-hairline); border-radius: var(--wf-r-md);
+  text-align: center;
+}
+.co-indempty i { font-size: 20px; color: var(--wf-mute); }
+.co-indempty b { font-size: 15px; font-weight: 500; color: var(--wf-ink); }
+.co-indempty span { font-size: 13px; color: var(--wf-mute); }
+
+/* ── 담기 버튼 ──────────────────────────────────────────────
+   개요·재무·최근 이슈·채용공고 네 칸에 같은 버튼이 뜬다. 칸마다 따로 만들면
+   담긴 표시가 칸마다 어긋나므로 한 벌만 둔다(company-cover.js pickBtn). */
+.co-take {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 10px; border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-sm);
+  background: var(--wf-canvas); font: inherit; font-size: 12px; color: var(--wf-mute); cursor: pointer;
+  white-space: nowrap;
+}
+.co-take:hover { border-color: var(--wf-ink); color: var(--wf-ink); }
+.co-take i { font-size: 14px; }
+.co-take.is-on {
+  border-color: var(--wf-ok, #00a83a); color: var(--wf-ok, #00a83a);
+  background: color-mix(in srgb, var(--wf-ok, #00a83a) 8%, transparent);
+}
+/* 사업 내용 줄글 아래에 붙는 담기는 문단과 붙지 않게 띄운다. */
+.co-biz-block .co-take { margin-top: 10px; }
+.co-stat .co-take { margin-top: 8px; }
+.co-tbl-take { text-align: right; white-space: nowrap; }
+.co-news-item .co-take { margin-left: auto; align-self: center; }
+
+/* 게이지의 종류별 칸. 숫자 하나로 뭉치면 무엇을 담았는지 알 수 없다. */
+.co-gauge-kinds { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px; }
+.co-gauge-kind {
+  padding: 2px 7px; border-radius: 4px; background: var(--wf-fill);
+  font-size: 11px; color: var(--wf-mute);
+}
+.co-gauge-kind b { font-weight: 500; color: var(--wf-body); }
+
+/* ── 4단계의 담은 근거 — 종류별 묶음 ─────────────────────────
+   "담긴 건 알겠는데 무엇을 어디에 쓰라는 거지" 를 없애는 것이 이 묶음의 목적이다. */
+.jd-ev-groups { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
+.jd-ev-h { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.jd-ev-h b { font-size: 13px; font-weight: 500; color: var(--wf-ink); }
+.jd-ev-use { font-size: 11px; color: var(--wf-mute); }
+
+/* ── 기업규모 필터 ──────────────────────────────────────────
+   1단계에서 고른 대·중견·중소·공이 여기로 온다. 계열 아코디언보다 **위**에 둔다 —
+   아래 목록 전체를 바꾸는 스위치라, 목록 사이에 끼면 그 계열에만 걸리는 것으로 읽힌다. */
+.co-sizes { margin-bottom: 4px; }
+.co-sizechips { display: flex; flex-wrap: wrap; gap: 8px; }
+.co-sizechip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 15px; border: 1px solid var(--wf-hairline); border-radius: 999px;
+  background: var(--wf-canvas); font: inherit; font-size: 14px; color: var(--wf-body); cursor: pointer;
+}
+.co-sizechip:hover { border-color: var(--wf-ink); color: var(--wf-ink); }
+.co-sizechip b { font-size: 12px; font-weight: 500; color: var(--wf-mute); }
+.co-sizechip.is-on {
+  border-color: var(--wf-ink); background: var(--wf-ink); color: var(--wf-canvas);
+}
+.co-sizechip.is-on b { color: var(--wf-canvas); opacity: .72; }
+
+/* 회사 칩의 규모 배지. 필터가 꺼져 있을 때만 붙는다 — 켜져 있으면 전부 같은 값이라
+   정보가 아니라 잡음이 된다(company-cover.js companyChip 주석). */
+.co-chip-size {
+  margin-left: 6px; padding: 1px 5px; border-radius: 4px;
+  font-size: 11px; font-style: normal; line-height: 1.6;
+  background: var(--wf-fill); color: var(--wf-mute);
+}
+.co-chip-size--large { background: color-mix(in srgb, var(--wf-purple, #7a3dff) 12%, transparent); color: var(--wf-purple, #7a3dff); }
+.co-chip-size--public { background: color-mix(in srgb, var(--wf-blue, #3b89ff) 12%, transparent); color: var(--wf-blue, #3b89ff); }
+
+/* 공공기관 칩은 두 줄이다 — 유형(공기업(시장형))과 소관부처가 이름만큼 중요하다. */
+.co-chip--org { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; }
+.co-chip--org b { font-size: 13px; font-weight: 500; color: var(--wf-body); }
+.co-chip--org small { font-size: 11px; color: var(--wf-mute); }
+.co-chip--org:hover b { color: var(--wf-ink); }
+
 /* ── 로드맵 3단계 · 이 직무를 주로 뽑는 계열 ────────────────
    아래 '계열로 둘러보기'(전체 목록)와 같은 부품을 쓰되, 초점이라는 것이 보여야
    한다. 다른 카드를 만들지 않고 테두리와 배경만 바꾼다 — 두 벌을 만들면 계열

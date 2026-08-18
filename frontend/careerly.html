@@ -300,40 +300,15 @@
         <div><h2>커리어 인사이트</h2><div class="sub">데이터로 읽는 취업 준비 이야기</div></div>
         <span class="home-sec-all" onclick="goInsights()">전체보기</span>
       </div>
-      <div class="home-articles">
-        <div class="art-card acc-a">
-          <div class="art-cover"><span class="emoji">📜</span></div>
-          <div class="art-body">
-            <span class="art-chip">자격증</span>
-            <div class="art-title">백엔드 취업, 정보처리기사는 정말 필수일까?</div>
-            <div class="art-meta">데이터 인사이트 · 5분</div>
-          </div>
-        </div>
-        <div class="art-card acc-b">
-          <div class="art-cover"><span class="emoji">💼</span></div>
-          <div class="art-body">
-            <span class="art-chip">인턴십</span>
-            <div class="art-title">합격자 71%가 경험한 인턴십, 언제 시작할까</div>
-            <div class="art-meta">데이터 인사이트 · 7분</div>
-          </div>
-        </div>
-        <div class="art-card acc-a">
-          <div class="art-cover"><span class="emoji">🗣️</span></div>
-          <div class="art-body">
-            <span class="art-chip">어학</span>
-            <div class="art-title">TOEIC 900 vs 850, 실제 합격선은 어디일까</div>
-            <div class="art-meta">데이터 인사이트 · 4분</div>
-          </div>
-        </div>
-        <div class="art-card acc-b">
-          <div class="art-cover"><span class="emoji">🏆</span></div>
-          <div class="art-body">
-            <span class="art-chip">활동</span>
-            <div class="art-title">공모전 수상이 CAS 점수에 미치는 영향</div>
-            <div class="art-meta">데이터 인사이트 · 6분</div>
-          </div>
-        </div>
-      </div>
+      <!-- ── 카드는 JS 가 만든다 (home.js paintArticles) ──────────────
+           예전에는 제목 네 개가 여기 박혀 있었고 **누를 수도 없었다** — 읽을 글이
+           애초에 없었기 때문이다. 지금은 커리어 인사이트 게시판의 실제 글로
+           이어지고, 그 글 목록은 서버가 준다(/api/insights/featured).
+
+           박아 둔 제목에는 '합격자 71%', 'TOEIC 900 vs 850' 처럼 **출처 없는
+           수치**도 들어 있었다. 화면을 채우려고 넣은 값인데 학생은 그걸 사실로
+           읽는다 — 새 글에는 그런 숫자가 없다(insight-featured.js 머리주석). -->
+      <div class="home-articles" id="home-articles"></div>
     </section>
 
     <footer class="home-footer">
@@ -1118,6 +1093,8 @@
 <script src="js/mentoring.js"></script>
 <script src="js/jd-coach.js"></script>
 <script src="js/company-cover.js"></script>
+<!-- 마크다운 렌더러. insight.js 보다 **먼저** 와야 한다 — 본문을 그릴 때 쓴다. -->
+<script src="js/markdown.js"></script>
 <script src="js/insight.js"></script>
 <!-- specup 은 CASHero.resolveContext 와 mentoring.js 의 window.Gap 을 쓴다 — 둘 뒤에 둔다 -->
 <script src="js/specup.js"></script>

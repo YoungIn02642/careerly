@@ -161,8 +161,14 @@ function classify(companyName) {
     const key = normalize(companyName);
     if (!key) return { type: DEFAULT_TYPE, source: '기본값(빈 회사명)', matched: false };
 
-    const hit = cache().map.get(key);
-    if (hit) return { type: hit.type, source: hit.source, matched: true };
+    /* 음차까지 같이 본다. 예전에는 suggest 만 이 규칙을 갖고 있어서, 자동완성으로는
+       'SK하이닉스' 가 대기업으로 나오는데 그걸 골라 저장하면 **중소기업으로 분류**됐다
+       (실측: SK하이닉스·LG전자·KT·CJ제일제당·NAVER 전부 '기본값(미등록)').
+       같은 명단을 두 함수가 다르게 읽고 있던 것이라 규칙을 하나로 합쳤다. */
+    for (const k of queryKeys(key)) {
+      const hit = cache().map.get(k);
+      if (hit) return { type: hit.type, source: hit.source, matched: true };
+    }
 
     return { type: DEFAULT_TYPE, source: '기본값(미등록)', matched: false };
   } catch (e) {
@@ -189,17 +195,26 @@ const QUERY_ALIASES = {
   SK: '에스케이', LG: '엘지', KT: '케이티', GS: '지에스', CJ: '씨제이',
   KB: '케이비', LS: '엘에스', HD: '에이치디', BGF: '비지에프', DL: '디엘',
   DB: '디비', OCI: '오씨아이', HMM: '에이치엠엠', KCC: '케이씨씨', NH: '엔에이치',
+  NAVER: '네이버', POSCO: '포스코', SPC: '에스피씨', HL: '에이치엘', AK: '에이케이',
 };
+
+/* 정규화된 질의 하나 → 실제로 찾아볼 키들. 원문이 먼저다(명단에 알파벳으로 올라온
+   회사도 있다). classify 와 suggest 가 **같은 함수**를 쓴다 — 갈리면 자동완성에서
+   본 분류와 저장된 분류가 달라진다. */
+function queryKeys(normalized) {
+  const out = [normalized];
+  for (const [abbr, kor] of Object.entries(QUERY_ALIASES)) {
+    if (normalized.startsWith(abbr)) out.push(kor + normalized.slice(abbr.length));
+  }
+  return out;
+}
 
 function suggest(query, limit = 8) {
   const q = normalize(query);
   if (!q) return [];
 
   /* 알파벳으로 시작하면 음차로 바꾼 질의도 같이 본다. 'SK하이닉스' → '에스케이하이닉스' */
-  const queries = [q];
-  for (const [abbr, kor] of Object.entries(QUERY_ALIASES)) {
-    if (q.startsWith(abbr)) queries.push(kor + q.slice(abbr.length));
-  }
+  const queries = queryKeys(q);
 
   const starts = [];
   const contains = [];

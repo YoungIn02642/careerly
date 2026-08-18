@@ -229,5 +229,75 @@ ok('coach 가 없어도 깨지지 않는다',
 ok('STAR 에 없는 것을 지어내지 말라고 못 박는다',
    pStar.includes('언제나 비워두기가 맞다'));
 
+/* ══ 지원동기 문단 ══════════════════════════════════════════
+   STAR 초안과 축이 다르다 — 증명 대상이 내 경험이 아니라 "왜 이 회사인가" 이고,
+   지어내기의 위험도 하나 더 있다: **회사가 하지 않은 일**. */
+console.log('\n── 지원동기 프롬프트 ──');
+const EV = [
+  { kind: 'biz',  text: '도료 및 관련제품을 생산·판매하고 있습니다', source: '사업보고서 「1. 사업의 개요」' },
+  { kind: 'fact', text: '매출액 5,986억원 · 전년비 −6.9%', source: '2025년 사업보고서' },
+  { kind: 'news', text: '항균 도료 신제품 출시', source: '2026-05-12 · example.com' },
+];
+const ACTS = [{ name: '커머스 데이터 인턴', typeLabel: '인턴십', duration: '3개월', role: '데이터 분석' }];
+const pM = DRAFT.buildMotivePrompt({
+  company: '강남제비스코', jobTitle: '백엔드 개발자',
+  question: '지원 동기와 입사 후 포부를 기술해 주십시오.',
+  evidence: EV, activities: ACTS, limit: 600,
+});
+
+ok('회사와 문항이 들어간다', pM.includes('강남제비스코') && pM.includes('입사 후 포부'));
+ok('담아 온 근거가 전부 들어간다', EV.every(e => pM.includes(e.text)));
+ok('출처까지 같이 넣는다', pM.includes('사업보고서 「1. 사업의 개요」'),
+   '출처 없이 나온 문단은 면접에서 되물으면 답할 수 없다');
+ok('근거 종류를 이름으로 적는다', pM.includes('사업 내용 —') && pM.includes('최근 기사 —'));
+/* ── 실측으로 잡은 것 ────────────────────────────────────────
+   종류 이름을 `[사업 내용]` 으로 감쌌더니 모델이 그 대괄호를 **빈칸 표기로 읽고**
+   초안에 "귀사는 현재 [사업 내용]을 진행하고 있으며" 라고 썼다. 담아 온 사실을
+   쓰라고 준 재료가 도리어 빈칸이 된 것이다.
+   이 프롬프트에서 대괄호는 "여기를 비워라" 하나만 뜻해야 한다. */
+ok('근거 목록에 대괄호를 쓰지 않는다',
+   !pM.split('# Restriction')[0].split('\n').filter(l => l.trim().startsWith('- ')).some(l => l.includes('[')),
+   '대괄호가 두 가지 뜻을 가지면 모델이 재료를 빈칸으로 읽는다');
+ok('근거를 그대로 녹이라고 못 박는다', pM.includes('대괄호로 비우지 말고 그대로 문장에 녹여라'));
+/* 최대만 걸어 뒀더니 빈칸 0개인 문단이 나왔다 — 그건 초안이 아니라 그대로 낼 수
+   있는 대필이다. 대괄호가 이 기능의 대필 방지 장치라 최소도 걸어야 한다(16-2). */
+ok('빈칸 최소 한 개를 요구한다', pM.includes('최소 한 곳을 반드시 대괄호로 비운다'));
+ok('빈칸 상한도 그대로 있다', pM.includes('최대 4개'));
+ok('근거 밖의 회사 사실을 금지한다', pM.includes('유일한 사실') && pM.includes('한 줄도 만들지 마라'));
+ok('내 활동도 같이 넣는다', pM.includes('커머스 데이터 인턴'));
+
+/* 지원동기가 무너지는 자리는 늘 같다 — 어느 회사에나 붙는 문장이다. */
+ok('일반론으로 시작하지 말라고 적는다', pM.includes('어느 회사에나'));
+ok('네 덩이 순서를 지시한다', pM.includes('입사 후 맡고 싶은 일'));
+ok('상투 표현 목록을 넘긴다', pM.includes('비전에 공감'));
+ok('한국어만 쓰게 한다', pM.includes('한국어로만'));
+ok('coach 는 비운다', pM.includes('"coach": []'),
+   'STAR 칸이 없는 문항이라 되짚기가 붙을 자리가 없다');
+/* 규칙 번호가 어긋나면 모델이 "4번 규칙" 을 못 찾는다 — 조립할 때 다시 매긴다. */
+ok('규칙 번호가 1부터 이어진다',
+   pM.split('# Restriction')[1].split('# Output')[0].trim().split('\n')
+     .filter(l => /^\d+\./.test(l)).map(l => parseInt(l, 10))
+     .every((n, i) => n === i + 1));
+
+/* 근거가 없으면 프롬프트 안에서도 '지어내지 말라' 가 유지돼야 한다. 라우트가
+   400 으로 막지만, 프롬프트 자체가 안전한 편이 낫다. */
+const pMEmpty = DRAFT.buildMotivePrompt({ company: '카카오', evidence: [], activities: [], limit: 600 });
+ok('근거가 없으면 전부 비우라고 한다', pMEmpty.includes('전부 대괄호로 비워라'));
+ok('활동도 없으면 그것도 비우라고 한다', pMEmpty.includes('지원자 경험 자리도 전부 대괄호'));
+
+/* 사업보고서 문단은 수천 자다. 프롬프트가 길어지면 뒤쪽 Restriction 이 밀려서
+   지어내기 금지 규칙이 잘린다 — 자르는 것은 라우트의 일이지만, 잘린 값이 들어와도
+   프롬프트 모양이 깨지지 않아야 한다. */
+const pLong = DRAFT.buildMotivePrompt({
+  company: 'A', evidence: [{ kind: 'biz', text: '가'.repeat(700), source: 'x' }], activities: [], limit: 600,
+});
+ok('긴 근거가 와도 규칙이 뒤에 온다',
+   pLong.indexOf('# Restriction') < pLong.indexOf('# Output')
+   && pLong.includes('한국어로만'));
+
+ok('근거 종류 이름이 4가지 다 있다',
+   ['job', 'biz', 'fact', 'news'].every(k => DRAFT.KIND_LABEL[k]),
+   'frontend/js/roadmap.js EVIDENCE_KINDS 의 label 과 같은 말이어야 한다');
+
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
 process.exit(fail ? 1 : 0);

@@ -857,6 +857,19 @@ app.get('/api/company/sectors', (req, res) => {
   res.json(middle ? { ...base, focus: sectors.sectorFocus(middle, job) } : base);
 });
 
+/* 공공기관 목록 — 1단계에서 '공공기관' 을 고른 학생이 쓴다.
+
+   ── 왜 계열 목록과 같은 라우트에 얹지 않는가 ──
+   둘은 묶는 축이 다르다. 계열은 업종(KSIC)이고 이건 기관 유형(공기업·준정부기관…)
+   이다. 공공기관은 대부분 비상장이라 업종코드가 없어서 계열 목록에는 4곳밖에 못
+   들어간다(company-sectors.js publicOrgs 주석).
+   1,667곳이라 항상 실어 보내면 계열 목록을 여는 사람까지 그 무게를 진다 —
+   규모 필터를 공공기관으로 돌릴 때만 받아간다. */
+app.get('/api/company/public-orgs', (req, res) => {
+  res.set('Cache-Control', 'no-cache');
+  res.json(sectors.publicOrgs());
+});
+
 /* ── 자격증 카탈로그 ────────────────────────────────────────────
    스펙 입력 화면의 자격증 선택 목록. 국가자격(큐넷 API 캐시) + 민간자격(수기).
    650종 남짓 · 60KB 정도라 페이징 없이 통째로 준다 — 프론트가 한 번 받아

@@ -43,6 +43,24 @@ const isConfigured = () => Boolean((process.env.GROQ_API_KEY || '').trim());
    num_ctx / num_predict 는 로컬 추론 시절의 인자다. Groq 는 컨텍스트를 알아서
    잡으므로 num_ctx 는 쓰지 않고, num_predict 만 max_tokens 로 넘긴다.
    호출하는 쪽 코드를 건드리지 않으려고 인자 모양은 그대로 둔다. */
+/* ── 추론형 모델은 생각하다가 토큰을 다 쓴다 (실측) ──────────────
+   지금 .env 의 모델은 `openai/gpt-oss-120b` 다. 이 계열은 답을 내기 전에 추론
+   토큰을 먼저 쓰는데, 그 몫도 max_tokens 안에서 나간다. 자소서 초안처럼 프롬프트가
+   긴 요청에서는 추론에서 예산을 다 쓰고 **본문이 빈 채로 끝난다.**
+
+   그러면 Groq 는 JSON 검증에 걸려 `HTTP 400 json_validate_failed` 를 낸다
+   (failed_generation 이 빈 문자열이다). 화면에는 "AI 초안을 만들지 못했어요" 로만
+   보이는데, 원인이 프롬프트도 키도 쿼터도 아니라서 아무리 다시 눌러도 똑같다.
+
+   실측 — 같은 프롬프트·같은 모델:
+     max_completion_tokens 1100                        → 400 (본문 0자)
+     max_completion_tokens 1100 + reasoning_effort low  → 200 (본문 470자)
+   짧은 프롬프트에서는 그냥 되기 때문에, 이 기능에서만 죽어 있었다.
+
+   추론을 안 쓰는 모델(llama 계열)에 이 인자를 보내면 거절당하므로 모델 이름으로 가른다. */
+const REASONING_MODEL = /gpt-oss|^o[13]|reason|qwen.*thinking|deepseek-r/i;
+const reasoningOpt = () => (REASONING_MODEL.test(GROQ_MODEL) ? { reasoning_effort: 'low' } : {});
+
 async function callModel(text, system, { num_predict = 512 } = {}) {
   const key = (process.env.GROQ_API_KEY || '').trim();
   if (!key) {
@@ -63,6 +81,7 @@ async function callModel(text, system, { num_predict = 512 } = {}) {
         temperature: 0.2,
         max_tokens: num_predict,
         response_format: { type: 'json_object' },
+        ...reasoningOpt(),
         messages: [
           { role: 'system', content: system },
           { role: 'user', content: text },

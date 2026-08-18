@@ -5,6 +5,7 @@
 const express = require('express');
 const { nanoid } = require('nanoid');
 const { query, queryOne } = require('../mysql');
+const FEATURED = require('../insight-featured');
 
 const router = express.Router();
 
@@ -70,6 +71,41 @@ function toComment(r) {
 
 // 카테고리 목록 — 화면이 이 순서·라벨 그대로 탭을 그린다
 router.get('/categories', (req, res) => res.json({ categories: CATEGORIES }));
+
+/* GET /api/insights/featured
+   홈 첫 화면의 '커리어 인사이트' 카드 칸.
+
+   ── 왜 목록 API 를 안 쓰나 ──
+   `/api/insights` 는 최신순이라 누가 글을 쓰면 편집 글이 밀려난다. 홈 카드는
+   **정해진 다섯 편**이고 커버 사진이 글마다 짝지어져 있어서, 순서가 바뀌면
+   사진과 제목이 어긋난다.
+
+   ── 글이 아직 없으면 id 만 null 로 나간다 ──
+   시드를 안 돌린 DB 에서도 홈이 멀쩡히 떠야 한다. 그때 화면은 카드를 그대로
+   보여주되 인사이트 목록으로 보낸다 — 카드를 통째로 숨기면 홈에 빈 칸이 생기고,
+   보는 사람은 그게 오류인지 원래 없는 건지 알 수 없다.
+
+   제목으로 찾는 이유는 insight_posts 에 '어느 편집 글인가' 를 적을 칸이 없기
+   때문이다(scripts/seed-insights.js 머리주석). */
+router.get('/featured', ah(async (req, res) => {
+  const titles = FEATURED.ARTICLES.map(a => a.title);
+  const rows = titles.length
+    ? await query(
+      `SELECT id, title FROM insight_posts WHERE title IN (${titles.map(() => '?').join(',')})`,
+      titles)
+    : [];
+  const idByTitle = new Map(rows.map(r => [r.title, r.id]));
+
+  res.json({
+    /* 본문은 안 보낸다 — 카드에 쓰지 않는 값이고, 다섯 편이면 수십 KB다.
+       글은 눌러서 게시판 상세로 들어가면 거기서 받는다. */
+    articles: FEATURED.ARTICLES.map(a => ({
+      key: a.key, cover: a.cover, chip: a.chip, minutes: a.minutes, title: a.title,
+      postId: idByTitle.get(a.title) || null,
+    })),
+    seeded: rows.length === titles.length,
+  });
+}));
 
 /* 검색 범위. 제목만 볼지, 본문까지 볼지 사용자가 고른다.
    본문까지 뒤지면 원하는 글이 더 잘 걸리지만 엉뚱한 글도 같이 걸린다 —

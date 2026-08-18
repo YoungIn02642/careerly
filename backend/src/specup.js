@@ -385,11 +385,27 @@ async function youthActivities({ topic = 'contest', page = 1, size = 30 } = {}) 
   }
 
   /* 키워드를 하나씩 걸어 합친다. 이 API 는 OR 검색을 지원하지 않아서, 한 번에
-     부르면 '공모전' 만 잡히고 '서포터즈' 가 통째로 빠진다. */
+     부르면 '공모전' 만 잡히고 '서포터즈' 가 통째로 빠진다.
+
+     ── plcyKywdNm 이 아니라 plcyNm 이다 (키 발급 후 실측, 2026-08-18) ──
+     명세서만 보고 `plcyKywdNm`(정책 키워드)에 '공모전' 을 넣어 뒀는데, 키를 받아
+     불러 보니 **전부 0건**이었다. 에러가 아니라 `totCount: 0` 이라 조용히 빈 목록만
+     나왔다(19-6-1 과 같은 부류다 — 명세서만 보고 짠 코드는 열쇠가 오기 전까지
+     틀린 줄 모른다).
+
+     `plcyKywdNm` 은 자유검색이 아니라 **정해진 어휘 17종**의 필드였다. 정책 2,715건을
+     훑어 확인한 실제 어휘: 교육지원 902 · 보조금 752 · 맞춤형상담서비스 372 ·
+     주거지원 234 · 인턴 215 … '공모전'·'서포터즈' 는 아예 없는 말이다.
+
+     정책 **이름**으로 찾는 파라미터가 따로 있다 — `plcyNm`. 실측:
+       plcyNm=서포터즈 → 17건 · plcyKywdNm=서포터즈 → 0건
+     모르는 파라미터는 무시되고 전체(2,715건)가 그대로 오므로, 파라미터 이름이
+     틀리면 **0건이 아니라 '전부'** 가 온다는 것도 같이 확인했다(srchWord·searchWord·
+     pblancNm 전부 2,715건). 둘 다 조용히 틀리는 모양이라 이름을 못 박아 둔다. */
   const seen = new Map();
   for (const kw of ACTIVITY_TOPICS[t].keywords) {
     const url = `${YOUTH_API}?apiKeyNm=${encodeURIComponent(apiKey)}`
-      + `&rtnType=json&pageNum=${page}&pageSize=${size}&plcyKywdNm=${encodeURIComponent(kw)}`;
+      + `&rtnType=json&pageNum=${page}&pageSize=${size}&plcyNm=${encodeURIComponent(kw)}`;
     let parsed;
     try {
       const { status, body } = await getText(url);
@@ -410,12 +426,71 @@ async function youthActivities({ topic = 'contest', page = 1, size = 30 } = {}) 
     });
   }
 
-  const items = [...seen.values()].sort((a, b) =>
-    String(a.endDate || '9999').localeCompare(String(b.endDate || '9999')));
+  /* ── 이미 끝난 모집은 빼고 준다 (실측) ──────────────────────────
+     정책 목록에는 2025년에 끝난 공모전이 그대로 남아 있다. 화면은 지난 것에
+     '마감 지남' 배지를 붙일 뿐 지우지 않으므로, 그대로 내보내면 목록의 절반이
+     지난 공고가 된다 — 이 화면은 **지금 지원할 수 있는 것**을 보러 오는 곳이다.
+
+     **마감일을 모르는 것은 남긴다.** 상시 모집이거나 신고 양식에 기간을 안 적은
+     정책이 있는데(실측: '청년정책 서포터즈 2기' 는 aplyYmd 가 비어 있다), 모른다는
+     이유로 지우면 열려 있는 모집이 사라진다. 아는 것만 판정한다. */
+  const today = ymd(new Date().toISOString().slice(0, 10).replace(/-/g, ''));
+  const items = [...seen.values()]
+    .filter(a => !a.endDate || a.endDate >= today)
+    .sort((a, b) => String(a.endDate || '9999').localeCompare(String(b.endDate || '9999')));
   const data = { topic: t, label: ACTIVITY_TOPICS[t].label, items,
     source: '온통청년 청년정책(한국고용정보원)' };
   youthCache.set(cacheKey, { at: Date.now(), data });
   return data;
+}
+
+/* ── 지원 대상 지역 ────────────────────────────────────────────
+   ── 왜 zipCd 인가 (후보 셋을 다 재 보고 골랐다) ──
+   | 후보 | 문제 |
+   |---|---|
+   | `sprvsnInstCdNm` 주관기관 | 늘 차 있지만 **부서명만 오는 일이 잦다** — '복지국'·'지역경제과'·'정보통계담당관'. 지역이 안 나온다 |
+   | `rgtrHghrkInstCdNm` 최상위등록기관 | 시·도 이름이 잘 오지만 **비어 있는 것이 있고**, 중앙부처('중소벤처기업부')는 지역이 아니다 |
+   | `zipCd` | **1,300건 전부 차 있다.** 지원 대상 지역을 법정동코드 5자리 목록으로 준다 |
+
+   ── 코드↔시도 대응은 추측하지 않고 데이터에서 뽑았다 ──
+   한 시도만 대상인 정책의 zipCd 앞 2자리와 최상위등록기관을 짝지어 셌다(실측):
+
+     11 서울특별시(8) · 12 광주시청(124)·전남광주통합특별시(59)·전라남도(20)
+     27 대구(1) · 28 인천(160) · 30 대전(7) · 31 울산(102) · 36 행정중심복합도시건설청(2)
+     41 경기(69) · 44 충남(90) · 47 경북(28) · 48 경남(28) · 50 제주(28)
+     51 강원특별자치도(9) · 52 전북특별자치도(55)
+
+   법정동코드 체계와 맞는데 **`12` 만 표준에 없는 값**이다 — '전남광주통합특별시'
+   라는 통합 광역단체 코드로, 명세서에는 없고 실측으로만 알 수 있었다.
+   관측되지 않은 코드(부산 26·충북 43 등)는 표준 법정동코드로 채웠다 — 아래 표에서
+   어느 쪽인지 구분해 적어 둔다.
+
+   ── 전국이냐 지역이냐로 갈린다 ──
+   걸치는 시도 수 분포가 **1개 1,211건 · 2~8개 0건 · 9개 이상 89건** 이다.
+   중간이 없다 — 지역 정책이거나 전국 정책이거나 둘 중 하나다. 그래서 규칙이 단순하다. */
+const SIDO_BY_ZIP = {
+  /* 실측으로 확인한 것 */
+  11: '서울', 12: '광주·전남', 27: '대구', 28: '인천', 30: '대전', 31: '울산',
+  36: '세종', 41: '경기', 44: '충남', 47: '경북', 48: '경남',
+  50: '제주', 51: '강원', 52: '전북',
+  /* 관측되지 않아 표준 법정동코드로 채운 것 — 옛 코드로 들어오는 자료를 위해 남긴다 */
+  26: '부산', 29: '광주', 43: '충북', 45: '전북', 46: '전남', 42: '강원',
+};
+
+/* 시도가 이만큼 걸리면 전국 사업으로 본다. 실측상 9개 이상은 전부 전국 단위였고
+   2~8개는 한 건도 없었다. */
+const NATIONWIDE_MIN = 9;
+
+function regionOf(zipCd) {
+  const pres = [...new Set(String(zipCd || '').split(',')
+    .map(s => s.trim().slice(0, 2)).filter(s => /^\d\d$/.test(s)))];
+  if (!pres.length) return null;
+  if (pres.length >= NATIONWIDE_MIN) return '전국';
+
+  const names = [...new Set(pres.map(p => SIDO_BY_ZIP[Number(p)]).filter(Boolean))];
+  if (!names.length) return null;          // 모르는 코드는 지어내지 않는다
+  if (names.length === 1) return names[0];
+  return names.length <= 2 ? names.join('·') : `${names[0]} 외 ${names.length - 1}곳`;
 }
 
 function toActivity(p, topic) {
@@ -435,7 +510,23 @@ function toActivity(p, topic) {
     summary: (p.plcyExplnCn || '').replace(/\s+/g, ' ').trim().slice(0, 160),
     keywords: String(p.plcyKywdNm || '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 4),
     startDate: start, endDate: end,
-    period: p.aplyPrdSeCd === '0057001' ? '상시' : null,
+    /* 어느 지역 사람이 지원할 수 있는지. 잡히는 정책이 지자체 것에 몰려 있어서
+       (광주·울산·인천…) 이게 없으면 학생이 남의 동네 공고를 열어 보고 나서야 안다. */
+    region: regionOf(p.zipCd),
+    /* ── 신청기간 구분코드를 거꾸로 읽고 있었다 (키 발급 후 실측) ────────
+       `0057001` 을 '상시' 로 적어 뒀는데, 정책 1,400건을 훑어 보니 정반대다:
+
+         0057001  738건  **전부 aplyYmd 가 있다** = 기간이 정해진 모집
+         0057002  437건  기간 없음 = 상시 (응시료 지원·면접정장 대여처럼 늘 열린 것)
+         0057003  225건  기간 없음 = 기타 — 신청방법이 '별도 문의' 인 것이 대부분
+
+       화면이 endDate 를 먼저 보기 때문에(specup.js actCard) 001 의 '상시' 는 가려져
+       사고가 안 났고, 대신 **상시 배지가 아무 데도 안 떴다** — 진짜 상시인 002 는
+       null 로 떨어져 '기간 미상' 으로 나갔다. 조용히 틀리는 쪽이었다.
+
+       003 은 '상시' 라고 말하지 않는다. 기간을 안 적었을 뿐 늘 열려 있다는 뜻이
+       아니라서, 아는 만큼만 적고 나머지는 화면의 '기간 미상' 으로 둔다. */
+    period: p.aplyPrdSeCd === '0057002' ? '상시' : null,
     url: p.aplyUrlAddr || p.refUrlAddr1 || null,
   };
 }
@@ -444,5 +535,6 @@ module.exports = {
   certSchedules, youthActivities,
   // 테스트·점검 스크립트가 쓰는 조각들
   phaseOf, daysUntil, ymd, toRound, stagesOf, toActivity, codeOf, parseItems, gatewayError,
+  regionOf, SIDO_BY_ZIP,
   ACTIVITY_TOPICS, EXAM_API, EXAM_APPLY_URL, YOUTH_APPLY_URL, EXAM_PER_PAGE,
 };

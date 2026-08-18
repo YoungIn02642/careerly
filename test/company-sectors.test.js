@@ -163,5 +163,101 @@ ok('대분류끼리 중분류 코드가 겹치지 않는다', (() => {
   return true;
 })());
 
+console.log('\n── 6. 기업규모 ──');
+/* 1단계에서 고른 대·중견·중소·공으로 이 목록을 거르려면 회사마다 같은 축의 값이
+   있어야 한다. 그 판정은 company-classify.js 하나에서만 나와야 한다 — 여기서
+   기준을 새로 세우면 스펙에 저장되는 분류와 목록의 배지가 갈린다. */
+const CLASSIFY = require('../backend/src/company-classify.js');
+const allCos = r.sectors.flatMap(s => s.companies);
+
+ok('회사마다 규모가 붙는다', allCos.every(c => 'size' in c));
+ok('규모 값은 4분류 안에서만 나온다',
+   allCos.every(c => c.size === null || ['large', 'mid', 'small', 'public'].includes(c.size)),
+   `→ ${[...new Set(allCos.map(c => c.size))].join(', ')}`);
+ok('규모별 곳수를 같이 준다',
+   r.sizes && Object.values(r.sizes).reduce((a, b) => a + b, 0) === allCos.filter(c => c.size).length,
+   `→ ${JSON.stringify(r.sizes)}`);
+/* 이 목록은 상장사 ∩ (공정위 ∪ 고용24) 라서 큰 회사만 남는다. 중소기업이 0곳인 것은
+   버그가 아니라 사실이고, **화면이 그 사실을 적어야 한다.** */
+ok('대기업과 중견기업이 둘 다 있다', (r.sizes.large || 0) > 0 && (r.sizes.mid || 0) > 0);
+
+/* 분류가 목록 쪽에서 따로 계산되고 있지 않은지 — 표본으로 대조한다. */
+ok('배지가 company-classify 판정과 같다', allCos.slice(0, 200).every(c => {
+  const j = CLASSIFY.classify(c.name);
+  return c.size === (j.matched ? CLASSIFY.CORP_TYPE_ID[j.type] : null);
+}));
+
+/* 음차 미매칭 — 자동완성은 대기업이라고 하는데 그걸 골라 저장하면 중소기업이 되던 것.
+   같은 명단을 classify 와 suggest 가 다르게 읽고 있었다. */
+console.log('\n── 6-2. 알파벳 사명도 분류된다 ──');
+for (const name of ['SK하이닉스', 'LG전자', 'KT', 'CJ제일제당', 'NAVER']) {
+  const j = CLASSIFY.classify(name);
+  ok(`${name} 이 명단에서 잡힌다`, j.matched && j.type === '대기업', `→ ${j.type}`);
+}
+ok('모르는 회사는 여전히 미등록이다',
+   CLASSIFY.classify('듣도보도못한회사').matched === false,
+   '못 찾은 것을 찾은 척하면 안 된다');
+
+console.log('\n── 6-3. 지주회사를 금융에서 빼낸다 ──');
+/* KSIC 는 지주회사를 금융업(64992)으로 분류한다. 통계로는 맞지만, 산업을 **고르는**
+   축이 되면 화면이 거짓말을 한다 — 실측으로 '금융·보험' 68곳 중 33곳이 지주회사였고,
+   금융을 고른 학생에게 농심홀딩스·하림지주(식품)·노루홀딩스(도료)·한진칼(항공)이
+   나왔다. 순수 금융사는 29곳뿐이었다. */
+const holdings = r.sectors.find(s => s.name === '지주회사');
+const finance = r.sectors.find(s => s.name === '금융·보험');
+ok('지주회사 계열이 생겼다', holdings && holdings.companies.length > 20, `→ ${holdings?.companies.length}곳`);
+
+const hasName = n => holdings.companies.some(c => c.name === n);
+for (const n of ['롯데지주', '농심홀딩스', '한진칼', '노루홀딩스', '코오롱', '하림지주']) {
+  ok(`${n} 이 지주회사로 간다`, hasName(n));
+}
+ok('금융·보험에는 지주회사가 안 남는다',
+   !finance.companies.some(c => /(홀딩스|지주)$/.test(c.name)),
+   finance.companies.filter(c => /(홀딩스|지주)$/.test(c.name)).map(c => c.name).join(', ') || '없음');
+ok('진짜 금융사는 그대로 있다',
+   ['우리은행', '삼성증권', '삼성화재해상보험', '카카오뱅크', '삼성카드']
+     .every(n => finance.companies.some(c => c.name === n)));
+/* 649(3자리)로만 온 회사는 지주회사인지 코드로 알 수 없다 — 그 안에 벤처캐피탈이
+   섞여 있다. 이름 규칙은 그 6곳에만 쓰고, 전체에 훑지 않는다. */
+ok('벤처캐피탈을 지주회사로 끌고 가지 않는다', !hasName('미래에셋벤처투자'));
+ok('회사가 두 계열에 겹치지 않는다', (() => {
+  const seen = new Set();
+  for (const s of r.sectors) for (const c of s.companies) {
+    if (seen.has(c.name)) return false;
+    seen.add(c.name);
+  }
+  return true;
+})());
+ok('빼내도 총합은 그대로', r.total === 778, `→ ${r.total}곳`);
+
+console.log('\n── 7. 공공기관 목록 ──');
+/* 공공기관은 대부분 비상장이라 업종코드가 없어 계열 목록에 4곳밖에 못 들어간다.
+   1단계에서 '공공기관' 을 고른 학생에게 4곳을 내밀면 안 되므로 따로 낸다. */
+const pub = S.publicOrgs();
+ok('공공기관 목록이 나온다', pub.total > 1000, `→ ${pub.total}곳`);
+ok('중앙과 지방이 둘 다 들어 있다',
+   pub.lanes.some(l => l.name === '공기업') && pub.lanes.some(l => l.name === '지방공기업'),
+   `→ ${pub.lanes.map(l => `${l.name} ${l.companies.length}`).join(' · ')}`);
+/* 실측 함정 — local-public-orgs.json 에는 organizations 말고 sourceFiles 도 있어서,
+   "처음 걸리는 배열" 로 읽으면 파일 이름 두 줄을 기관 목록으로 집어 온다.
+   예외도 안 나고 1,312곳이 조용히 사라진다. */
+ok('지방 기관이 통째로 빠지지 않았다',
+   pub.lanes.find(l => l.name === '지방출자출연기관')?.companies.length > 500);
+ok('전부 공공기관 규모다', pub.lanes.every(l => l.companies.every(c => c.size === 'public')));
+ok('법인격 표기를 다듬는다',
+   pub.lanes.every(l => l.companies.every(c => !/^\(|주식회사|^재단법인/.test(c.name))));
+ok('같은 기관을 두 번 담지 않는다', (() => {
+  const seen = new Set();
+  for (const l of pub.lanes) for (const c of l.companies) {
+    const k = c.name.replace(/\s+/g, '');
+    if (seen.has(k)) return false;
+    seen.add(k);
+  }
+  return true;
+})());
+ok('유형·소관부처를 같이 남긴다',
+   pub.lanes.find(l => l.name === '공기업').companies.every(c => c.note),
+   '레인 이름만으로는 시장형·준시장형이 뭉개진다');
+
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
 process.exit(fail ? 1 : 0);

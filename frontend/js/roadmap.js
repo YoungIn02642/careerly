@@ -32,6 +32,30 @@
 
   const LS_KEY = 'careerly_roadmap_v1';
 
+  /* ── 기업분류(대·중견·중소·공)는 직무와 **다른 키**에 둔다 ─────────
+     1단계에서 직무와 함께 고르는 값이지만, 흐름 안에서의 성격이 다르다.
+
+     · 직무를 바꿔도 "대기업에 가고 싶다" 는 안 바뀐다. 같은 객체에 넣으면
+       setJob 이 회사를 버릴 때 같이 휩쓸리기 쉽다(실제로 company 가 그렇게 버려진다).
+     · read() 는 middle 이 없으면 상태 자체를 null 로 본다 — 집계를 못 하니까.
+       기업분류만 먼저 고른 상태는 그 규칙에 걸려 저장되지 않는다.
+
+     서버가 아니라 localStorage 인 이유는 company 와 같다(17-3) — 스펙 스키마의
+     corpType 은 **선배가 다닌 회사의 규모**라서 목표를 적을 칸이 아니다. 목표를
+     서버에 남기려면 컬럼이 하나 필요한데, 그건 이 작업의 범위가 아니다. */
+  const LS_CORP = 'careerly_roadmap_corptype_v1';
+
+  /* id 는 Aggregator.CORP_TYPES · company-classify.js 의 CORP_TYPE_ID 와 같은 값이다.
+     화면은 'public' 을 '공기업' 으로 부르고 회사 목록은 '공공기관' 으로 부르는데,
+     둘 다 같은 것을 가리킨다(공공기관 명단이 공기업·준정부기관·기타공공기관을 다 담는다). */
+  const CORP_TYPES = [
+    { id: 'large',  label: '대기업' },
+    { id: 'mid',    label: '중견기업' },
+    { id: 'small',  label: '중소기업' },
+    { id: 'public', label: '공공기관' },
+  ];
+  const CORP_LABEL = new Map(CORP_TYPES.map(c => [c.id, c.label]));
+
   /* 스텝바의 칸. page 는 app.js 의 PAGES 값이다. */
   const STEPS = [
     { id: 'job',     no: 1, label: '직무 찾기',    page: 'career',    hint: '관심 직무를 고르고 필요한 스펙을 봅니다' },
@@ -118,6 +142,119 @@
   }
 
   function clear() { write(null); }
+
+  /* ── 기업분류 ────────────────────────────────────────────────
+     1단계(직무 찾기)가 고른 값을 3단계(지원할 회사)가 읽는다. 지금은 1단계에
+     그 칸이 없어서 늘 null 이고, **null 이면 3단계는 지금까지처럼 전체를 보여준다** —
+     팀원 작업이 붙기 전에도 화면이 멀쩡히 돌아가야 한다.
+
+     1단계에서는 `Roadmap.setCorpType('large')` 한 줄만 부르면 된다.
+     모르는 값은 받지 않는다 — 오타 하나가 '아무 회사도 안 나오는 목록' 이 되고,
+     그건 화면만 봐서는 필터 탓인지 데이터 탓인지 알 수 없다. */
+  let corpState;                       // undefined = 아직 안 읽음 (null 은 '고르지 않음')
+
+  function corpType() {
+    if (corpState === undefined) {
+      let raw = null;
+      try { raw = localStorage.getItem(LS_CORP); } catch { /* 프라이빗 모드 */ }
+      corpState = CORP_LABEL.has(raw) ? raw : null;
+    }
+    return corpState;
+  }
+
+  function setCorpType(id) {
+    const next = CORP_LABEL.has(id) ? id : null;
+    corpState = next;
+    try {
+      if (next) localStorage.setItem(LS_CORP, next);
+      else localStorage.removeItem(LS_CORP);
+    } catch { /* 이번 세션 동안은 메모리로 버틴다 */ }
+    return next;
+  }
+
+  const corpLabel = () => CORP_LABEL.get(corpType()) || null;
+
+  /* ══ 담은 근거 ══════════════════════════════════════════════
+     3단계(회사 리포트)에서 담고 4단계(자소서 코치)가 쓴다. 딱 흐름 상태라 여기 둔다 —
+     예전에는 두 화면이 같은 localStorage 키를 **각자 파싱**했다. 키 이름이나 모양을
+     한쪽에서 바꾸면 다른 쪽은 조용히 빈 목록을 보게 되는 배치였다.
+
+     ── 종류를 붙이는 것이 이 구조의 핵심이다 ──
+     예전에도 담기가 기사·실적·직원수에 다 있었는데 없앴다. 담은 것들이 서로 다른
+     종류인 채로 한 통에 들어가서, 4단계로 넘어가면 **무엇을 어느 문항에 쓰라는
+     것인지 알 수 없었기** 때문이다(company-cover.js 옛 주석).
+
+     그래서 이번에는 담을 때 종류를 같이 적고, 종류마다 **어느 문항에 쓰는지**를
+     화면이 말한다. 담는 대상을 넓히는 것과 쓰임을 밝히는 것은 한 몸이다 —
+     쓰임 없이 넓히면 예전 상태로 되돌아간다. */
+  const LS_EVIDENCE = 'careerly_company_evidence_v1';
+
+  const EVIDENCE_KINDS = {
+    /* ── use 는 자소서 **문항 유형** 이름이다 ─────────────────────
+       값은 jd-coach.js 의 QUESTION_TYPES[].label 과 **글자까지 같아야 한다** —
+       4단계가 그 이름으로 대조해서 "이 문항에는 이 근거" 를 고른다. 한 글자만
+       달라도 에러 없이 '해당 근거 없음' 으로만 보인다.
+       ('입사 후 포부' 는 따로 두지 않는다 — QUESTION_TYPES 의 '지원동기' 규칙이
+        `입사\s*후|포부` 까지 같이 잡아서, 별도 이름을 만들면 아무 문항에도 안 붙는다.) */
+    job:  { label: '채용공고',  use: ['직무역량'], hint: '이 공고가 요구하는 역량으로 분석합니다' },
+    biz:  { label: '사업 내용', use: ['지원동기'], hint: '회사가 무엇으로 버는지 — "왜 우리 회사인가" 의 바탕' },
+    fact: { label: '회사 숫자', use: ['지원동기'], hint: '규모·실적처럼 자소서에 그대로 인용할 수 있는 값' },
+    news: { label: '최근 기사', use: ['지원동기'], hint: '지금 이 회사가 하고 있는 일 — 입사 후 포부의 재료이기도 하다' },
+  };
+  const EVIDENCE_ORDER = ['job', 'biz', 'fact', 'news'];
+
+  function allEvidence() {
+    try { return JSON.parse(localStorage.getItem(LS_EVIDENCE)) || {}; } catch { return {}; }
+  }
+
+  /* 옛 항목에는 kind 가 없다 — 그때는 담는 대상이 채용공고 하나뿐이었다.
+     지우지 않고 'job' 으로 읽는다. 담아 둔 공고가 갱신 한 번에 사라지면
+     사용자는 우리가 지운 줄 모르고 자기가 잘못한 줄 안다. */
+  const withKind = e => (e && !e.kind ? { ...e, kind: 'job' } : e);
+
+  function evidenceOf(company) {
+    if (!company) return [];
+    return (allEvidence()[company] || []).filter(Boolean).map(withKind);
+  }
+
+  /* 종류별로 나눠 준다. 화면 셋(3단계 게이지·4단계 근거 칸·초안 탭)이 전부
+     이 모양을 쓴다 — 각자 groupBy 를 쓰면 순서가 갈린다. */
+  function evidenceByKind(company) {
+    const list = evidenceOf(company);
+    return EVIDENCE_ORDER
+      .map(kind => ({ kind, ...EVIDENCE_KINDS[kind], items: list.filter(e => e.kind === kind) }))
+      .filter(g => g.items.length);
+  }
+
+  /* 문항 유형 하나에 쓸 근거만. 4단계가 "이 문항에는 이걸 쓰세요" 를 말하는 데 쓴다. */
+  function evidenceFor(company, questionType) {
+    return evidenceOf(company)
+      .filter(e => (EVIDENCE_KINDS[e.kind]?.use || []).includes(questionType));
+  }
+
+  function saveEvidence(company, list) {
+    const all = allEvidence();
+    if (list.length) all[company] = list; else delete all[company];
+    try { localStorage.setItem(LS_EVIDENCE, JSON.stringify(all)); } catch { /* 프라이빗 모드 */ }
+    return list;
+  }
+
+  /* 같은 것을 두 번 담지 않는다. id 는 담는 쪽이 만든다(기사 URL·계정 이름처럼
+     그 항목을 가리키는 값). */
+  function addEvidence(company, item) {
+    if (!company || !item?.id) return evidenceOf(company);
+    const list = evidenceOf(company);
+    if (list.some(e => e.id === item.id)) return list;
+    const next = [...list, { kind: 'job', ...item }];
+    saveEvidence(company, next);
+    return next;
+  }
+
+  function removeEvidence(company, id) {
+    const next = evidenceOf(company).filter(e => e.id !== id);
+    saveEvidence(company, next);
+    return next;
+  }
 
   /* ── 목표 직무를 스펙에 반영 ──────────────────────────────────
      로그인·스펙이 없으면 조용히 건너뛴다(로드맵은 비로그인도 돌아간다).
@@ -316,8 +453,10 @@
   }
 
   const api = {
-    STEPS, LS_KEY,
+    STEPS, LS_KEY, LS_CORP, LS_EVIDENCE, CORP_TYPES, EVIDENCE_KINDS, EVIDENCE_ORDER,
     get, hasJob, company, setJob, setCompany, clear,
+    corpType, setCorpType, corpLabel,
+    evidenceOf, evidenceByKind, evidenceFor, addEvidence, removeEvidence, allEvidence,
     bench, switchMiddle, syncGoalToSpec,
     stepBar, mount, goalChip, nextLabel, goNext,
     josa, withJosa,

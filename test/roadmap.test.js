@@ -58,7 +58,11 @@ const ok = (name, cond, extra = '') => {
   if (cond) { pass++; console.log(`  PASS  ${name} ${extra}`); }
   else { fail++; console.log(`  FAIL  ${name} ${extra}`); }
 };
-const reset = () => { store.clear(); Roadmap.clear(); toasts = []; savedPatches = []; };
+/* 기업분류는 직무와 다른 키에 있으므로 clear() 로는 안 지워진다 — 따로 비운다.
+   그 사실 자체가 규칙이라 여기서 드러나 있는 편이 낫다. */
+const reset = () => {
+  store.clear(); Roadmap.clear(); Roadmap.setCorpType(null); toasts = []; savedPatches = [];
+};
 
 const DEV = { major: '1', middle: '13', job: 'K1',
               majorName: '연구직 및 공학 기술직', middleName: '정보통신 연구개발직',
@@ -103,6 +107,94 @@ ok('직무를 바꾸면 고른 회사를 버린다', Roadmap.company() === null)
 Roadmap.setCompany('현대자동차');
 Roadmap.setJob({ ...DEV, middle: '15', middleName: '제조 연구개발직', job: null, jobName: '' });
 ok('같은 직무를 다시 고르면 회사는 그대로', Roadmap.company() === '현대자동차');
+
+// ── 3-2. 기업분류 ───────────────────────────────────────────
+/* 1단계(팀원 작업)가 고른 대·중견·중소·공을 3단계가 읽는다. 이 값이 직무 상태와
+   같은 객체에 있으면 안 되는 이유를 여기서 지킨다 — setJob 이 회사를 버릴 때
+   같이 휩쓸리거나, 직무를 고르기 전에는 저장 자체가 안 된다. */
+console.log('\n── 3-2. 1단계에서 고른 기업분류 ──');
+reset();
+ok('고르기 전에는 null', Roadmap.corpType() === null && Roadmap.corpLabel() === null,
+   'null 이면 3단계는 지금까지처럼 전체를 보여준다');
+
+ok('아는 값만 받는다', Roadmap.setCorpType('mid') === 'mid' && Roadmap.corpType() === 'mid');
+ok('라벨이 같이 나온다', Roadmap.corpLabel() === '중견기업');
+
+ok('모르는 값은 비운다', Roadmap.setCorpType('대기업') === null && Roadmap.corpType() === null,
+   '오타 하나가 "아무 회사도 안 나오는 목록" 이 되면 원인을 못 찾는다');
+
+/* 직무를 고르기 전에도 저장돼야 한다 — 1단계에서 어느 쪽을 먼저 고를지 모른다. */
+reset();
+Roadmap.setCorpType('public');
+ok('직무 없이도 기업분류는 남는다', Roadmap.hasJob() === false && Roadmap.corpType() === 'public');
+
+Roadmap.setJob(DEV);
+Roadmap.setCompany('삼성전자');
+Roadmap.setJob({ ...DEV, middle: '15', middleName: '제조 연구개발직', job: null, jobName: '' });
+ok('직무를 바꿔도 기업분류는 그대로', Roadmap.corpType() === 'public',
+   '"대기업에 가고 싶다" 는 직무를 바꿔도 안 바뀐다');
+ok('그때 회사는 여전히 버린다', Roadmap.company() === null);
+
+ok('직무를 비워도 기업분류는 남는다',
+   (Roadmap.clear(), Roadmap.corpType() === 'public'));
+
+// ── 3-3. 담은 근거 ──────────────────────────────────────────
+/* 3단계에서 담고 4단계가 쓴다. 예전에는 두 화면이 같은 localStorage 키를 각자
+   파싱했고, 담는 대상이 '채용공고' 하나로 좁혀져 있었다 — 종류가 섞이면 4단계에서
+   무엇을 어디에 쓸지 알 수 없었기 때문이다. 종류(kind)와 쓰임(use)이 그 답이다. */
+console.log('\n── 3-3. 담은 근거 ──');
+reset();
+ok('안 담았으면 빈 목록', Roadmap.evidenceOf('삼성전자').length === 0);
+ok('회사 이름이 없으면 빈 목록', Roadmap.evidenceOf('').length === 0);
+
+Roadmap.addEvidence('삼성전자', { id: 'biz-0', kind: 'biz', text: '반도체를 만든다', source: '사업보고서' });
+Roadmap.addEvidence('삼성전자', { id: 'news-1', kind: 'news', text: 'HBM 증설', source: '한국경제' });
+Roadmap.addEvidence('삼성전자', { id: 'job-1', kind: 'job', text: '반도체 공정기술', source: '채용공고' });
+ok('담긴다', Roadmap.evidenceOf('삼성전자').length === 3);
+
+Roadmap.addEvidence('삼성전자', { id: 'biz-0', kind: 'biz', text: '다른 글' });
+ok('같은 id 를 두 번 담지 않는다', Roadmap.evidenceOf('삼성전자').length === 3);
+
+ok('회사별로 나뉜다', Roadmap.evidenceOf('카카오').length === 0);
+
+/* 종류를 안 적고 담긴 옛 항목 — 그때는 담는 대상이 채용공고뿐이었다.
+   지우면 사용자는 우리가 지운 줄 모르고 자기가 잘못한 줄 안다. */
+store.set(Roadmap.LS_EVIDENCE, JSON.stringify({
+  ...Roadmap.allEvidence(), 네이버: [{ id: 'old', text: '옛 공고' }],
+}));
+ok('kind 없는 옛 항목은 채용공고로 읽는다', Roadmap.evidenceOf('네이버')[0].kind === 'job');
+
+/* 4단계가 "이 문항에 이 근거" 를 고르는 축. 종류마다 쓰이는 문항이 정해져 있다. */
+const motive = Roadmap.evidenceFor('삼성전자', '지원동기').map(e => e.id).sort();
+ok('지원동기에는 사업 내용과 기사가 간다', motive.join(',') === 'biz-0,news-1', `→ ${motive.join(',')}`);
+const comp = Roadmap.evidenceFor('삼성전자', '직무역량').map(e => e.id);
+ok('직무역량에는 채용공고가 간다', comp.join(',') === 'job-1', `→ ${comp.join(',')}`);
+ok('모르는 문항 유형에는 아무것도 안 간다', Roadmap.evidenceFor('삼성전자', '없는유형').length === 0,
+   '억지로 붙이면 학생이 엉뚱한 근거를 인용한다');
+
+/* use 값은 jd-coach.js QUESTION_TYPES 의 label 과 글자까지 같아야 한다.
+   한 글자만 달라도 에러 없이 '해당 근거 없음' 으로만 보인다. */
+const QLABELS = ['지원동기', '협업·갈등', '도전·실패', '성장과정·가치관', '직무역량'];
+ok('쓰임 이름이 실제 문항 유형 이름과 같다',
+   Object.values(Roadmap.EVIDENCE_KINDS).every(k => k.use.every(u => QLABELS.includes(u))),
+   Object.values(Roadmap.EVIDENCE_KINDS).flatMap(k => k.use).filter(u => !QLABELS.includes(u)).join(', ') || '전부 일치');
+ok('종류마다 쓰임이 적혀 있다',
+   Object.values(Roadmap.EVIDENCE_KINDS).every(k => k.label && k.use.length && k.hint),
+   '쓰임 없이 담기만 넓히면 예전 상태로 돌아간다');
+ok('EVIDENCE_ORDER 가 종류를 다 담는다',
+   Roadmap.EVIDENCE_ORDER.length === Object.keys(Roadmap.EVIDENCE_KINDS).length
+   && Roadmap.EVIDENCE_ORDER.every(k => Roadmap.EVIDENCE_KINDS[k]));
+
+const groups = Roadmap.evidenceByKind('삼성전자');
+ok('종류별 묶음은 정해진 순서로 나온다', groups.map(g => g.kind).join(',') === 'job,biz,news',
+   `→ ${groups.map(g => g.kind).join(',')}`);
+ok('빈 종류는 묶음에 안 나온다', groups.every(g => g.items.length > 0));
+
+Roadmap.removeEvidence('삼성전자', 'news-1');
+ok('하나만 뺄 수 있다', Roadmap.evidenceOf('삼성전자').map(e => e.id).join(',') === 'biz-0,job-1');
+Roadmap.removeEvidence('삼성전자', 'biz-0');
+Roadmap.removeEvidence('삼성전자', 'job-1');
+ok('다 빼면 회사 칸도 지운다', !JSON.parse(store.get(Roadmap.LS_EVIDENCE)).삼성전자);
 
 // ── 4. 집계 기준 ────────────────────────────────────────────
 console.log('\n── 4. 벤치마크는 2차 분류 단위 ──');
