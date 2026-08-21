@@ -270,6 +270,20 @@ a.wf-btn { text-decoration: none; }
 
 .co-main { padding: 28px clamp(20px, 3.4vw, 40px) 72px; min-width: 0; }
 
+/* 리포트에서 회사 검색으로 돌아가는 길. 회사 이름 바로 위에 둔다 —
+   예전에는 사이드바 맨 아래라 스크롤해야 나왔고, 그래서 없는 것과 같았다
+   (company-cover.js mainHtml 주석). */
+.co-back {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-bottom: 10px; padding: 6px 12px 6px 9px;
+  border: 1px solid var(--wf-hairline); border-radius: 99px;
+  background: var(--wf-surface, #fff);
+  font-size: 13px; font-weight: 500; color: var(--wf-body);
+  cursor: pointer;
+}
+.co-back:hover { background: var(--wf-surface-2, #f5f5f4); color: var(--wf-ink); }
+.co-back .ti { font-size: 15px; }
+
 .co-hero { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
 .co-hero-t { min-width: 0; flex: 1 1 320px; }
 .co-hero-t h1 { font-size: 32px; line-height: 41.6px; font-weight: 500; color: var(--wf-ink); }
@@ -293,6 +307,10 @@ a.wf-btn { text-decoration: none; }
 .co-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
 .co-card {
   display: flex; flex-direction: column; gap: 8px; min-height: 148px; padding: 16px;
+  /* 추이 스파크라인(.co-spark)이 카드 밖으로 그려지던 것을 막는다 — SVG 가
+     flex:none 이라 칸이 좁아지면 넘쳐 나갔다(실측: 재무 카드에서 빨간 선이
+     카드 오른쪽 아래로 삐져나왔다). */
+  overflow: hidden;
   border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-md); background: var(--wf-canvas);
   font: inherit; text-align: left; cursor: pointer;
   transition: border-color .14s ease, box-shadow .16s ease;
@@ -311,7 +329,7 @@ a.wf-btn { text-decoration: none; }
 .co-card-d--down { color: var(--wf-error); }
 .co-card-d--flat { color: var(--wf-mute); }
 .co-card-none { font-size: 13px; line-height: 1.5; color: var(--wf-mute-soft); }
-.co-spark { flex: none; margin-left: auto; }
+.co-spark { flex: none; margin-left: auto; max-width: 100%; }
 
 /* 고른 칸의 자세한 내용 */
 .co-detail { margin-top: 12px; padding: 24px; border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-md); }
@@ -439,7 +457,19 @@ a.wf-btn { text-decoration: none; }
 }
 @media (max-width: 860px) {
   .co-report { grid-template-columns: 1fr; }
-  .co-side { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--wf-hairline); }
+  /* ── 좁은 화면에서는 리포트를 먼저 ──────────────────────────
+     한 줄로 접히면 사이드바(검색·최근 본 회사·많이 찾는 회사)가 위로 쌓여서,
+     회사를 열었는데 **1,000px 넘게 내려야 그 회사 이름이 나왔다**(실측 375px:
+     회사 이름 top 1233 · 돌아가기 버튼 top 1099). 보러 온 것이 리포트인데
+     남의 목록을 한참 지나야 했다. 순서를 뒤집는다 — 사이드바는 리포트를 다
+     읽은 뒤 '다음에 볼 회사' 자리로 내려간다. */
+  .co-report > .co-side { order: 2; }
+  .co-report > :not(.co-side) { order: 1; }
+  .co-side {
+    position: static; height: auto; border-right: 0;
+    border-bottom: 0; border-top: 1px solid var(--wf-hairline);
+    margin-top: 24px; padding-top: 20px;
+  }
   .co-side-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .co-search-head h1 { font-size: 32px; line-height: 38px; }
 }
@@ -925,6 +955,194 @@ a.wf-btn { text-decoration: none; }
 .co-chip:hover { border-color: var(--wf-ink); color: var(--wf-ink); }
 .co-chip--more { color: var(--wf-mute); border-style: dashed; }
 
+/* ── 지원동기 AI 초안 ───────────────────────────────────────
+   역량 문항의 AI 초안은 왼쪽 역량 카드에 붙지만, 지원동기는 붙을 카드가 없다
+   (재료가 역량이 아니라 회사 근거라서). 문항 프롬프트 아래에 자리를 만든다. */
+.jd-motive-ai { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--wf-hairline); }
+.jd-motive-ai .jd-hint { margin-top: 6px; }
+.jd-motive-ai .jd-draft-state { margin-left: 8px; font-size: 12px; color: var(--wf-mute); }
+
+/* 공고 없이 시작했을 때 왼쪽 역량 칸에 들어가는 안내.
+   '실패' 가 아니라 '아직 안 넣었다' 라는 것이 읽혀야 한다. */
+.jd-empty--soft { text-align: left; padding: 20px; }
+.jd-empty--soft b { display: block; margin-bottom: 6px; color: var(--wf-ink); }
+.jd-empty--soft p { margin-bottom: 12px; font-size: 13px; line-height: 1.7; color: var(--wf-mute); }
+
+/* ── 산업 고르기 ────────────────────────────────────────────
+   규모 칩(위)과 같은 부품처럼 보이되, 고른 것이 무엇인지는 더 또렷해야 한다 —
+   이 선택이 아래 목록 전체를 정하기 때문이다. */
+.co-inds { margin-bottom: 4px; }
+.co-indchips { display: flex; flex-wrap: wrap; gap: 8px; }
+.co-indchip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 14px; border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-sm);
+  background: var(--wf-canvas); font: inherit; font-size: 14px; color: var(--wf-body); cursor: pointer;
+}
+.co-indchip:hover { border-color: var(--wf-ink); color: var(--wf-ink); }
+.co-indchip b { font-size: 12px; font-weight: 500; color: var(--wf-mute); }
+.co-indchip i { font-size: 13px; color: var(--wf-purple, #7a3dff); }
+/* 직무로 좁혀진 계열 — 고르라고 강요하지 않고 표시만 한다. */
+.co-indchip.is-focus {
+  border-color: color-mix(in srgb, var(--wf-purple, #7a3dff) 45%, transparent);
+  background: color-mix(in srgb, var(--wf-purple, #7a3dff) 5%, transparent);
+}
+.co-indchip.is-on {
+  border-color: var(--wf-ink); background: var(--wf-ink); color: var(--wf-canvas);
+}
+.co-indchip.is-on b, .co-indchip.is-on i { color: var(--wf-canvas); opacity: .72; }
+
+.co-indlist { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* 아직 안 골랐을 때. 빈 화면으로 두면 목록이 없는 것처럼 보인다. */
+.co-indempty {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 32px 20px; border: 1px dashed var(--wf-hairline); border-radius: var(--wf-r-md);
+  text-align: center;
+}
+.co-indempty i { font-size: 20px; color: var(--wf-mute); }
+.co-indempty b { font-size: 15px; font-weight: 500; color: var(--wf-ink); }
+.co-indempty span { font-size: 13px; color: var(--wf-mute); }
+
+/* ── 담기 버튼 ──────────────────────────────────────────────
+   개요·재무·최근 이슈·채용공고 네 칸에 같은 버튼이 뜬다. 칸마다 따로 만들면
+   담긴 표시가 칸마다 어긋나므로 한 벌만 둔다(company-cover.js pickBtn). */
+.co-take {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 10px; border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-sm);
+  background: var(--wf-canvas); font: inherit; font-size: 12px; color: var(--wf-mute); cursor: pointer;
+  white-space: nowrap;
+}
+.co-take:hover { border-color: var(--wf-ink); color: var(--wf-ink); }
+.co-take i { font-size: 14px; }
+.co-take.is-on {
+  border-color: var(--wf-ok, #00a83a); color: var(--wf-ok, #00a83a);
+  background: color-mix(in srgb, var(--wf-ok, #00a83a) 8%, transparent);
+}
+/* 사업 내용 줄글 아래에 붙는 담기는 문단과 붙지 않게 띄운다. */
+.co-biz-block .co-take { margin-top: 10px; }
+.co-stat .co-take { margin-top: 8px; }
+.co-tbl-take { text-align: right; white-space: nowrap; }
+.co-news-item .co-take { margin-left: auto; align-self: center; }
+
+/* 게이지의 종류별 칸. 숫자 하나로 뭉치면 무엇을 담았는지 알 수 없다. */
+.co-gauge-kinds { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px; }
+.co-gauge-kind {
+  padding: 2px 7px; border-radius: 4px; background: var(--wf-fill);
+  font-size: 11px; color: var(--wf-mute);
+}
+.co-gauge-kind b { font-weight: 500; color: var(--wf-body); }
+
+/* ── 4단계의 담은 근거 — 종류별 묶음 ─────────────────────────
+   "담긴 건 알겠는데 무엇을 어디에 쓰라는 거지" 를 없애는 것이 이 묶음의 목적이다. */
+.jd-ev-groups { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
+.jd-ev-h { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.jd-ev-h b { font-size: 13px; font-weight: 500; color: var(--wf-ink); }
+.jd-ev-use { font-size: 11px; color: var(--wf-mute); }
+
+/* ── 기업규모 필터 ──────────────────────────────────────────
+   1단계에서 고른 대·중견·중소·공이 여기로 온다. 계열 아코디언보다 **위**에 둔다 —
+   아래 목록 전체를 바꾸는 스위치라, 목록 사이에 끼면 그 계열에만 걸리는 것으로 읽힌다.
+
+   ── 폭을 아래 목록과 맞춘다 (사용자 지시) ──
+   이 칸은 .co-search-page 의 직계 자식인데 폭 제한이 없었다. 그래서 1600px 화면에서
+   **혼자만 x=32 에서 시작**하고(폭 1536) 바로 아래 .co-lanes 는 x=250(폭 1100)이라,
+   규모 칩만 218px 왼쪽으로 삐져나와 보였다. 같은 1100px 기둥에 세운다.
+   위 여백도 없어서 검색창에 붙어 있었다 — .co-lanes 와 같은 56px 을 준다. */
+.co-sizes { max-width: 1100px; margin: 56px auto 0; }
+.co-sizechips { display: flex; flex-wrap: wrap; gap: 8px; }
+.co-sizechip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 15px; border: 1px solid var(--wf-hairline); border-radius: 999px;
+  background: var(--wf-canvas); font: inherit; font-size: 14px; color: var(--wf-body); cursor: pointer;
+}
+.co-sizechip:hover { border-color: var(--wf-ink); color: var(--wf-ink); }
+.co-sizechip b { font-size: 12px; font-weight: 500; color: var(--wf-mute); }
+.co-sizechip.is-on {
+  border-color: var(--wf-ink); background: var(--wf-ink); color: var(--wf-canvas);
+}
+.co-sizechip.is-on b { color: var(--wf-canvas); opacity: .72; }
+
+/* ── 기업 형태 필터 한 줄 ────────────────────────────────────
+   단계가 아니라 필터라 한 줄에 눕히고 배경을 깔아 **단계 카드와 다른 물건**임을
+   모양으로 알린다. 아래 단계 카드는 흰 바탕에 테두리다. */
+.co-filter {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  padding: 12px 14px; border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-md);
+  background: var(--wf-fill);
+}
+.co-filter > b { font-size: 13px; font-weight: 600; color: var(--wf-body); margin-right: 2px; }
+.co-filter-hint { margin-left: auto; font-size: 12.5px; color: var(--wf-mute); }
+@media (max-width: 640px) { .co-filter-hint { margin-left: 0; width: 100%; } }
+
+/* ── 진행 표시 ───────────────────────────────────────────────
+   자동으로 건너뛴 단계는 점선이다. 지우면 "내가 안 골랐는데 정해져 있다" 가 되어
+   고장으로 읽힌다(company-cover.js stepsHtml 주석). */
+.co-steps { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.co-step {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px;
+  border: 1px solid var(--wf-hairline); border-radius: 999px;
+  font-size: 12.5px; color: var(--wf-mute); background: var(--wf-canvas);
+  max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.co-step i { font-style: normal; font-weight: 700; opacity: .55; }
+.co-step.is-on { border-color: var(--wf-ink); color: var(--wf-ink); font-weight: 500; }
+.co-step.is-done {
+  border-color: color-mix(in srgb, var(--wf-ok, #00a83a) 40%, transparent);
+  background: color-mix(in srgb, var(--wf-ok, #00a83a) 7%, transparent);
+  color: var(--wf-ok, #00a83a);
+}
+.co-step.is-skip { border-style: dashed; }
+.co-step-arw { color: var(--wf-hairline); font-size: 13px; }
+
+/* ── 단계 카드 (B안) ─────────────────────────────────────────
+   한 번에 한 단계만 열린다. 고른 단은 접혀서 한 줄이 되고 고른 값이 오른쪽에 남는다 —
+   되짚어 보려고 펼칠 필요가 없어야 한다. */
+.co-steps-acc { display: flex; flex-direction: column; gap: 8px; }
+.co-step-card {
+  border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-md);
+  background: var(--wf-canvas); overflow: hidden;
+}
+.co-step-card.is-open { border-color: var(--wf-ink); }
+/* 아직 앞 단계를 안 고른 칸. 눌러도 소용없다는 것이 보여야 한다. */
+.co-step-card.is-locked { opacity: .45; }
+.co-step-h {
+  display: flex; align-items: center; gap: 11px; width: 100%; padding: 13px 15px;
+  border: 0; background: transparent; font: inherit; text-align: left; cursor: pointer;
+}
+.co-step-h:disabled { cursor: not-allowed; }
+.co-step-n {
+  flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--wf-fill);
+  display: grid; place-items: center; font-size: 11.5px; font-weight: 700; color: var(--wf-mute);
+}
+.co-step-card.is-done .co-step-n { background: var(--wf-ok, #00a83a); color: #fff; }
+.co-step-t { flex: 1; min-width: 0; }
+.co-step-t b { display: block; font-size: 14px; font-weight: 600; color: var(--wf-ink); }
+.co-step-t small { display: block; font-size: 12.5px; color: var(--wf-mute); }
+.co-step-pick {
+  font-size: 13px; font-weight: 600; color: var(--wf-purple, #7a3dff);
+  max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.co-step-b { padding: 2px 15px 15px; border-top: 1px solid var(--wf-hairline); }
+/* 마지막 단(회사)은 목록이 길 수 있다 — 석유·화학 61곳. 카드 안에서 스크롤한다. */
+.co-step-b { max-height: 340px; overflow-y: auto; }
+.co-step-b .co-indchips, .co-step-b .co-indlist { padding-top: 12px; }
+
+/* 회사 칩의 규모 배지. 필터가 꺼져 있을 때만 붙는다 — 켜져 있으면 전부 같은 값이라
+   정보가 아니라 잡음이 된다(company-cover.js companyChip 주석). */
+.co-chip-size {
+  margin-left: 6px; padding: 1px 5px; border-radius: 4px;
+  font-size: 11px; font-style: normal; line-height: 1.6;
+  background: var(--wf-fill); color: var(--wf-mute);
+}
+.co-chip-size--large { background: color-mix(in srgb, var(--wf-purple, #7a3dff) 12%, transparent); color: var(--wf-purple, #7a3dff); }
+.co-chip-size--public { background: color-mix(in srgb, var(--wf-blue, #3b89ff) 12%, transparent); color: var(--wf-blue, #3b89ff); }
+
+/* 공공기관 칩은 두 줄이다 — 유형(공기업(시장형))과 소관부처가 이름만큼 중요하다. */
+.co-chip--org { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; }
+.co-chip--org b { font-size: 13px; font-weight: 500; color: var(--wf-body); }
+.co-chip--org small { font-size: 11px; color: var(--wf-mute); }
+.co-chip--org:hover b { color: var(--wf-ink); }
+
 /* ── 로드맵 3단계 · 이 직무를 주로 뽑는 계열 ────────────────
    아래 '계열로 둘러보기'(전체 목록)와 같은 부품을 쓰되, 초점이라는 것이 보여야
    한다. 다른 카드를 만들지 않고 테두리와 배경만 바꾼다 — 두 벌을 만들면 계열
@@ -934,3 +1152,146 @@ a.wf-btn { text-decoration: none; }
   background: color-mix(in srgb, var(--wf-purple, #7a3dff) 4%, transparent);
 }
 .co-note--tight { margin: 0 0 12px; }
+
+/* ── STAR 입력 아코디언 ─────────────────────────────────────────
+   위 띠(.jd-star-band)가 "뼈대가 무엇인가" 라면 여기는 그 뼈대에 내 경험을 채우는
+   자리다. 색은 위 띠의 S·T·A·R 네 색을 그대로 쓴다 — 같은 것을 말하는 두 블록이
+   다른 색을 쓰면 연결이 끊긴다. */
+.jd-starin { margin-bottom: 16px; }
+.jd-starin .co-sec-h { margin-bottom: 10px; }
+.jd-starin-steps {
+  border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-md); overflow: hidden;
+}
+.jd-si { border-bottom: 1px solid var(--wf-hairline); }
+.jd-si:last-child { border-bottom: 0; }
+.jd-si:nth-child(1) { --star-accent: var(--wf-purple); }
+.jd-si:nth-child(2) { --star-accent: var(--wf-blue); }
+.jd-si:nth-child(3) { --star-accent: var(--wf-orange); }
+.jd-si:nth-child(4) { --star-accent: var(--wf-ok); }
+
+.jd-si-h {
+  width: 100%; display: flex; align-items: center; gap: 12px;
+  padding: 13px 16px; background: none; border: 0; cursor: pointer;
+  font: inherit; text-align: left;
+}
+.jd-si-h:hover { background: var(--wf-surface-2, #fafafa); }
+.jd-si.is-open .jd-si-h { background: var(--wf-surface-2, #fafafa); }
+.jd-si-key {
+  flex: 0 0 auto; width: 28px; height: 28px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; font-weight: 700; color: #fff;
+  background: var(--star-accent, var(--wf-ink));
+}
+.jd-si-t { flex: 1; min-width: 0; }
+.jd-si-t b { display: block; font-size: 13.5px; font-weight: 600; color: var(--wf-ink); }
+.jd-si-ask {
+  display: block; margin-top: 2px; font-size: 12.8px; line-height: 1.5; color: var(--wf-mute);
+}
+.jd-si-state {
+  flex: 0 0 auto; font-size: 12px; font-weight: 600; color: var(--wf-mute);
+  padding: 3px 9px; border-radius: 99px; background: var(--wf-surface-2, #f3f3f3);
+}
+.jd-si-state.is-done { color: var(--wf-ok); background: rgba(22,133,95,.10); }
+
+/* 접힌 칸은 머리줄만 남는다 — STAR 는 앞 칸이 뒤 칸의 전제라 한 번에 하나만 연다 */
+.jd-si-body { display: none; padding: 0 16px 16px; }
+.jd-si.is-open .jd-si-body { display: block; }
+
+.jd-si-hint { font-size: 12.8px; line-height: 1.7; color: var(--wf-body-mid); margin-bottom: 10px; }
+.jd-si-hint b { font-weight: 600; color: var(--wf-ink); }
+
+/* 나쁜 예 / 고친 예를 나란히. "구체적으로 쓰세요" 보다 이 대비가 훨씬 빠르다. */
+.jd-si-ex {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px;
+}
+.jd-si-ex-row {
+  padding: 10px 12px; border-radius: var(--wf-r-sm, 8px);
+  border: 1px solid var(--wf-hairline);
+}
+.jd-si-ex-row p { font-size: 12.8px; line-height: 1.65; color: var(--wf-body); }
+.jd-si-ex-tag {
+  display: inline-block; margin-bottom: 5px;
+  font-size: 11px; font-weight: 700; letter-spacing: .02em;
+}
+.jd-si-ex--bad  { background: rgba(197,48,48,.045); border-color: rgba(197,48,48,.20); }
+.jd-si-ex--bad  .jd-si-ex-tag { color: var(--wf-error, #C53030); }
+.jd-si-ex--bad  p { color: var(--wf-mute); text-decoration: line-through; text-decoration-color: rgba(197,48,48,.35); }
+.jd-si-ex--good { background: rgba(22,133,95,.045); border-color: rgba(22,133,95,.20); }
+.jd-si-ex--good .jd-si-ex-tag { color: var(--wf-ok, #16855F); }
+
+.jd-si-ta {
+  width: 100%; min-height: 108px; resize: vertical;
+  padding: 12px 14px; border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-sm, 8px);
+  font: inherit; font-size: 13.5px; line-height: 1.75; color: var(--wf-ink); background: #fff;
+}
+.jd-si-ta:focus { outline: none; border-color: var(--star-accent, var(--wf-ink)); }
+
+.jd-si-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin-top: 8px; flex-wrap: wrap;
+}
+.jd-si-saved { font-size: 12px; color: var(--wf-mute); }
+.jd-si-done { font-size: 12.8px; color: var(--wf-body-mid); }
+.jd-si-done b { font-weight: 600; color: var(--wf-ink); }
+
+@media (max-width: 860px) {
+  .jd-si-ex { grid-template-columns: 1fr; }
+}
+
+/* 칸별 되짚기 — 읽고 끝내지 않고 그 칸으로 돌아가는 버튼이다 */
+.jd-coach { display: flex; flex-direction: column; gap: 6px; }
+.jd-coach-row {
+  display: flex; align-items: flex-start; gap: 10px; width: 100%;
+  padding: 10px 12px; text-align: left; cursor: pointer;
+  background: rgba(240,150,20,.05); border: 1px solid rgba(240,150,20,.28);
+  border-radius: var(--wf-r-sm, 8px); font: inherit;
+}
+.jd-coach-row:hover { background: rgba(240,150,20,.10); }
+.jd-coach-row i { margin-left: auto; color: var(--wf-mute); font-size: 15px; }
+.jd-coach-key {
+  flex: 0 0 auto; width: 22px; height: 22px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: #fff; background: var(--wf-orange, #e08600);
+}
+.jd-coach-t { flex: 1; min-width: 0; }
+.jd-coach-t b { display: block; font-size: 13px; font-weight: 600; color: var(--wf-ink); }
+.jd-coach-t span { display: block; margin-top: 3px; font-size: 12.5px; line-height: 1.55; color: var(--wf-body-mid); }
+.jd-si-state.is-todo { color: #a35a00; background: rgba(240,150,20,.16); }
+
+/* 무엇을 하는 회사인가 — 제목 + 줄글 (사용자 지시).
+   예전에는 칩을 늘어놨는데, 칩으로는 "무엇을 만들어 파는 회사인가" 라는 문장이
+   안 나온다. 이제 덩이마다 제목 하나와 문단 몇 개다(company-cover.js businessHtml).
+   본문은 사업보고서 원문이라 **읽는 글**이다 — 줄간격을 넉넉히 준다. */
+.co-biz { margin-top: 16px; display: flex; flex-direction: column; gap: 2px; }
+.co-biz-block {
+  padding: 15px 18px; border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-md);
+  background: var(--wf-surface, #fff);
+}
+.co-biz-block + .co-biz-block { margin-top: 8px; }
+.co-biz-block h4 {
+  margin: 0 0 8px; font-size: 14.5px; font-weight: 600; color: var(--wf-ink);
+  letter-spacing: -.01em;
+}
+.co-biz-block p {
+  margin: 0 0 9px; font-size: 13.6px; line-height: 1.82; color: var(--wf-body);
+  /* 원문 문단은 길다. 한국어는 어절 단위로 끊어야 읽힌다. */
+  word-break: keep-all; overflow-wrap: anywhere;
+}
+.co-biz-block p:last-of-type { margin-bottom: 0; }
+.co-biz-block p b { font-weight: 600; color: var(--wf-ink); }
+.co-biz-block.is-wait p, .co-biz-block.is-none p { color: var(--wf-mute); font-size: 13px; }
+.co-biz-block.is-none p span { display: block; margin-top: 4px; font-size: 12.5px; }
+
+/* 어느 보고서 어느 절에서 왔는지. 본문과 확실히 갈라 놔야 원문과 우리 말이 안 섞인다. */
+.co-biz-from {
+  margin-top: 11px; padding-top: 9px; border-top: 1px solid var(--wf-hairline);
+  font-size: 12px; line-height: 1.65; color: var(--wf-mute);
+}
+.co-biz-from b { font-weight: 500; color: var(--wf-body); }
+.co-biz-more {
+  display: inline-flex; align-items: center; gap: 4px; margin-left: 6px;
+  color: var(--wf-accent, #7a3dff); font-weight: 500; text-decoration: none;
+}
+.co-biz-more:hover { text-decoration: underline; }
+.co-biz-more .ti { font-size: 13px; }
+.co-biz-block.is-none .co-biz-more { margin-left: 0; margin-top: 8px; }

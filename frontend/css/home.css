@@ -246,7 +246,9 @@ body.dir-c .home-hero-dark { display: block; }
 .job-meta-item .l { font-size: 11px; color: var(--text-m); }
 
 /* articles */
-.home-articles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+/* 카드가 다섯 장이다(사진 5장 · insight-featured.js). 4칸 고정이면 마지막 한 장이
+   혼자 다음 줄로 떨어져 빈 칸 세 개가 남는다. 폭에 맞춰 접히게 둔다. */
+.home-articles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; }
 .art-card {
   display: flex; flex-direction: column;
   border: 1px solid var(--border); border-radius: var(--radius);
@@ -259,6 +261,15 @@ body.dir-c .home-hero-dark { display: block; }
   background: var(--acc-soft);
 }
 .art-cover .emoji { font-size: 30px; }
+
+/* 사진 커버. 카드 폭이 접히면서 달라지므로 비율을 고정하지 않고 잘라 채운다 —
+   object-fit 없이 두면 사진이 늘어나 인물 얼굴이 찌그러진다. */
+.art-cover--photo { padding: 0; overflow: hidden; }
+.art-cover--photo img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+  transition: transform 0.24s ease;
+}
+.art-card:hover .art-cover--photo img { transform: scale(1.04); }
 .art-body { padding: 16px 18px 20px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
 .art-chip { font-size: 12px; font-weight: 600; color: var(--acc); align-self: flex-start; }
 .art-title { font-size: 16px; font-weight: 600; color: var(--ink); line-height: 1.4; letter-spacing: -0.2px; }
@@ -298,7 +309,7 @@ body.dir-c .home-hero-dark { display: block; }
 /* ─────────────────────── RESPONSIVE ─────────────────────── */
 @media (max-width: 940px) {
   .home-quick { grid-template-columns: repeat(3, 1fr); }
-  .home-articles { grid-template-columns: repeat(2, 1fr); }
+  .home-articles { grid-template-columns: repeat(2, 1fr); }   /* 태블릿에선 2칸으로 고정 */
   .home-hero { grid-template-columns: 1fr; }
   body.dir-b .home-hero { display: flex; flex-direction: column; }
   /* 좁은 화면에선 오른쪽으로 삐져나갈 자리가 없다. 계단을 위로만 쌓는다. */

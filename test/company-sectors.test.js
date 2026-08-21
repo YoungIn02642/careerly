@@ -83,5 +83,181 @@ ok('빈 값도 matched:false', S.sectorFocus('').matched === false && S.sectorFo
 ok('2차 분류를 빠짐없이 담았다', Object.keys(S.SECTORS_BY_MIDDLE).length >= 34,
    `→ ${Object.keys(S.SECTORS_BY_MIDDLE).length}개`);
 
+
+// ── KECO 직업 ↔ KSIC 대분류 다리 ───────────────────────────────
+console.log('\n── 직업 단위 보정 (사용자 지적: 교장인데 회사가 안 떴다) ──');
+
+/* 관리직(01)에는 기업 임원·금융관리자·교장·정부 고위공무원이 한 칸에 들어 있다.
+   칸 전체로 보면 '전 업종' 이 맞지만, 개별 직업에는 그 판단이 틀린다. */
+const 교장 = S.sectorFocus('01', 'K000000838');
+ok('교장은 더 이상 universal 이 아니다', 교장.universal === false,
+   '예전에는 "업종을 가리지 않는 직무" 라는 안내만 뜨고 회사가 0곳이었다');
+ok('교장은 교육 서비스업(P)으로 잇는다',
+   교장.sections.length === 1 && 교장.sections[0].code === 'P');
+ok('근거를 사람 말로 같이 준다', 교장.sections[0].label === '교육 서비스업',
+   '계열 이름만 던지면 왜 그 계열인지 알 수 없다');
+ok('계열이 실제로 나온다', 교장.sectors.length > 0, `→ ${교장.sectors.join(', ')}`);
+ok('직업으로 정했다고 밝힌다', 교장.by === 'job');
+
+/* 같은 칸(01)이라도 이름으로 업종을 알 수 없는 직업은 건드리지 않는다 —
+   억지로 계열을 붙이면 나머지 업종의 회사를 후보에서 지운다. */
+const 임원 = S.sectorFocus('01', 'K000000847');   // 기업 대표 및 기업 고위 임원
+ok('업종을 알 수 없는 직업은 그대로 universal', 임원.universal === true);
+ok('그때는 2차 분류로 정했다고 밝힌다', 임원.by === 'middle');
+
+/* 직업 코드를 안 주면 예전과 똑같이 동작해야 한다 — 화면 어딘가는 아직 안 보낼 수 있다. */
+const 코드없이 = S.sectorFocus('01');
+ok('직업 코드가 없으면 예전 동작 그대로', 코드없이.universal === true && 코드없이.by === 'middle');
+ok('2차 분류 매핑은 그대로 이긴다', S.sectorFocus('13').sectors.includes('IT·소프트웨어'));
+
+console.log('\n── 업종은 아는데 상장사가 없는 경우 ──');
+/* '모른다' 와 '알지만 민간에 없다' 는 다른 말이다. 후자는 아는 만큼 말해 준다. */
+const 공무원 = S.sectorFocus('01', 'K000000933');  // 행정부고위공무원
+ok('공무원도 matched 다', 공무원.matched === true);
+ok('공공행정(O)으로 잇는다', 공무원.sections[0].code === 'O');
+ok('그래도 계열은 비어 있다', 공무원.sectors.length === 0,
+   'DART 상장사에 공공행정 업종이 없다 — 억지로 붙이지 않는다');
+ok('universal 과는 구분된다', 공무원.universal === false);
+
+console.log('\n── KSIC 대분류 → 계열 변환 ──');
+ok('교육(P)은 의료·교육·기타서비스로', S.sectorsOfSections(['P']).includes('의료·교육·기타서비스'));
+ok('금융(K)은 금융·보험으로', S.sectorsOfSections(['K']).join() === '금융·보험');
+ok('제조(C)는 여러 계열로 퍼진다', S.sectorsOfSections(['C']).length >= 6);
+ok('공공행정(O)은 아무 계열도 아니다', S.sectorsOfSections(['O']).length === 0);
+ok('모르는 글자는 조용히 무시한다', S.sectorsOfSections(['Z']).length === 0);
+/* 화면 순서(SECTORS 정의 순서)를 지켜야 계열 줄이 매번 다른 순서로 나오지 않는다. */
+ok('계열 순서가 화면 순서를 따른다', (() => {
+  const got = S.sectorsOfSections(['C']);
+  const idx = got.map(n => S.SECTORS.findIndex(([x]) => x === n));
+  return idx.every((v, i) => i === 0 || idx[i - 1] < v);
+})());
+
+console.log('\n── 매핑이 실제 데이터와 맞는가 ──');
+/* 직업 코드를 손으로 적는 표라 오타가 나기 쉽고, 오타는 에러 없이 '보정 안 됨' 으로만
+   보인다. 실제로 처음 적을 때 7개를 틀렸다(회계사·세무사·관세사·노무사·감정평가사·
+   행정사·부동산중개사). 코드가 카탈로그에 있는지 여기서 못 박는다. */
+const WAGE = require('../backend/data/wage-jobs.json');
+const JOB_NAMES = new Map();
+WAGE.majors.forEach(M => M.middles.forEach(m => m.jobs.forEach(j => JOB_NAMES.set(j.code, j.name))));
+
+const jobCodes = Object.keys(S.SECTIONS_BY_JOB);
+ok('보정 표가 비어 있지 않다', jobCodes.length > 0, `→ ${jobCodes.length}개`);
+ok('모든 직업 코드가 실제 카탈로그에 있다',
+   jobCodes.every(c => JOB_NAMES.has(c)),
+   jobCodes.filter(c => !JOB_NAMES.has(c)).join(', ') || '전부 확인됨');
+ok('모든 KSIC 대분류 글자가 표에 정의돼 있다',
+   jobCodes.every(c => S.SECTIONS_BY_JOB[c].every(L => S.KSIC_SECTIONS[L])));
+/* 상장사가 있는 업종으로 이었는데 계열이 0개면 매핑이 헛돈 것이다(O 만 예외). */
+ok('공공행정 말고는 전부 계열이 나온다',
+   jobCodes.every(c => {
+     const ls = S.SECTIONS_BY_JOB[c];
+     return ls.every(L => L === 'O') || S.sectorsOfSections(ls).length > 0;
+   }));
+
+/* KSIC 대분류끼리 2자리 코드가 겹치면 한 회사가 두 대분류에 속하게 된다. */
+ok('대분류끼리 중분류 코드가 겹치지 않는다', (() => {
+  const seen = new Set();
+  for (const { codes } of Object.values(S.KSIC_SECTIONS)) {
+    for (const c of codes) { if (seen.has(c)) return false; seen.add(c); }
+  }
+  return true;
+})());
+
+console.log('\n── 6. 기업규모 ──');
+/* 1단계에서 고른 대·중견·중소·공으로 이 목록을 거르려면 회사마다 같은 축의 값이
+   있어야 한다. 그 판정은 company-classify.js 하나에서만 나와야 한다 — 여기서
+   기준을 새로 세우면 스펙에 저장되는 분류와 목록의 배지가 갈린다. */
+const CLASSIFY = require('../backend/src/company-classify.js');
+const allCos = r.sectors.flatMap(s => s.companies);
+
+ok('회사마다 규모가 붙는다', allCos.every(c => 'size' in c));
+ok('규모 값은 4분류 안에서만 나온다',
+   allCos.every(c => c.size === null || ['large', 'mid', 'small', 'public'].includes(c.size)),
+   `→ ${[...new Set(allCos.map(c => c.size))].join(', ')}`);
+ok('규모별 곳수를 같이 준다',
+   r.sizes && Object.values(r.sizes).reduce((a, b) => a + b, 0) === allCos.filter(c => c.size).length,
+   `→ ${JSON.stringify(r.sizes)}`);
+/* 이 목록은 상장사 ∩ (공정위 ∪ 고용24) 라서 큰 회사만 남는다. 중소기업이 0곳인 것은
+   버그가 아니라 사실이고, **화면이 그 사실을 적어야 한다.** */
+ok('대기업과 중견기업이 둘 다 있다', (r.sizes.large || 0) > 0 && (r.sizes.mid || 0) > 0);
+
+/* 분류가 목록 쪽에서 따로 계산되고 있지 않은지 — 표본으로 대조한다. */
+ok('배지가 company-classify 판정과 같다', allCos.slice(0, 200).every(c => {
+  const j = CLASSIFY.classify(c.name);
+  return c.size === (j.matched ? CLASSIFY.CORP_TYPE_ID[j.type] : null);
+}));
+
+/* 음차 미매칭 — 자동완성은 대기업이라고 하는데 그걸 골라 저장하면 중소기업이 되던 것.
+   같은 명단을 classify 와 suggest 가 다르게 읽고 있었다. */
+console.log('\n── 6-2. 알파벳 사명도 분류된다 ──');
+for (const name of ['SK하이닉스', 'LG전자', 'KT', 'CJ제일제당', 'NAVER']) {
+  const j = CLASSIFY.classify(name);
+  ok(`${name} 이 명단에서 잡힌다`, j.matched && j.type === '대기업', `→ ${j.type}`);
+}
+ok('모르는 회사는 여전히 미등록이다',
+   CLASSIFY.classify('듣도보도못한회사').matched === false,
+   '못 찾은 것을 찾은 척하면 안 된다');
+
+console.log('\n── 6-3. 지주회사를 금융에서 빼낸다 ──');
+/* KSIC 는 지주회사를 금융업(64992)으로 분류한다. 통계로는 맞지만, 산업을 **고르는**
+   축이 되면 화면이 거짓말을 한다 — 실측으로 '금융·보험' 68곳 중 33곳이 지주회사였고,
+   금융을 고른 학생에게 농심홀딩스·하림지주(식품)·노루홀딩스(도료)·한진칼(항공)이
+   나왔다. 순수 금융사는 29곳뿐이었다. */
+const holdings = r.sectors.find(s => s.name === '지주회사');
+const finance = r.sectors.find(s => s.name === '금융·보험');
+ok('지주회사 계열이 생겼다', holdings && holdings.companies.length > 20, `→ ${holdings?.companies.length}곳`);
+
+const hasName = n => holdings.companies.some(c => c.name === n);
+for (const n of ['롯데지주', '농심홀딩스', '한진칼', '노루홀딩스', '코오롱', '하림지주']) {
+  ok(`${n} 이 지주회사로 간다`, hasName(n));
+}
+ok('금융·보험에는 지주회사가 안 남는다',
+   !finance.companies.some(c => /(홀딩스|지주)$/.test(c.name)),
+   finance.companies.filter(c => /(홀딩스|지주)$/.test(c.name)).map(c => c.name).join(', ') || '없음');
+ok('진짜 금융사는 그대로 있다',
+   ['우리은행', '삼성증권', '삼성화재해상보험', '카카오뱅크', '삼성카드']
+     .every(n => finance.companies.some(c => c.name === n)));
+/* 649(3자리)로만 온 회사는 지주회사인지 코드로 알 수 없다 — 그 안에 벤처캐피탈이
+   섞여 있다. 이름 규칙은 그 6곳에만 쓰고, 전체에 훑지 않는다. */
+ok('벤처캐피탈을 지주회사로 끌고 가지 않는다', !hasName('미래에셋벤처투자'));
+ok('회사가 두 계열에 겹치지 않는다', (() => {
+  const seen = new Set();
+  for (const s of r.sectors) for (const c of s.companies) {
+    if (seen.has(c.name)) return false;
+    seen.add(c.name);
+  }
+  return true;
+})());
+ok('빼내도 총합은 그대로', r.total === 778, `→ ${r.total}곳`);
+
+console.log('\n── 7. 공공기관 목록 ──');
+/* 공공기관은 대부분 비상장이라 업종코드가 없어 계열 목록에 4곳밖에 못 들어간다.
+   1단계에서 '공공기관' 을 고른 학생에게 4곳을 내밀면 안 되므로 따로 낸다. */
+const pub = S.publicOrgs();
+ok('공공기관 목록이 나온다', pub.total > 1000, `→ ${pub.total}곳`);
+ok('중앙과 지방이 둘 다 들어 있다',
+   pub.lanes.some(l => l.name === '공기업') && pub.lanes.some(l => l.name === '지방공기업'),
+   `→ ${pub.lanes.map(l => `${l.name} ${l.companies.length}`).join(' · ')}`);
+/* 실측 함정 — local-public-orgs.json 에는 organizations 말고 sourceFiles 도 있어서,
+   "처음 걸리는 배열" 로 읽으면 파일 이름 두 줄을 기관 목록으로 집어 온다.
+   예외도 안 나고 1,312곳이 조용히 사라진다. */
+ok('지방 기관이 통째로 빠지지 않았다',
+   pub.lanes.find(l => l.name === '지방출자출연기관')?.companies.length > 500);
+ok('전부 공공기관 규모다', pub.lanes.every(l => l.companies.every(c => c.size === 'public')));
+ok('법인격 표기를 다듬는다',
+   pub.lanes.every(l => l.companies.every(c => !/^\(|주식회사|^재단법인/.test(c.name))));
+ok('같은 기관을 두 번 담지 않는다', (() => {
+  const seen = new Set();
+  for (const l of pub.lanes) for (const c of l.companies) {
+    const k = c.name.replace(/\s+/g, '');
+    if (seen.has(k)) return false;
+    seen.add(k);
+  }
+  return true;
+})());
+ok('유형·소관부처를 같이 남긴다',
+   pub.lanes.find(l => l.name === '공기업').companies.every(c => c.note),
+   '레인 이름만으로는 시장형·준시장형이 뭉개진다');
+
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
 process.exit(fail ? 1 : 0);

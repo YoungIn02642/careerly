@@ -95,6 +95,42 @@ function finish() {
       console.log(`  SKIP  전체 캐시가 없습니다(${st2.cached}건). scripts/fetch-dart-corps.js 를 실행하세요.`);
     }
 
+    /* ── 8. 직원현황 접기 ──────────────────────────────────────
+       실제로 틀렸던 자리다. 삼성전자 응답에는 부문별 줄 뒤에 '성별합계' 가 한 번 더
+       오는데 그것까지 더해서 인원이 두 배(257,762)로 떴고, 사업부문 1위가 '성별합계'
+       였다. 아래 고정 응답은 2025년 실제 값이다. */
+    console.log('\n── 8. 직원현황 접기 ──');
+    const row = (fo_bbm, sm, extra = {}) => ({ fo_bbm, sm: String(sm), ...extra });
+
+    const samsung = DART.foldEmployees([
+      row('DX', '38,119'), row('DX', '12,698'),
+      row('DS', '56,154'), row('DS', '21,910'),
+      row('성별합계', '94,273'), row('성별합계', '34,608'),
+    ], 2025);
+    ok('합계 줄을 빼고 센다', samsung.count === 128881, `→ ${samsung.count.toLocaleString()}명`);
+    ok("'성별합계' 가 부문으로 올라오지 않는다",
+       !samsung.segments.some(s => s.name === '성별합계'),
+       `→ ${samsung.segments.map(s => s.name).join(', ')}`);
+    ok('부문은 인원 순', samsung.segments[0].name === 'DS' && samsung.segments[1].name === 'DX');
+    ok('비율은 합계 대비', samsung.segments[0].pct === 61, `→ DS ${samsung.segments[0].pct}%`);
+
+    /* '전사' 는 합계가 아니라 **부문을 안 나눈 회사의 유일한 줄**이다. 이것까지
+       걷어내면 카카오·NAVER 의 인원이 0이 된다. */
+    const kakao = DART.foldEmployees([row('전사', '2,186'), row('전사', '1,736')], 2025);
+    ok("'전사' 는 합계로 보지 않는다", kakao.count === 3922, `→ ${kakao.count.toLocaleString()}명`);
+
+    /* 합계 줄만 온 회사 — 걷어낼 것이 없으니 그대로 쓴다(0명이 되면 안 된다). */
+    const onlyTotal = DART.foldEmployees([row('합계', '1,200')], 2025);
+    ok('합계 줄만 오면 그것을 쓴다', onlyTotal && onlyTotal.count === 1200);
+
+    /* '〃' 는 앞 줄의 부문을 물려받는다 — 실측: 강남제비스코 도료 583 + 〃 44. */
+    const jevisco = DART.foldEmployees([row('도료', '583'), row('〃', '44')], 2025);
+    ok("'〃' 를 앞 부문에 합친다",
+       jevisco.segments.length === 1 && jevisco.segments[0].count === 627,
+       `→ ${jevisco.segments.map(s => `${s.name} ${s.count}`).join(', ')}`);
+
+    ok('빈 응답은 null', DART.foldEmployees([], 2025) === null);
+
     console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
     process.exit(fail ? 1 : 0);
   });

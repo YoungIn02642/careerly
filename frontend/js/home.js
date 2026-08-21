@@ -108,8 +108,63 @@ function replayReveal() {
   setupReveal();
 }
 
+/* ══ 커리어 인사이트 카드 ══════════════════════════════════════
+   ── 예전에는 HTML 에 제목 네 개가 박혀 있었다 ──
+   그리고 **누를 수도 없었다** — 읽을 글이 애초에 없었기 때문이다. 제목에는
+   '합격자 71%가 경험한 인턴십', 'TOEIC 900 vs 850' 처럼 출처 없는 수치까지
+   들어 있었는데, 화면을 채우려고 넣은 값을 학생은 사실로 읽는다.
+
+   지금은 커리어 인사이트 게시판의 **실제 글**로 이어진다. 카드 정의(제목·커버·
+   소요시간)의 단일 출처는 서버다(backend/src/insight-featured.js) — 사진과 글이
+   짝지어져 있어서 한쪽만 고치면 사진과 제목이 어긋난다.
+
+   ── 못 받아 와도 홈은 멀쩡해야 한다 ──
+   서버가 죽었거나 시드를 안 돌린 DB 면 카드가 안 나오는데, 그러면 홈 한가운데에
+   빈 칸이 생긴다. 그때는 이 칸을 통째로 감춘다 — 제목만 있고 안 열리는 카드를
+   보여 주느니 없는 편이 낫다. */
+const ART_ACCENTS = ['acc-a', 'acc-b'];
+
+async function paintArticles() {
+  const box = document.getElementById('home-articles');
+  if (!box || box.dataset.done === '1') return;   // 홈에 들를 때마다 다시 부르지 않는다
+
+  let data = null;
+  try { data = await DB.insightFeatured(); } catch { /* 아래에서 칸을 감춘다 */ }
+
+  const list = data?.articles || [];
+  const sec = document.getElementById('insights-sec');
+  if (!list.length) { if (sec) sec.hidden = true; return; }
+  if (sec) sec.hidden = false;
+
+  const esc = s => String(s ?? '').replace(/[&<>"']/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  box.innerHTML = list.map((a, i) => `
+    <div class="art-card ${ART_ACCENTS[i % ART_ACCENTS.length]}" data-post="${esc(a.postId || '')}">
+      <div class="art-cover art-cover--photo">
+        <img src="img/insight/${esc(a.cover)}" alt="" loading="lazy" />
+      </div>
+      <div class="art-body">
+        <span class="art-chip">${esc(a.chip)}</span>
+        <div class="art-title">${esc(a.title)}</div>
+        <div class="art-meta">커리어 인사이트 · ${a.minutes}분</div>
+      </div>
+    </div>`).join('');
+
+  box.querySelectorAll('[data-post]').forEach(el => el.addEventListener('click', () => {
+    /* 글이 아직 시드되지 않았으면 목록으로 보낸다. 아무 데도 안 가면 눌러도
+       반응이 없는 카드가 되는데, 그건 고장으로 읽힌다. */
+    const id = el.dataset.post;
+    if (id) { try { localStorage.setItem(Insight.LS_OPEN, id); } catch { /* 프라이빗 모드 */ } }
+    navigate('insight');
+  }));
+
+  box.dataset.done = '1';
+}
+window.paintArticles = paintArticles;
+
 /* ── main page hook (called by app.js showPage) ─────────── */
-function renderHome() { applyTweaks(); refreshStartFree(); }
+function renderHome() { applyTweaks(); refreshStartFree(); paintArticles(); }
 window.renderHome = renderHome;
 
 /* ── "무료로 시작하기" — 로그인 상태별 동작 ───────────────── */

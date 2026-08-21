@@ -17,11 +17,13 @@ const OAuth = require('./oauth');
 const NiceAuth = require('./nice-auth');
 const recommendationsRouter = require("./routes/recommendations");
 const casAnalyzeRouter = require("./routes/casAnalyze");
+const casFitRouter = require("./routes/casFit");
 const jdCoachRouter = require("./routes/jdCoach");
 const companyAnalysisRouter = require("./routes/companyAnalysis");
 const { router: mentoringRouter } = require("./routes/mentoring");
 const { router: paymentsRouter } = require("./routes/payments");
 const { router: insightRouter } = require("./routes/insight");
+const specupRouter = require("./routes/specup");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -72,10 +74,15 @@ app.use(express.static(FRONTEND_DIR, {
 }));
 app.use("/api/recommendations", recommendationsRouter);
 app.use("/api/cas", casAnalyzeRouter);
+/* 직무 적합도 — 업무특성 기준 채점. AI 는 매칭만 하고 점수는 cas-fit.js 가 낸다. */
+app.use("/api/cas", casFitRouter);
 app.use("/api/jd", jdCoachRouter);
 /* 기업분석(뉴스+DART)은 /api/company/analysis 하나다. 같은 접두사의 classify·suggest 는
    아래쪽에 app.get 으로 따로 있는데, 경로가 겹치지 않아 순서 문제가 생기지 않는다. */
 app.use("/api/company", companyAnalysisRouter);
+/* 스펙업 — 자격증 시험일정·공모전 모집. 로그인은 필요 없다. 부족 판정은 프론트가
+   자기 스펙으로 하고, 여기는 공개 데이터만 되돌려 준다. */
+app.use("/api/specup", specupRouter);
 /* 멘토링·결제·인사이트는 라우터 안에서 req.user 를 보므로 세션을 먼저 붙여 준다
    (전역 requireAuth 는 아니다 — 가격표·게시판 읽기는 비로그인도 본다). */
 app.use(["/api/mentoring", "/api/payments", "/api/insights"], async (req, res, next) => {
@@ -832,19 +839,31 @@ app.get('/api/company/suggest', ah(async (req, res) => {
 // 분류 캐시 상태 — 배치를 돌렸는지 확인용
 app.get('/api/company/stats', ah(async (req, res) => res.json(await catalog.companyStats())));
 
-/* 계열별 기업 목록 — 회사 찾기 첫 화면. 캐시 파일만 읽으므로 빠르다.
-   내용이 하루에 바뀌는 자료가 아니라 ETag 재검증에 맡긴다(/api/jobs 와 같은 규약).
 
-   ?middle=<KECO 2차 코드> 를 주면 **목록은 그대로 두고** focus 만 덧붙인다.
-   커리어 로드맵 4단계에서 "이 직무를 주로 뽑는 계열"을 앞으로 끌어올리는 데 쓴다.
-   목록 자체를 잘라 보내지 않는 이유는, 좁힌 계열 밖에도 지원할 회사가 있기 때문이다 —
-   무엇을 왜 앞에 뒀는지는 화면이 밝히고, 나머지를 볼 자유는 남긴다. */
-app.get('/api/company/sectors', (req, res) => {
-  res.set('Cache-Control', 'no-cache');
+/* ── 취업 업종 트리 — 회사 찾기 첫 화면이 실제로 쓰는 목록 ──────
+   계열(company-sectors.js `sectors()`)과 무엇이 다른가: 저건 KSIC 중분류를 묶은
+   '계열' 이고 여기는 **사람인·잡코리아가 쓰는 말**이다(게임·화장품·2차전지…).
+   계열을 그대로 내보내던 라우트는 이 트리가 대신하면서 지웠다(작업정리 24-10).
+   업종코드는 그대로 열쇠로 쓰되 화면에 나가는 이름만 바꾼 것이라, 근거는 그대로
+   회사가 신고한 값이다(company-sectors.js industryTree · job-industry.js).
+
+   민간·공공을 **한 번에** 준다. 옛 계열 목록은 공공기관을 따로 실어 날랐는데(업종코드가
+   없어 계열에 4곳밖에 못 들어간다), 여기서는 '기관·공공' 이 대분류 하나로 들어가고 그
+   아래를 기관 유형·소관부처로 나눠서 축이 어긋나지 않는다. 2,442곳 · 100KB 남짓이라
+   한 번 받아 두면 단계를 오갈 때 서버를 다시 부를 일이 없다.
+
+   ?middle=<KECO 2차 코드>[&job=<직업코드>] 를 주면 focus.minors 가 붙는다 —
+   "이 직무를 주로 뽑는 업종" 에 추천 표시를 다는 데 쓴다. 목록을 잘라 보내지는
+   않는다 — 좁힌 업종 밖에도 지원할 회사가 있다. 무엇을 왜 앞에 뒀는지는 화면이 밝히고,
+   나머지를 볼 자유는 남긴다. */
+app.get('/api/company/industry-tree', (req, res) => {
+  res.set('Cache-Control', 'no-cache');   // 내용이 하루에 바뀌지 않는다 — ETag 재검증에 맡긴다
   const middle = String(req.query.middle || '').trim();
-  const base = sectors.sectors();
-  res.json(middle ? { ...base, focus: sectors.sectorFocus(middle) } : base);
+  const job = String(req.query.job || '').trim();
+  const base = sectors.industryTree();
+  res.json(middle ? { ...base, focus: sectors.industryFocus(middle, job) } : base);
 });
+
 
 /* ── 자격증 카탈로그 ────────────────────────────────────────────
    스펙 입력 화면의 자격증 선택 목록. 국가자격(큐넷 API 캐시) + 민간자격(수기).

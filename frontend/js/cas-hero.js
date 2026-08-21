@@ -18,8 +18,6 @@
 // ════════════════════════════════════════════════════════════
 window.CASHero = (() => {
 
-  let selectedJob = null;
-
   /* 이 인원 미만이면 백분위를 숨긴다. 3명 중 2등을 '상위 33%' 라고
      보여주는 건 정보가 아니라 착시다. */
   const MIN_PEERS = 5;
@@ -110,32 +108,86 @@ window.CASHero = (() => {
     return sub ? `${dept} · ${sub} 기준` : `${dept} 기준`;
   }
 
-  function paintJobSelect(spec) {
+  /* ── 비교 직무 셀렉트 ─────────────────────────────────────────
+     이 칸은 **오랫동안 비어 있었다.** 원인은 하나가 아니라 셋이었다.
+
+     | 상황 | 예전 결과 |
+     |---|---|
+     | 비로그인 · 스펙 없음 | showEmpty() 로 먼저 빠져나가 셀렉트를 아예 안 칠했다 → 빈 칸 |
+     | 로드맵 직무 없음 | 옛 학과 기반 `SpecForm.JOB_OPTIONS[spec.field]` 인데 그 표가 비면 옵션 0개 |
+     | 같은 1차 분류에 형제가 없음 | `Roadmap.siblings()` 결과 하나 → 고를 수 없는 셀렉트 |
+
+     ── 무엇을 보여줄 것인가 ──
+     비교의 단위는 **KECO 2차 분류(직무군) 35개**다. CAS 벤치마크·로드맵 STEP 03·
+     GAP 이 전부 이 단위로 집계하므로(roadmap.js '해상도를 속이지 않는다'),
+     셀렉트도 같은 단위여야 화면끼리 말이 맞는다. 1차 분류로 묶어 optgroup 에
+     담으면 35개도 한눈에 들어온다.
+
+     ── 어떻게 고르게 할 것인가 ──
+     옵션마다 **그 직무군의 선배 표본 수**를 같이 적는다. 이게 이 화면의 핵심인데,
+     선배가 0명인 직무군은 점수를 내도 비교가 성립하지 않기 때문이다. 고르기 전에
+     보이면 "왜 계산이 안 되지" 가 "표본이 없구나" 로 바뀐다.
+
+     고른 값은 `Roadmap.setJob()` 으로 흐름 상태에 심는다. CAS 만의 별도 선택을
+     두면 로드맵과 CAS 가 서로 다른 직무를 목표라고 말하게 된다 — roadmap.js 를
+     만든 이유가 바로 그 상태를 없애는 것이었다. */
+  const esc = s => String(s ?? '').replace(/[&<>"']/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  /* 분류를 한 번만 받아 온다. 실패해도 화면은 살아 있어야 하므로(점수는 학과 기준으로
+     계속 낼 수 있다) 셀렉트에만 실패를 적고 넘어간다. */
+  let kecoTried = false;
+  let loadError = false;
+  function ensureKeco() {
+    if (KECO.ready() || kecoTried) return;
+    kecoTried = true;
+    KECO.load()
+      .then(() => { loadError = false; render(); })
+      .catch(() => { loadError = true; paintJobSelect(); });
+  }
+
+  /* 2차 분류별 선배 표본 수.
+     Aggregator.compute() 를 35번 부르면 선배 1,000여 명의 정성 원점수를 그때마다
+     다시 채점한다(compute 가 qualBenchRaw 를 만든다) — 여기서 필요한 건 개수뿐이라
+     matcher 로 세기만 한다. */
+  function peerCounts() {
+    const specs = (typeof DB !== 'undefined' && DB.getAllSpecs()) || [];
+    const out = {};
+    KECO.MAJORS().forEach(m => (m.middles || []).forEach(mid => {
+      const fn = KECO.middleMatcher(m.code, mid.code);
+      out[`${m.code}:${mid.code}`] = fn ? specs.filter(fn).length : 0;
+    }));
+    return out;
+  }
+
+  /* 값은 `1차:2차` 다. 2차 분류 코드만 담으면 다른 1차 분류의 직무군으로는 옮겨갈 수
+     없고(예전 siblings 방식의 한계), 학과 기반 화면에서 넘어온 사람은 시작점이 없다. */
+  function paintJobSelect() {
     const select = $('cas-job-select');
     if (!select) return;
-    const jobs = (window.SpecForm?.JOB_OPTIONS || {})[spec.field] || [];
-    if (!jobs.length) {
-      select.innerHTML = `<option value="${spec.job || ''}">${labelOf(spec).replace(' 기준', '')}</option>`;
+
+    if (!KECO.ready()) {
+      select.innerHTML = `<option value="">${loadError ? '직무 목록을 불러오지 못했어요' : '직무 목록 불러오는 중…'}</option>`;
       select.disabled = true;
       return;
     }
-    select.disabled = false;
-    if (!selectedJob || !jobs.some(([id]) => id === selectedJob)) selectedJob = spec.job || jobs[0][0];
-    select.innerHTML = jobs.map(([id, label]) =>
-      `<option value="${id}" ${id === selectedJob ? 'selected' : ''}>${label}</option>`).join('');
-  }
 
-  /* 로드맵으로 들어왔을 때의 '비교 직무' — 같은 1차 분류의 2차 분류들을 담는다.
-     고른 것 하나만 박아 두면 셀렉트가 아니라 라벨이 되고, 옛 학과 기반 목록을
-     그대로 두면 화면이 로드맵과 다른 직무를 말하게 된다. */
-  function paintRoadmapJobSelect(rm) {
-    const select = $('cas-job-select');
-    if (!select) return;
-    const sibs = Roadmap.siblings();
-    select.disabled = sibs.length <= 1;
-    select.innerHTML = (sibs.length ? sibs : [{ code: rm.middle, name: rm.middleName }])
-      .map(s => `<option value="${s.code}" ${s.code === rm.middle ? 'selected' : ''}>${s.name}</option>`)
-      .join('');
+    const rm = Roadmap.get();
+    const cur = rm ? `${rm.major}:${rm.middle}` : '';
+    const counts = peerCounts();
+
+    const groups = KECO.MAJORS().map(m => {
+      const opts = (m.middles || []).map(mid => {
+        const key = `${m.code}:${mid.code}`;
+        const n = counts[key] || 0;
+        return `<option value="${key}"${key === cur ? ' selected' : ''}>`
+             + `${esc(mid.name)} · 선배 ${n}명</option>`;
+      }).join('');
+      return `<optgroup label="${esc(`${m.emoji} ${m.name}`)}">${opts}</optgroup>`;
+    }).join('');
+
+    select.disabled = false;
+    select.innerHTML = (cur ? '' : `<option value="" selected>직무군을 골라 주세요</option>`) + groups;
   }
 
   /* ── 로드맵 직무 기준 벤치마크 ────────────────────────────────
@@ -152,71 +204,108 @@ window.CASHero = (() => {
     return { ...b, agg: agg.empty ? null : agg };
   }
 
+  /* ── 지금 무엇과 비교하고 있는가 ──────────────────────────────
+     화면을 그리지 않고 **모집단만 정한다.** CAS 화면과 스펙업 화면이 각자 이 판단을
+     하면 "CAS 는 정보통신 직무군 기준인데 스펙업은 컴퓨터공학과 기준" 같은, 사용자가
+     설명할 수 없는 상태가 생긴다. 한 함수에서 정하고 둘 다 그걸 쓴다.
+
+     성공하면 `{ ok:true, ctx }`, 못 하면 **왜 못 하는지**를 돌려준다. 빈 화면만
+     주면 '부족한 게 없다' 로 읽히기 때문이다(mentoring.js gapContext 와 같은 원칙).
+
+     ── 어느 직무로 채점할 것인가 ────────────────────────────
+     목표 직무가 있으면 **그 직무가 이긴다.** 없을 때만 스펙에 저장된 학과·직무로
+     채점하고, 화면에도 "○○학과 기준" 이라고 적는다.
+
+     ── 조용히 다른 모집단으로 물러서지 않는다 ──
+     예전에는 목표 직무의 선배 표본이 0명이면 말없이 학과 기준으로 내려갔다.
+     위쪽 목표 칩은 '○○ 직무군' 이라고 적혀 있는데 점수는 다른 집단에서 나온
+     셈이라, 숫자가 왜 그런지 설명할 수 없었다(작업정리 6-3 '조용히 틀리는 곳').
+     이제는 계산을 접고 왜 접었는지 적는다. 셀렉트에 직무군마다 선배 수가 붙어
+     있으므로 바로 그 자리에서 표본이 있는 직무군으로 옮겨갈 수 있다. */
+  function resolveContext() {
+    const user = DB.currentUser();
+    if (!user) {
+      return { ok: false, reason: 'login', msg: '로그인하면 내 CAS 점수를 볼 수 있어요.',
+        help: '로그인 후 스펙을 입력하면 선배 데이터와 비교해 점수를 계산해 드려요.' };
+    }
+    const savedSpec = DB.getSpec(user.username);
+    if (!savedSpec || !savedSpec.dept) {
+      return { ok: false, reason: 'spec', msg: '아직 스펙을 입력하지 않았어요.',
+        help: '마이페이지에서 학점·어학·경험을 입력하면 점수가 계산됩니다.' };
+    }
+
+    const rm = Roadmap.get();
+
+    if (rm && KECO.ready()) {
+      const b = roadmapBenchmark();
+      if (!b || !b.agg) {
+        const label = rm.middleName || rm.jobName || '이 직무군';
+        return { ok: false, reason: 'no-peers', msg: `${label} 선배 데이터가 아직 없어요.`,
+          help: '위 ‘비교 직무’ 에서 선배 수가 있는 직무군을 고르면 그 기준으로 계산해 드려요. '
+              + '이 직무군은 데이터가 쌓이는 대로 열립니다.' };
+      }
+      return { ok: true, ctx: {
+        spec: savedSpec, agg: b.agg,
+        scopeLabel: b.label,                              // '○○ 직무군'
+        catalogIds: (Aggregator.CERT_CATALOG[b.certKey] || []).map(c => c.id),
+        roadmap: rm, source: 'roadmap',
+      } };
+    }
+
+    /* 벤치마크는 좁은 조건부터(직무 → 분야 → 학과) 넓혀 간다.
+       레이더는 '비어 있을 때만' 넓히지만 여기서는 MIN_PEERS 를 채울 때까지 넓힌다 —
+       백분위는 모집단이 곧 신뢰도라, 같은 직무 1명과 비교한 순위는 의미가 없다.
+       끝까지 못 채우면 가장 넓은 집계를 쓴다 — 어차피 백분위를 못 낼 상황이면
+       1명짜리 평균보다 학과 전체 평균이 점수 기준으로 덜 흔들린다. */
+    const steps = [
+      { dept: savedSpec.dept, field: savedSpec.field, job: savedSpec.job },
+      { dept: savedSpec.dept, field: savedSpec.field },
+      { dept: savedSpec.dept },
+    ];
+    const aggs = steps.map(q => Aggregator.compute(q)).filter(a => !a.empty);
+    if (!aggs.length) {
+      return { ok: false, reason: 'no-peers', msg: '비교할 선배 데이터가 아직 없어요.',
+        help: '같은 학과·직무 선배 데이터가 쌓이면 점수와 백분위가 표시됩니다. '
+            + '위 ‘비교 직무’ 에서 다른 직무군을 골라 볼 수도 있어요.' };
+    }
+    /* 저장된 직무 데이터가 한 명이라도 있으면 그 직무를 그대로 쓴다.
+       예전처럼 5명을 채우려고 분야·학과로 넓히면 직무를 바꿔도 점수가 같아진다. */
+    return { ok: true, ctx: {
+      spec: savedSpec, agg: aggs[0],
+      scopeLabel: labelOf(savedSpec).replace(' 기준', ''),
+      catalogIds: (Aggregator.CERT_CATALOG[savedSpec.dept] || []).map(c => c.id),
+      roadmap: rm, source: 'spec',
+    } };
+  }
+
   // ── 진입점 ──────────────────────────────────────────────────
   function render() {
     if (!$('cas-hero')) return;
     window.CASDashboardContext = null;
     Roadmap.mount('rm-bar-dashboard', 'me');
 
-    /* 로드맵에서 넘어왔으면 그 직무로 채점해야 하는데, 직무 분류(200KB)는 로드맵을
-       열 때만 받는다. #dashboard 로 바로 들어온 경우 여기서 받아 다시 그린다. */
-    if (Roadmap.hasJob() && !KECO.ready() && !window.__casKecoTried) {
-      window.__casKecoTried = true;
-      KECO.load().then(render).catch(() => { /* 옛 학과 기준으로 계속 간다 */ });
+    /* 직무 분류(200KB)는 로드맵을 열 때만 받는다. #dashboard 로 바로 들어오면
+       아직 없다. 예전에는 '로드맵 직무가 있을 때만' 받았는데, 이제는 **비교 직무
+       셀렉트 자체가 이 분류로 만들어지므로** 이 화면에 들어오면 늘 받아 온다.
+       받는 동안 셀렉트는 '불러오는 중' 이고, 오면 다시 그린다. */
+    ensureKeco();
+
+    /* 직무 적합도 칸 — 선배 비교와 다른 질문에 답하는 자리라, 아래 화면의
+       성공·실패와 무관하게 늘 그린다(선배가 0명이어도 적합도는 나온다). */
+    if (window.CASFit) CASFit.render();
+
+    /* 셀렉트는 점수를 못 내는 상태에서도 반드시 칠한다 — 아래 showEmpty 갈래로
+       빠져나가면서 이걸 건너뛴 것이 '비교 직무가 빈 칸' 의 직접 원인이었다. */
+    paintJobSelect();
+
+    const resolved = resolveContext();
+    if (!resolved.ok) {
+      if (resolved.reason === 'no-peers') renderNext(null);
+      return showEmpty(resolved.msg, resolved.help);
     }
 
-    const user = DB.currentUser();
-    if (!user) return showEmpty('로그인하면 내 CAS 점수를 볼 수 있어요.',
-      '로그인 후 스펙을 입력하면 선배 데이터와 비교해 점수를 계산해 드려요.');
-
-    const savedSpec = DB.getSpec(user.username);
-    if (!savedSpec || !savedSpec.dept) return showEmpty('아직 스펙을 입력하지 않았어요.',
-      '마이페이지에서 학점·어학·경험을 입력하면 점수가 계산됩니다.');
-
-    /* ── 어느 직무로 채점할 것인가 ────────────────────────────
-       로드맵에서 직무를 고르고 왔으면 그 직무가 이긴다. 그러지 않으면 화면은
-       "○○ 직무 기준" 이라고 적어 놓고 스펙에 저장된 옛 직무로 계산하게 된다. */
-    const rmBench = roadmapBenchmark();
-    const rm = Roadmap.get();
-
-    let spec, agg, scopeLabel, catalogIds;
-
-    if (rmBench && rmBench.agg) {
-      paintRoadmapJobSelect(rm);
-      spec = savedSpec;
-      agg = rmBench.agg;
-      scopeLabel = rmBench.label;                       // '○○ 직무군'
-      catalogIds = (Aggregator.CERT_CATALOG[rmBench.certKey] || []).map(c => c.id);
-      window.CASDashboardContext = { spec, agg, scopeLabel, roadmap: rm, source: 'roadmap' };
-    } else {
-      paintJobSelect(savedSpec);
-      spec = { ...savedSpec, job: selectedJob || savedSpec.job };
-
-      /* 벤치마크는 좁은 조건부터(직무 → 분야 → 학과) 넓혀 간다.
-         레이더는 '비어 있을 때만' 넓히지만 여기서는 MIN_PEERS 를 채울 때까지 넓힌다 —
-         백분위는 모집단이 곧 신뢰도라, 같은 직무 1명과 비교한 순위는 의미가 없다.
-         끝까지 못 채우면 가장 넓은 집계를 쓴다 — 어차피 백분위를 못 낼 상황이면
-         1명짜리 평균보다 학과 전체 평균이 점수 기준으로 덜 흔들린다. */
-      const steps = [
-        { dept: spec.dept, field: spec.field, job: spec.job },
-        { dept: spec.dept, field: spec.field },
-        { dept: spec.dept },
-      ];
-      const aggs = steps.map(q => Aggregator.compute(q)).filter(a => !a.empty);
-      if (!aggs.length) {
-        renderNext(null);
-        return showEmpty('비교할 선배 데이터가 아직 없어요.',
-          rmBench
-            ? `${rmBench.label} 선배 데이터가 아직 없어요. 쌓이면 이 직무 기준으로 계산해 드립니다.`
-            : '같은 학과·직무 선배 데이터가 쌓이면 점수와 백분위가 표시됩니다.');
-      }
-      /* 선택한 직무 데이터가 한 명이라도 있으면 그 직무를 그대로 쓴다.
-         예전처럼 5명을 채우려고 분야·학과로 넓히면 직무를 바꿔도 점수가 같아진다. */
-      agg = aggs[0];
-      scopeLabel = labelOf(spec).replace(' 기준', '');
-      catalogIds = (Aggregator.CERT_CATALOG[spec.dept] || []).map(c => c.id);
-      window.CASDashboardContext = { spec, agg, scopeLabel, roadmap: rm, source: 'spec' };
-    }
+    const { spec, agg, scopeLabel, catalogIds } = resolved.ctx;
+    window.CASDashboardContext = resolved.ctx;
 
     const mine = scoreOf(spec, agg, catalogIds);
 
@@ -268,18 +357,24 @@ window.CASHero = (() => {
     if (typeof window.renderRoadmapNext === 'function') window.renderRoadmapNext(mine, pct);
   }
 
-  /* 로드맵 모드에서는 셀렉트 값이 KECO 2차 분류 코드다 — 흐름 상태를 바꿔야
-     회사 찾기·자소서 코치까지 같이 따라온다. 아니면 옛 학과 기반 직무 id 다. */
+  /* 셀렉트 값은 `1차:2차` 다. 고른 직무군을 **흐름 상태에 심는다** — CAS 만의 별도
+     선택으로 두면 회사 찾기·자소서 코치가 여전히 옛 직무를 본다. 갈아 끼우는 규칙
+     (직업 단위 선택을 비운다 · 같은 것을 다시 고르면 그대로 둔다)은 흐름 상태를
+     가진 쪽이 안다 — Roadmap.switchMiddle 하나만 쓴다. */
   function selectJob(value) {
-    if (Roadmap.hasJob() && KECO.ready() && KECO.middleById(Roadmap.get().major, value)) {
-      Roadmap.switchMiddle(value);
-    } else {
-      selectedJob = value || null;
-    }
+    const [major, middle] = String(value || '').split(':');
+    if (!major || !middle || !KECO.ready()) return;
+
+    Roadmap.switchMiddle(middle, major);
+
+    /* 직무가 바뀌면 적합도는 통째로 다른 직업의 점수가 된다 — 캐시를 버린다. */
+    if (window.CASFit) CASFit.reset();
     render();
     if (window.CASRadar) CASRadar.render();
     if (typeof window.animateDashboard === 'function') window.animateDashboard();
   }
 
-  return { render, selectJob, scoreOf, percentileOf };
+  /* 스펙업 화면이 같은 모집단을 쓰게 하는 통로. 화면을 그리지 않으므로
+     #dashboard 에 들어가지 않아도 부를 수 있다. */
+  return { render, selectJob, scoreOf, percentileOf, resolveContext, ensureKeco };
 })();

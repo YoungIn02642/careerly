@@ -18,11 +18,14 @@
 const express = require('express');
 const NEWS = require('../news');
 const DART = require('../dart');
+const REPORT = require('../dart-report');
 const GUIDE = require('../cover-guide');
 const SARAMIN = require('../saramin-jobs');
 const WORKNET = require('../worknet-jobs');
 const ALIO = require('../alio-jobs');
 const SECTORS = require('../company-sectors');
+const JOB = require('../job-industry');
+const KSIC = require('../ksic');
 
 const router = express.Router();
 
@@ -185,6 +188,32 @@ async function fetchJobs(name) {
   };
 }
 
+/* GET /api/company/business?name=<회사명>
+   '무엇을 하는 회사인가' 를 사업보고서 원문에서 줄글로 가져온다.
+
+   ── 왜 /analysis 에 합치지 않았나 ──
+   위 라우트의 머리주석은 "화면에서 두 번 부르게 하면 하나가 느릴 때 반쪽만
+   그려진다" 고 적어 뒀고 그 판단은 지금도 맞다. 그런데 이 값은 성격이 다르다 —
+   보고서 원문 ZIP 이 회사마다 5~14MB 다(실측). /analysis 에 얹으면 재무도 뉴스도
+   공고도 그 다운로드를 기다린다. **모두를 늦추느니 이 칸만 늦게 채운다.**
+   화면은 이 칸이 오기 전에는 "사업보고서에서 가져오는 중" 을 보여준다 —
+   빈칸을 숨기지 않는다는 규칙은 그대로다. */
+router.get('/business', async (req, res) => {
+  const name = String(req.query.name || '').trim();
+  if (!name) return res.status(400).json({ error: '회사명을 입력해 주세요.' });
+  try {
+    res.json(await REPORT.business(name));
+  } catch (e) {
+    /* 실패를 200 으로 감싸지 않는다 — 화면이 '없음' 과 구별해서 다시 눌러 볼 수
+       있어야 한다. 사업 내용이 없어도 리포트의 나머지는 이미 떠 있다. */
+    res.status(e.status === 429 ? 429 : 502).json({
+      ok: false, reason: 'fetch-failed',
+      message: '사업보고서 원문을 가져오지 못했어요.',
+      detail: e.message,
+    });
+  }
+});
+
 router.get('/analysis', async (req, res) => {
   const name = String(req.query.name || '').trim();
   if (!name) return res.status(400).json({ error: '회사명을 입력해 주세요.' });
@@ -229,9 +258,21 @@ router.get('/analysis', async (req, res) => {
       profile: dart.profile && {
         ...dart.profile,
         sector: SECTORS.sectorOfCode(dart.profile.industryCode),
+        /* 화면에 내보낼 업종 이름. 예전에는 '업종코드 212' 를 그대로 띄웠는데,
+           그건 우리가 읽으라고 준 값이 아니라 신고 서식의 숫자다.
+           ① 취업 업종(사람인·잡코리아가 쓰는 말)이 있으면 그것을 쓰고,
+           ② 없으면 KSIC 공식 명칭으로 물러난다(회사 색인은 11만 곳이라 우리 목록
+              밖의 회사도 리포트는 열린다),
+           ③ 둘 다 없으면 null 이다 — 지어내지 않는다. 화면이 '—' 로 적는다. */
+        industryLabel: (JOB.classify(name || dart.profile.name, dart.profile.industryCode) || {}).minor
+          || (KSIC.deepest(dart.profile.industryCode) || {}).name
+          || null,
       },
       financials: summarizeFinancials(dart.financials),
-      employees: dart.employees,
+      employees: dart.employees,      // segments(사업부문)까지 들어 있다
+      /* 관계사 — 사업부문과 짝이다. 여기 안 실으면 화면의 '무엇을 하는 회사인가' 가
+         절반만 뜬다(실측으로 그렇게 됐다 — dart.js 에는 있는데 이 목록에서 빠졌었다). */
+      affiliates: dart.affiliates,
       labels: LABELS,
       competitors: dart.competitors,
       note: dart.note,

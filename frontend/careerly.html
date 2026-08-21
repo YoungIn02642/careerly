@@ -300,40 +300,15 @@
         <div><h2>커리어 인사이트</h2><div class="sub">데이터로 읽는 취업 준비 이야기</div></div>
         <span class="home-sec-all" onclick="goInsights()">전체보기</span>
       </div>
-      <div class="home-articles">
-        <div class="art-card acc-a">
-          <div class="art-cover"><span class="emoji">📜</span></div>
-          <div class="art-body">
-            <span class="art-chip">자격증</span>
-            <div class="art-title">백엔드 취업, 정보처리기사는 정말 필수일까?</div>
-            <div class="art-meta">데이터 인사이트 · 5분</div>
-          </div>
-        </div>
-        <div class="art-card acc-b">
-          <div class="art-cover"><span class="emoji">💼</span></div>
-          <div class="art-body">
-            <span class="art-chip">인턴십</span>
-            <div class="art-title">합격자 71%가 경험한 인턴십, 언제 시작할까</div>
-            <div class="art-meta">데이터 인사이트 · 7분</div>
-          </div>
-        </div>
-        <div class="art-card acc-a">
-          <div class="art-cover"><span class="emoji">🗣️</span></div>
-          <div class="art-body">
-            <span class="art-chip">어학</span>
-            <div class="art-title">TOEIC 900 vs 850, 실제 합격선은 어디일까</div>
-            <div class="art-meta">데이터 인사이트 · 4분</div>
-          </div>
-        </div>
-        <div class="art-card acc-b">
-          <div class="art-cover"><span class="emoji">🏆</span></div>
-          <div class="art-body">
-            <span class="art-chip">활동</span>
-            <div class="art-title">공모전 수상이 CAS 점수에 미치는 영향</div>
-            <div class="art-meta">데이터 인사이트 · 6분</div>
-          </div>
-        </div>
-      </div>
+      <!-- ── 카드는 JS 가 만든다 (home.js paintArticles) ──────────────
+           예전에는 제목 네 개가 여기 박혀 있었고 **누를 수도 없었다** — 읽을 글이
+           애초에 없었기 때문이다. 지금은 커리어 인사이트 게시판의 실제 글로
+           이어지고, 그 글 목록은 서버가 준다(/api/insights/featured).
+
+           박아 둔 제목에는 '합격자 71%', 'TOEIC 900 vs 850' 처럼 **출처 없는
+           수치**도 들어 있었다. 화면을 채우려고 넣은 값인데 학생은 그걸 사실로
+           읽는다 — 새 글에는 그런 숫자가 없다(insight-featured.js 머리주석). -->
+      <div class="home-articles" id="home-articles"></div>
     </section>
 
     <footer class="home-footer">
@@ -618,6 +593,10 @@
         취업에 성공한 선배들의 실제 데이터와 비교해 계산합니다.</p>
     </div>
 
+    <!-- 직무 적합도 — 이 직업의 업무특성과 내 스펙을 견준 1000점.
+         내용은 js/cas-fit.js 가 만든다(임금직업정보시스템 업무특성 기준). -->
+    <div id="cas-fit"></div>
+
     <!-- CAS hero — 값은 js/cas-hero.js 가 채운다 -->
     <div class="card cas-hero" id="cas-hero">
       <div>
@@ -706,6 +685,16 @@
          내용은 js/mentoring.js 의 renderRoadmapNext() 가 만든다. -->
     <div id="cas-next"></div>
   </div>
+</main>
+
+<!-- ══════════ SPEC-UP — 스펙 채우기 ══════════
+     로드맵 2단계(CAS)에서 갈라지는 곁가지. CAS 가 "무엇이 부족한지" 를 말해 주면
+     여기서 "그래서 지금 무엇을 신청할지" 를 고른다. 예전에는 이 자리가 마이페이지
+     스펙 입력 폼이었는데, 거기는 *이미 한 것을 적는* 곳이라 흐름이 끊겼다.
+     내용은 js/specup.js 가 만든다(스펙 입력·백오피스와 같은 방식). -->
+<main class="page page--doc" id="page-specup">
+  <div class="rm-bar-host" id="rm-bar-specup"></div>
+  <div class="wrap" id="specup-wrap"></div>
 </main>
 
 <!-- ══════════ MENTOR SEARCH ══════════ -->
@@ -1093,6 +1082,7 @@
 <script src="js/cas-profile.js"></script>
 <script src="js/cas-radar.js"></script>
 <script src="js/cas-hero.js"></script>
+<script src="js/cas-fit.js"></script>
 <script src="js/cas-compare.js"></script>
 <script src="js/spec-form.js"></script>
 <!-- app.js 보다 앞에 와야 한다 — showPage()/initMypage() 가 이들을 부른다 -->
@@ -1103,7 +1093,11 @@
 <script src="js/mentoring.js"></script>
 <script src="js/jd-coach.js"></script>
 <script src="js/company-cover.js"></script>
+<!-- 마크다운 렌더러. insight.js 보다 **먼저** 와야 한다 — 본문을 그릴 때 쓴다. -->
+<script src="js/markdown.js"></script>
 <script src="js/insight.js"></script>
+<!-- specup 은 CASHero.resolveContext 와 mentoring.js 의 window.Gap 을 쓴다 — 둘 뒤에 둔다 -->
+<script src="js/specup.js"></script>
 <script src="js/app.js"></script>
 
 <!-- ══ TWEAKS PANEL ══ -->

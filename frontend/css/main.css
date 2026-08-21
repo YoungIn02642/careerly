@@ -1485,17 +1485,14 @@ input[readonly]:focus { border-color: var(--border); box-shadow: none; }
 .topbar {
   background: var(--c-surface); border-bottom: 1px solid var(--c-border);
   padding: 14px 28px; display: flex; align-items: center; gap: 0; flex-shrink: 0;
-  /* .career-main 이 스크롤 컨테이너다(overflow-y:auto) — 그 안에서 맨 위에 붙어
-     스크롤해도 지금 보고 있는 직무 경로가 항상 보이게 한다. */
-  position: sticky; top: 0; z-index: 5;
+  /* ── 고정하지 않는다 (사용자 지시) ────────────────────────────
+     예전에는 여기를 sticky 로 붙여 두고 스크롤하면 작게 접었다(is-compact).
+     그 접기가 **화면이 위로 튀는 원인**이었다 — 직무를 고를 때마다 이 블록을 다시
+     그리고 스크롤 위치를 되돌리는데, 그 직후 접기가 걸리면서 높이가 12px 줄어
+     본문 전체가 그만큼 위로 딸려 올라갔다(실측 809 → 797).
+     대신 아래 로드맵 스텝바(.content > .rm-bar)를 고정한다 — 스크롤 중에 계속
+     보여야 하는 것은 '지금 몇 단계인가' 지, 방금 누른 분류 이름이 아니다. */
 }
-/* 맨 위가 아니면(scrollTop > 4, career.js syncTopbarCompact) 작게 접는다 —
-   붙어 있는 채로 계속 처음 크기면 본문을 가리는 느낌이 든다.
-   render() 가 직무를 고를 때마다 이 블록을 통째로 다시 그리는데, 그때마다
-   transition 이 있으면 크기가 애니메이션으로 움직이는 것처럼 보여 눈에 거슬린다
-   (실측 — 클릭할 때마다 topbar 가 움찔거렸다). 그래서 바로 그 크기로 앉힌다. */
-.topbar.is-compact { padding: 8px 28px; }
-.topbar.is-compact .breadcrumb { font-size: 11.5px; }
 .breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--c-ink3); }
 .breadcrumb span.active { color: var(--c-ink); font-weight: 500; }
 .breadcrumb .sep { font-size: 11px; color: var(--c-ink3); }
@@ -1653,24 +1650,12 @@ input[readonly]:focus { border-color: var(--border); box-shadow: none; }
 .pg-arrow[disabled] { opacity: .38; cursor: default; }
 .pg-gap { padding: 0 2px; color: var(--c-ink3); font-size: 13px; }
 
-/* ── 연봉 카드 (기업 유형보다 위) ───────────────────────────── */
-.wage-card {
-  background: var(--c-surface); border: 1.5px solid var(--c-border);
-  border-radius: var(--radius); padding: 18px 20px; box-shadow: var(--shadow);
-}
-.wage-main { display: flex; flex-direction: column; gap: 6px; }
-.wage-label { font-size: 11.5px; color: var(--c-ink3); }
-.wage-amount { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; }
-.wage-note {
-  margin: 8px 0 24px; font-size: 11.5px; color: var(--c-ink3); line-height: 1.6;
-}
+/* 연봉 카드(.wage-*)는 제거됐다 — 직업을 고른 뒤 평균임금을 다시 크게 띄우지
+   않기로 했다(career.js renderRoadmap 주석). 평균임금은 직업 카드(.jc-wage)와
+   2차 분류 카드에만 남는다. */
 @media (max-width: 1100px) { .job-grid { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 700px)  { .job-grid { grid-template-columns: 1fr; } .wage-amount { font-size: 24px; } }
+@media (max-width: 700px)  { .job-grid { grid-template-columns: 1fr; } }
 .welcome-sub { font-size: 12px; opacity: .75; }
-@media (max-width: 640px) {
-  .wage-card { gap: 16px; }
-  .wage-amount { font-size: 24px; }
-}
 .field-card {
   background: var(--c-surface); border: 1.5px solid var(--c-border);
   border-radius: var(--radius); padding: 14px;
@@ -2177,6 +2162,12 @@ body.nav-drawer-open { overflow: hidden; }
 .content > .rm-bar {
   border: 1px solid var(--border); border-radius: 12px;
   margin-bottom: 14px;
+  /* ── 여기를 고정한다 (사용자 지시) ────────────────────────────
+     스크롤 컨테이너는 .career-main 이라, 그 안의 이 카드가 top:0 에 붙는다.
+     본문 padding(28px) 안쪽이라 위가 비어 보이지 않게 음수 여백으로 당겨 붙이고,
+     붙었을 때 뒤 내용이 비쳐 보이지 않게 배경을 준다. */
+  position: sticky; top: 0; z-index: 6;
+  margin-top: -4px;
 }
 .content > .rm-bar .rm-bar-inner { padding: 8px 14px; }
 

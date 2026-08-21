@@ -1,0 +1,916 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>회사 찾기 — 4단 분류 프로토타입 3안</title>
+<style>
+  /* ══════════════════════════════════════════════════════════
+     갤러리 프레임 — 설계 리뷰용 도면.
+     자소서코치-프로토타입.html 과 같은 토큰을 쓴다(나란히 놓고 보게 된다).
+
+     ── 이 파일은 목업이 아니라 실제로 눌러 보는 프로토타입이다 ──
+     회사 775곳·공공기관 1,667곳이 **실데이터**로 들어 있다. 업종명은 통계청
+     KSIC 10차 코드집에서 온 공식 명칭이라, 눌러 보다 만나는 것이 곧 사실이다.
+     ══════════════════════════════════════════════════════════ */
+  :root {
+    --g-bg:#f1f2f4; --g-surf:#ffffff; --g-surf2:#e8e9ec; --g-line:#dfe1e5;
+    --g-ink:#16171a; --g-ink2:#4a4c53; --g-mut:#82848c; --g-acc:#6d3aff;
+    --g-bad:#c2410c; --g-bad-bg:#fdf2ec; --g-good:#0f766e; --g-good-bg:#edf7f5;
+    --g-sans:'Pretendard Variable',Pretendard,-apple-system,BlinkMacSystemFont,
+             'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif;
+    --g-mono:ui-monospace,'SF Mono','Cascadia Mono',Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --g-bg:#131418; --g-surf:#1b1c21; --g-surf2:#24262c; --g-line:#2e3037;
+      --g-ink:#eceef2; --g-ink2:#b6b9c2; --g-mut:#83868f; --g-acc:#a488ff;
+      --g-bad:#f2916a; --g-bad-bg:#2a1d17; --g-good:#63c9bd; --g-good-bg:#152522;
+    }
+  }
+  :root[data-theme="dark"] {
+    --g-bg:#131418; --g-surf:#1b1c21; --g-surf2:#24262c; --g-line:#2e3037;
+    --g-ink:#eceef2; --g-ink2:#b6b9c2; --g-mut:#83868f; --g-acc:#a488ff;
+    --g-bad:#f2916a; --g-bad-bg:#2a1d17; --g-good:#63c9bd; --g-good-bg:#152522;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--g-bg); color: var(--g-ink);
+    font-family: var(--g-sans); font-size: 15px; line-height: 1.7;
+    font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, h4 { margin: 0; font-weight: 800; letter-spacing: -.02em; text-wrap: balance; }
+  p { margin: 0; }
+  ul { margin: 0; padding: 0; list-style: none; }
+  button { font: inherit; color: inherit; }
+  code { font-family: var(--g-mono); font-size: .92em; }
+  :focus-visible { outline: 2px solid var(--g-acc); outline-offset: 2px; border-radius: 3px; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+  /* ── 갤러리 레이아웃 ────────────────────────────────────── */
+  .g-app { display: grid; grid-template-columns: 252px minmax(0, 1fr); align-items: start; }
+  .g-rail {
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    padding: 26px 18px 40px; border-right: 1px solid var(--g-line); background: var(--g-surf);
+  }
+  .g-brand { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--g-mut); }
+  .g-rail h1 { margin: 6px 0 5px; font-size: 19px; line-height: 1.35; }
+  .g-rail-sub { font-size: 12px; color: var(--g-mut); line-height: 1.65; }
+  .g-grp { margin-top: 22px; }
+  .g-grp-h { display: flex; align-items: baseline; gap: 6px; padding: 0 4px 7px; }
+  .g-grp-h span { font-size: 10px; letter-spacing: .1em; color: var(--g-mut); }
+  .g-grp-h b { font-size: 12px; }
+  .g-nav { display: flex; flex-direction: column; gap: 2px; }
+  .g-nav button {
+    display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px;
+    border: 0; border-radius: 7px; background: transparent; text-align: left;
+    font-size: 13px; cursor: pointer;
+  }
+  .g-nav button:hover { background: var(--g-surf2); }
+  .g-nav button em {
+    flex: none; width: 22px; font-style: normal; font-size: 10px; font-weight: 700;
+    letter-spacing: .04em; color: var(--g-mut);
+  }
+  /* min-width:0 이 없으면 그리드 항목의 기본값(auto)이 **내용의 min-content** 라,
+     비교표(.g-tbl min-width:640px)가 페이지 전체를 640px 밖으로 밀어낸다.
+     실측: 567px 화면에서 문서 폭이 676px 이 되어 좌우 스크롤이 생겼다. */
+  .g-main { min-width: 0; padding: 34px clamp(18px, 3vw, 40px) 90px; max-width: 1180px; }
+  @media (max-width: 860px) {
+    .g-app { grid-template-columns: 1fr; }
+    .g-rail { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--g-line); }
+  }
+
+  .g-intro { padding-bottom: 26px; border-bottom: 1px solid var(--g-line); scroll-margin-top: 16px; }
+  .g-intro h2 { font-size: 24px; }
+  .g-intro p { margin-top: 10px; font-size: 14px; line-height: 1.85; color: var(--g-ink2); max-width: 80ch; }
+
+  .g-spine { margin-top: 18px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .g-spine div { padding: 12px 13px; border: 1px solid var(--g-line); border-radius: 10px; background: var(--g-surf); }
+  .g-spine em {
+    display: block; font-style: normal; font-size: 10px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--g-mut);
+  }
+  .g-spine b { display: block; margin-top: 3px; font-size: 14px; }
+  .g-spine small { display: block; margin-top: 3px; font-size: 12px; line-height: 1.6; color: var(--g-mut); }
+  @media (max-width: 780px) { .g-spine { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+  .g-proto { padding-top: 44px; scroll-margin-top: 16px; }
+  .g-meta { display: flex; align-items: center; gap: 9px; }
+  .g-code {
+    padding: 2px 8px; border-radius: 5px; background: var(--g-acc); color: #fff;
+    font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  }
+  .g-part { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--g-mut); }
+  .g-proto h3 { margin-top: 9px; font-size: 27px; }
+  .g-tag { margin-top: 8px; font-size: 14px; line-height: 1.8; color: var(--g-ink2); max-width: 78ch; }
+  .g-refs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
+  .g-refs b { font-size: 10px; letter-spacing: .1em; color: var(--g-mut); }
+  .g-refs span {
+    padding: 2px 8px; border: 1px solid var(--g-line); border-radius: 999px;
+    font-size: 11px; color: var(--g-mut); background: var(--g-surf);
+  }
+
+  .g-notes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+  @media (max-width: 860px) { .g-notes { grid-template-columns: 1fr; } }
+  .g-note { padding: 14px 16px; border-radius: 10px; border: 1px solid var(--g-line); background: var(--g-surf); }
+  .g-note h4 { font-size: 12px; letter-spacing: .04em; }
+  .g-note ul { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .g-note li { position: relative; padding-left: 13px; font-size: 13px; line-height: 1.7; color: var(--g-ink2); }
+  .g-note li::before {
+    content: ''; position: absolute; left: 0; top: 9px; width: 5px; height: 5px;
+    border-radius: 50%; background: currentColor; opacity: .38;
+  }
+  .g-note--bad { background: var(--g-bad-bg); border-color: color-mix(in srgb, var(--g-bad) 25%, transparent); }
+  .g-note--bad h4 { color: var(--g-bad); }
+  .g-note--good { background: var(--g-good-bg); border-color: color-mix(in srgb, var(--g-good) 25%, transparent); }
+  .g-note--good h4 { color: var(--g-good); }
+
+  /* ── 목업 프레임 ────────────────────────────────────────── */
+  .g-frame { margin: 20px 0 0; border: 1px solid var(--g-line); border-radius: 12px; overflow: hidden; }
+  .g-frame-bar {
+    display: flex; align-items: center; gap: 10px; padding: 9px 13px;
+    border-bottom: 1px solid var(--g-line); background: var(--g-surf2);
+  }
+  .g-dots { display: flex; gap: 5px; }
+  .g-dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--g-line); }
+  .g-url { font-family: var(--g-mono); font-size: 11px; color: var(--g-mut); }
+  .g-live {
+    margin-left: auto; padding: 2px 9px; border-radius: 999px;
+    background: color-mix(in srgb, var(--g-good) 15%, transparent);
+    color: var(--g-good); font-size: 10px; font-weight: 700; letter-spacing: .05em;
+  }
+
+  /* ══ 목업 내부 — C:road 실제 화면 톤 ═══════════════════════
+     스크린샷처럼 읽혀야 하므로 다크로 뒤집지 않는다(프레임만 테마를 따른다). */
+  .m {
+    --i:#16171a; --b:#3d3f46; --u:#82848c; --ln:#e4e5e9; --fl:#f5f6f8;
+    --ac:#6d3aff; --ok:#0f766e;
+    padding: 22px; background: #fff; color: var(--i); font-size: 14px; line-height: 1.6;
+  }
+  .m-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .m-head h4 { font-size: 19px; font-weight: 700; }
+  .m-head span { font-size: 12.5px; color: var(--u); }
+
+  /* ── 기업 형태 필터 ─────────────────────────────────────
+     이건 **단계가 아니라 필터**다. 계열 위에 걸려서 목록 전체를 바꾼다.
+     지금 실제 화면(.co-sizes)에서 폭이 안 맞아 왼쪽으로 치우쳐 있던 그 줄이다. */
+  .m-filter {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+    margin-top: 14px; padding: 11px 13px; border: 1px solid var(--ln); border-radius: 10px; background: var(--fl);
+  }
+  .m-filter > b { font-size: 12px; font-weight: 700; color: var(--b); margin-right: 2px; }
+  .m-filter .m-hint { margin-left: auto; font-size: 11.5px; color: var(--u); }
+
+  /* 진행 표시 — 네 단계 중 지금 어디까지 왔는지 */
+  .m-steps { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 14px; }
+  .m-step {
+    display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px;
+    border: 1px solid var(--ln); border-radius: 999px; font-size: 12px; color: var(--u); background: #fff;
+    max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .m-step i { font-style: normal; font-weight: 700; opacity: .55; }
+  .m-step.on { border-color: var(--i); color: var(--i); font-weight: 600; }
+  .m-step.done {
+    border-color: color-mix(in srgb, var(--ok) 40%, transparent);
+    background: color-mix(in srgb, var(--ok) 7%, transparent); color: var(--ok);
+  }
+  .m-step.skip { border-style: dashed; }
+  .m-arw { color: var(--ln); font-size: 12px; }
+
+  /* ── A안 · 4단 컬럼 ─────────────────────────────────────── */
+  .m-cols { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
+  @media (max-width: 900px) { .m-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  /* 네 칸의 키를 고정한다. 안 그러면 그리드 행이 **가장 긴 칸**에 맞춰 늘어나서
+     회사 49곳을 고르는 순간 칸 하나가 1,619px 이 되고 스크롤이 사라진다(실측).
+     min-height:0 이 없으면 flex 자식이 안 줄어든다. */
+  .m-col { height: 372px; border: 1px solid var(--ln); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
+  .m-col-h { flex: none; padding: 9px 11px; border-bottom: 1px solid var(--ln); background: var(--fl); }
+  .m-col-h b { display: block; font-size: 12.5px; font-weight: 700; }
+  .m-col-h small { display: block; font-size: 11px; color: var(--u); }
+  .m-col-b { flex: 1; min-height: 0; overflow-y: auto; padding: 5px; }
+  .m-opt {
+    display: flex; align-items: center; gap: 7px; width: 100%; padding: 7px 9px;
+    border: 0; border-radius: 7px; background: transparent; cursor: pointer;
+    font-size: 13px; text-align: left; line-height: 1.45;
+  }
+  .m-opt:hover { background: var(--fl); }
+  .m-opt.on { background: var(--i); color: #fff; }
+  .m-opt.on .m-n { color: rgba(255,255,255,.7); }
+  .m-opt-t { flex: 1; min-width: 0; }
+  .m-n { flex: none; font-size: 11px; color: var(--u); }
+  .m-opt input { flex: none; accent-color: var(--ac); width: 15px; height: 15px; margin: 0; }
+  .m-opt.is-none .m-opt-t { color: var(--u); font-style: italic; }
+  .m-empty { padding: 26px 12px; text-align: center; font-size: 12px; color: var(--u); line-height: 1.75; }
+
+  /* ── B안 · 단계 토글 ────────────────────────────────────── */
+  .m-acc { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+  .m-ac { border: 1px solid var(--ln); border-radius: 10px; overflow: hidden; background: #fff; }
+  .m-ac.is-open { border-color: var(--i); }
+  .m-ac.is-locked { opacity: .45; }
+  .m-ac-h {
+    display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px 13px;
+    border: 0; background: transparent; cursor: pointer; text-align: left;
+  }
+  .m-ac.is-locked .m-ac-h { cursor: not-allowed; }
+  .m-ac-n {
+    flex: none; width: 21px; height: 21px; border-radius: 50%; background: var(--fl);
+    display: grid; place-items: center; font-size: 11px; font-weight: 700; color: var(--u);
+  }
+  .m-ac.is-done .m-ac-n { background: var(--ok); color: #fff; }
+  .m-ac-t { flex: 1; min-width: 0; }
+  .m-ac-t b { display: block; font-size: 13px; font-weight: 700; }
+  .m-ac-t small { display: block; font-size: 12px; color: var(--u); }
+  .m-ac-pick { font-size: 12.5px; font-weight: 600; color: var(--ac); text-align: right; max-width: 46%; }
+  .m-ac-b { padding: 2px 11px 13px; border-top: 1px solid var(--ln); max-height: 300px; overflow-y: auto; }
+  .m-chips { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 11px; }
+  .m-chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px;
+    border: 1px solid var(--ln); border-radius: 999px; background: #fff;
+    font-size: 12.5px; cursor: pointer; text-align: left;
+  }
+  .m-chip:hover { border-color: var(--i); }
+  .m-chip.on { background: var(--i); border-color: var(--i); color: #fff; }
+  .m-chip.on .m-n { color: rgba(255,255,255,.7); }
+  .m-chip--box.on { background: color-mix(in srgb, var(--ac) 9%, #fff); border-color: var(--ac); color: var(--i); }
+  .m-chip--none { color: var(--u); font-style: italic; }
+  .m-chip input { accent-color: var(--ac); width: 14px; height: 14px; margin: 0; }
+
+  /* ── C안 · 드릴다운 ─────────────────────────────────────── */
+  .m-crumb { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin-top: 14px; font-size: 12.5px; }
+  .m-crumb button {
+    padding: 4px 11px; border: 1px solid var(--ln); border-radius: 999px;
+    background: #fff; cursor: pointer; font-size: 12.5px; max-width: 260px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .m-crumb button:hover { border-color: var(--i); }
+  .m-crumb .now { background: var(--i); border-color: var(--i); color: #fff; }
+  .m-drill { margin-top: 12px; border: 1px solid var(--ln); border-radius: 10px; overflow: hidden; }
+  .m-drill-h {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 13px; border-bottom: 1px solid var(--ln); background: var(--fl);
+  }
+  .m-drill-h b { font-size: 13.5px; }
+  .m-drill-h small { display: block; font-size: 12px; color: var(--u); font-weight: 400; }
+  .m-drill-h .m-all {
+    margin-left: auto; padding: 5px 11px; border: 1px solid var(--ln); border-radius: 7px;
+    background: #fff; font-size: 12px; cursor: pointer; white-space: nowrap;
+  }
+  .m-rows { max-height: 330px; overflow-y: auto; }
+  .m-row {
+    display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px 13px;
+    border: 0; border-bottom: 1px solid var(--ln); background: #fff; cursor: pointer;
+    text-align: left; font-size: 13.5px;
+  }
+  .m-row:last-child { border-bottom: 0; }
+  .m-row:hover { background: var(--fl); }
+  .m-row-t { flex: 1; min-width: 0; }
+  .m-row-t small { display: block; font-size: 11.5px; color: var(--u); }
+  .m-row.is-none .m-row-t { color: var(--u); font-style: italic; }
+  .m-row .m-go { color: var(--u); font-size: 15px; }
+  .m-row input { accent-color: var(--ac); width: 16px; height: 16px; margin: 0; }
+  .m-paths { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .m-path {
+    display: inline-flex; align-items: center; gap: 7px; padding: 5px 7px 5px 11px;
+    border: 1px solid color-mix(in srgb, var(--ac) 35%, transparent); border-radius: 999px;
+    background: color-mix(in srgb, var(--ac) 7%, transparent); font-size: 12px;
+  }
+  .m-path b { font-weight: 600; }
+  .m-path button { border: 0; background: transparent; cursor: pointer; color: var(--u); padding: 0 3px; font-size: 14px; line-height: 1; }
+
+  /* ── 담은 목록 (3안 공통) ───────────────────────────────── */
+  .m-cart { margin-top: 16px; border: 1px solid var(--ln); border-radius: 10px; background: var(--fl); padding: 13px 15px; }
+  .m-cart-h { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+  .m-cart-h b { font-size: 13.5px; }
+  .m-cart-h span { font-size: 12px; color: var(--u); }
+  .m-cta {
+    margin-left: auto; padding: 6px 13px; border: 0; border-radius: 7px;
+    background: var(--i); color: #fff; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  }
+  .m-cta[disabled] { background: var(--ln); color: var(--u); cursor: not-allowed; }
+  .m-cart-l { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .m-tag {
+    display: inline-flex; align-items: center; gap: 7px; padding: 5px 7px 5px 11px;
+    border: 1px solid var(--ln); border-radius: 999px; background: #fff; font-size: 12.5px;
+  }
+  .m-tag em { font-style: normal; font-size: 11px; color: var(--u); }
+  .m-tag button { border: 0; background: transparent; cursor: pointer; color: var(--u); font-size: 14px; line-height: 1; padding: 0 2px; }
+  .m-cart-e { margin-top: 8px; font-size: 12.5px; color: var(--u); }
+
+  /* 데이터에서 나온 주의문 — 프로토타입 안에서 그대로 읽히게 둔다.
+     "이 칸이 왜 이렇게 생겼나" 는 리뷰에서 반드시 나오는 질문이라 화면에 붙여 둔다. */
+  .m-note {
+    margin-top: 11px; padding: 9px 12px; border-radius: 8px;
+    background: color-mix(in srgb, var(--ac) 6%, transparent);
+    border: 1px solid color-mix(in srgb, var(--ac) 20%, transparent);
+    font-size: 12px; line-height: 1.75; color: var(--b);
+  }
+  .m-note b { color: var(--i); }
+
+  .g-fin { margin-top: 54px; padding-top: 26px; border-top: 1px solid var(--g-line); scroll-margin-top: 16px; }
+  .g-fin h2 { font-size: 21px; }
+  .g-fin p { margin-top: 10px; font-size: 14px; line-height: 1.85; color: var(--g-ink2); max-width: 80ch; }
+  .g-wrap { overflow-x: auto; margin-top: 14px; }
+  .g-tbl { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 13.5px; }
+  .g-tbl th, .g-tbl td { padding: 10px 11px; border-bottom: 1px solid var(--g-line); text-align: left; vertical-align: top; }
+  .g-tbl th { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--g-mut); }
+</style>
+</head>
+<body>
+
+<div class="g-app">
+  <aside class="g-rail">
+    <div class="g-brand">C:road · Design Review</div>
+    <h1>회사 찾기<br>4단 분류 프로토타입</h1>
+    <p class="g-rail-sub">사람인·잡코리아·링커리어처럼 연달아 좁혀 가며 회사를 고르는 3안.
+      <b>실데이터가 들어 있어 직접 눌러 볼 수 있습니다.</b></p>
+
+    <div class="g-grp">
+      <div class="g-grp-h"><span>Prototype</span><b>3안</b></div>
+      <div class="g-nav">
+        <button type="button" data-go="p1"><em>A</em>4단 컬럼 · 사람인식</button>
+        <button type="button" data-go="p2"><em>B</em>단계 토글 · 잡코리아식</button>
+        <button type="button" data-go="p3"><em>C</em>드릴다운 누적 · 링커리어식</button>
+      </div>
+    </div>
+    <div class="g-grp">
+      <div class="g-grp-h"><span>Reference</span><b>배경</b></div>
+      <div class="g-nav">
+        <button type="button" data-go="intro"><em>0</em>분류 축과 실측</button>
+        <button type="button" data-go="data"><em>!</em>데이터의 한계</button>
+        <button type="button" data-go="fin"><em>=</em>비교와 추천</button>
+      </div>
+    </div>
+  </aside>
+
+  <main class="g-main">
+    <div class="g-intro" id="p-intro">
+      <h2>분류를 취업사이트 기준으로 바꿨다</h2>
+      <p>앞선 안은 업종을 <b>한국표준산업분류(KSIC)</b>로 보여줬다. 그런데 KSIC 는 통계 분류라
+        취업 시장의 말과 다르다 — 넷마블·크래프톤이 <b>‘출판업’</b>에, 아모레퍼시픽이
+        <b>‘기타 화학제품 제조업’</b>에, 롯데지주가 <b>‘기타 금융업’</b>에 들어간다.
+        학생이 찾는 말은 ‘게임’, ‘화장품’, ‘지주회사’ 다. 그 말로 묶었다.</p>
+      <p><b>KSIC 를 버리지는 않았다.</b> 회사 이름만 보고 업종을 찍으면 근거가 없다.
+        업종코드는 회사가 금융감독원에 신고한 값이라 우리가 가진 유일한 객관적 근거라서,
+        <b>코드는 매핑 열쇠로 그대로 쓰고 화면에 나가는 이름만</b> 바꿨다
+        (<code>backend/src/job-industry.js</code>). 화면에 KSIC 는 한 글자도 안 나온다.</p>
+
+      <div class="g-spine">
+        <div><em>필터</em><b>기업 형태</b><small>대기업 306 · 중견 469 · 공공 1,667</small></div>
+        <div><em>1단계 · 1택</em><b>업종 대분류</b><small>IT·웹·통신, 제조·화학 등 10개</small></div>
+        <div><em>2단계 · 1택</em><b>업종 중분류</b><small>게임·반도체·제약 등 49개</small></div>
+        <div><em>3단계 · <b>복수</b></em><b>회사</b><small>체크한 곳이 지원 후보가 된다</small></div>
+      </div>
+
+      <p><b>사람인·잡코리아도 업종은 2단이다.</b> 세 단으로 더 쪼개면 회사 775곳에서는
+        칸마다 1~4곳이 되어 고를 거리가 없어진다. 대신 <b>공공기관만 한 단 더 깊다</b> —
+        1,667곳을 유형 5개로만 나누면 지방출자출연기관 한 칸에 890곳이 들어가서,
+        소관부처·시·도를 한 단 끼웠다. 화면은 단계를 세지 않고 <b>회사 목록을 만나면 거기가 끝</b>으로 읽는다.</p>
+      <p><b>선택지가 하나뿐인 단계는 자동으로 건너뛴다.</b> 누를 것이 하나만 있는 화면은
+        고르는 것이 아니라 확인 도장을 찍는 일이다. 건너뛴 단계는 진행 표시에 점선으로 남는다.</p>
+    </div>
+
+    <!-- ══════════════════════ A안 ══════════════════════ -->
+    <section class="g-proto" id="p-p1">
+      <div class="g-meta"><span class="g-code">A</span><span class="g-part">Prototype · 4단 컬럼</span></div>
+      <h3>4단 컬럼 — 사람인식</h3>
+      <p class="g-tag">네 단계를 <b>가로로 나란히</b> 펴 놓고 왼쪽부터 채운다. 지금 어느 경로로 좁혀 왔는지가
+        한 화면에 다 보이고, 되돌아가려면 왼쪽 칸을 다시 누르면 된다. 사람인·잡코리아의 업직종 선택 팝업이
+        쓰는 얼개다.</p>
+      <div class="g-refs"><b>REF</b><span>사람인 업직종 선택</span><span>잡코리아 직무별</span><span>macOS Finder 컬럼뷰</span></div>
+
+      <div class="g-notes">
+        <div class="g-note g-note--good">
+          <h4>이 안이 잘하는 것</h4>
+          <ul>
+            <li>네 단계가 동시에 보여 <b>되돌아가기가 한 번</b>이다 — 업종만 바꿔 보는 비교가 쉽다</li>
+            <li>각 칸에 곳수가 붙어 있어 “여기 들어가면 몇 곳인지”를 누르기 전에 안다</li>
+            <li>마지막 칸만 체크박스라 <b>복수 선택이 어디서 되는지</b>가 모양으로 구분된다</li>
+          </ul>
+        </div>
+        <div class="g-note g-note--bad">
+          <h4>대가</h4>
+          <ul>
+            <li>좁은 화면에서 4열이 안 된다 — 900px 미만은 2×2로 접히고 그러면 흐름이 끊긴다</li>
+            <li>칸 폭이 좁아 <b>KSIC 세분류명이 서너 줄</b>로 접힌다(‘인쇄회로기판 및 전자부품 실장기판 제조업’)</li>
+            <li>첫 화면에 빈 칸 셋이 먼저 보인다 — 아직 아무것도 안 골랐을 때 허전하다</li>
+          </ul>
+        </div>
+      </div>
+
+      <figure class="g-frame">
+        <figcaption class="g-frame-bar">
+          <span class="g-dots"><i></i><i></i><i></i></span>
+          <span class="g-url">croad.app/#company</span>
+          <span class="g-live">실데이터 · 눌러 보세요</span>
+        </figcaption>
+        <div class="m" id="mk-a"></div>
+      </figure>
+    </section>
+
+    <!-- ══════════════════════ B안 ══════════════════════ -->
+    <section class="g-proto" id="p-p2">
+      <div class="g-meta"><span class="g-code">B</span><span class="g-part">Prototype · 단계 토글</span></div>
+      <h3>단계 토글 — 잡코리아식</h3>
+      <p class="g-tag">한 번에 <b>한 단계만</b> 연다. 고르면 그 단은 접혀서 “1단계 · 반도체·디스플레이 [바꾸기]”
+        한 줄이 되고 다음 단이 열린다. 아래로 쌓이는 아코디언이라 좁은 화면에서도 그대로 쓰인다.
+        긴 KSIC 세분류명이 칩 한 줄에 그대로 들어간다는 점에서 A안보다 유리하다.</p>
+      <div class="g-refs"><b>REF</b><span>잡코리아 채용 필터</span><span>링커리어 공고 필터</span><span>토스 단계 입력</span></div>
+
+      <div class="g-notes">
+        <div class="g-note g-note--good">
+          <h4>이 안이 잘하는 것</h4>
+          <ul>
+            <li>한 번에 한 가지만 물어서 <b>처음 온 사람이 헤매지 않는다</b> — 지금 할 일이 하나다</li>
+            <li>세로로 쌓이므로 <b>모바일에서 레이아웃이 바뀌지 않는다</b></li>
+            <li>칩이 가로로 넓어 <b>긴 업종명이 접히지 않는다</b> — 이번 개정에서 이름이 길어져 더 중요해졌다</li>
+          </ul>
+        </div>
+        <div class="g-note g-note--bad">
+          <h4>대가</h4>
+          <ul>
+            <li>업종만 바꿔 비교하려면 <b>펼치고 → 고르고 → 아래로 다시 내려가야</b> 한다</li>
+            <li>4단을 다 지나야 회사가 나온다 — 이미 회사 이름을 아는 사람에겐 느리다(검색창을 위에 남겨 둔 이유)</li>
+            <li>단이 열릴 때마다 아래 내용이 밀려서 스크롤 위치가 흔들린다</li>
+          </ul>
+        </div>
+      </div>
+
+      <figure class="g-frame">
+        <figcaption class="g-frame-bar">
+          <span class="g-dots"><i></i><i></i><i></i></span>
+          <span class="g-url">croad.app/#company</span>
+          <span class="g-live">실데이터 · 눌러 보세요</span>
+        </figcaption>
+        <div class="m" id="mk-b"></div>
+      </figure>
+    </section>
+
+    <!-- ══════════════════════ C안 ══════════════════════ -->
+    <section class="g-proto" id="p-p3">
+      <div class="g-meta"><span class="g-code">C</span><span class="g-part">Prototype · 드릴다운 누적</span></div>
+      <h3>드릴다운 누적 — 링커리어식</h3>
+      <p class="g-tag">화면에 <b>한 단계만</b> 두고 파고든다. 위에 남는 것은 지나온 길(브레드크럼)뿐.
+        A·B와 결정적으로 다른 점은 <b>경로를 여러 개 담을 수 있다</b>는 것이다 — ‘반도체 &gt; 전자집적회로’에서
+        셋을 담고, 다시 올라가 ‘제약 &gt; 완제 의약품’에서 둘을 더 담는다. 실제로 학생은 한 업종만 지원하지 않는다.</p>
+      <div class="g-refs"><b>REF</b><span>링커리어 필터</span><span>당근 카테고리</span><span>쿠팡 모바일 카테고리</span></div>
+
+      <div class="g-notes">
+        <div class="g-note g-note--good">
+          <h4>이 안이 잘하는 것</h4>
+          <ul>
+            <li><b>서로 다른 업종을 섞어 담는다</b> — A·B는 한 경로에서만 담을 수 있다</li>
+            <li>화면에 목록이 하나뿐이라 <b>모바일에서 가장 편하다</b>. 줄 전체를 써서 긴 이름이 안 접힌다</li>
+            <li>담은 경로가 칩으로 남아 “어디서 담았는지”가 회사 이름 옆에 붙는다</li>
+          </ul>
+        </div>
+        <div class="g-note g-note--bad">
+          <h4>대가</h4>
+          <ul>
+            <li>지금 어디에 있는지가 <b>브레드크럼 한 줄에만</b> 있다 — 눌러야 다음이 보인다</li>
+            <li>단계마다 화면이 통째로 바뀌어서 A안 같은 비교가 안 된다</li>
+            <li>기능이 하나 더 있는 만큼(경로 누적) <b>설명할 것도 하나 더 생긴다</b></li>
+          </ul>
+        </div>
+      </div>
+
+      <figure class="g-frame">
+        <figcaption class="g-frame-bar">
+          <span class="g-dots"><i></i><i></i><i></i></span>
+          <span class="g-url">croad.app/#company</span>
+          <span class="g-live">실데이터 · 눌러 보세요</span>
+        </figcaption>
+        <div class="m" id="mk-c"></div>
+      </figure>
+    </section>
+
+    <!-- ══════════════════════ 데이터 한계 ══════════════════════ -->
+    <section class="g-fin" id="p-data">
+      <h2>어떻게 분류했나 — 그리고 무엇이 미덥지 않나</h2>
+      <p>회사 <b>778곳 전부</b>가 분류됐다(실패 0건). 규칙은 <b>KSIC 업종코드 → 취업 업종</b> 표
+        한 장이고, <b>긴 코드가 이긴다</b> — 204(기타 화학제품)는 통째로 ‘석유·화학’ 인데
+        그 안의 2042(세제·화장품)만 ‘화장품·생활용품’ 으로 빠지는 식이다. 3자리 코드 126개를
+        회사 이름과 하나씩 대조하며 채웠다.</p>
+      <div class="g-wrap">
+        <table class="g-tbl">
+          <thead><tr><th>판단</th><th>왜</th></tr></thead>
+          <tbody>
+            <tr><td><b>삼성전자 → 반도체·전자부품</b></td>
+                <td>신고 코드는 264(통신·방송장비)다. 휴대폰 기준이라 그런데, 지원자에게는 반도체·전자 쪽이 맞다</td></tr>
+            <tr><td><b>타이어 3사 → 자동차·자동차부품</b></td>
+                <td>KSIC는 221(고무제품)로 묶는다. 한국타이어를 화학에서 찾을 학생은 없다</td></tr>
+            <tr><td><b>삼성바이오로직스·셀트리온 → 바이오·진단</b></td>
+                <td>신고 업종이 211(기초 의약 물질 및 생물학적 제제)이다. 제약에 두면 바이오를 찾는 학생이 못 만난다</td></tr>
+            <tr><td><b>LG에너지솔루션 → 배터리·2차전지</b></td>
+                <td>282(일차전지 및 축전지). 취업 시장에서 2차전지는 독립 업종이라 따로 세웠다</td></tr>
+            <tr><td><b>현대건설 → 건설·건축</b></td>
+                <td>41221(도로 건설업)로 신고했지만 종합건설사다. 412는 통째로 ‘건설·건축’ 으로 뒀다</td></tr>
+            <tr><td><b>이름으로 옮긴 회사 9곳</b></td>
+                <td>코드가 지금 사업과 어긋난 경우다 — 에스와이(사료 코드 → 건축자재), 모다이노칩(의복 소매 코드 → 전자부품),
+                    로젠(의복 소매 코드 → 택배) 등. <b>여기 적은 회사만</b> 손으로 옮긴다</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><b>덤으로 고쳐진 것.</b> DART 식료품 코드가 한 칸씩 밀려 있어서(104·105·106·108·109)
+        KSIC 이름을 그대로 붙이면 농심이 ‘동물용 사료’ 가 됐었다. 취업 업종은 그보다 거칠어서
+        <b>밀린 코드도 같은 칸(식품·음료)에 떨어진다</b> — 틀릴 자리가 사라졌다.</p>
+      <p style="color:var(--g-mut)"><b>남는 한계.</b> ‘지주회사’ 39곳은 업종이 아니라 회사의 형태다(무엇을 하는지는 자회사에 있다).
+        ‘도소매·유통’ 44곳처럼 성격이 섞인 칸도 있다. 그리고 이 목록에는 <b>중소기업이 없다</b> —
+        상장사 ∩ (공정위 ∪ 고용24) 라서 0곳이고, 이름을 아는 회사는 검색창에서 바로 열린다.</p>
+    </section>
+
+    <!-- ══════════════════════ 비교 ══════════════════════ -->
+    <section class="g-fin" id="p-fin">
+      <h2>세 안 비교</h2>
+      <div class="g-wrap">
+        <table class="g-tbl">
+          <thead><tr><th>기준</th><th>A · 4단 컬럼</th><th>B · 단계 토글</th><th>C · 드릴다운 누적</th></tr></thead>
+          <tbody>
+            <tr><td>처음 온 사람</td><td>빈 칸 셋이 먼저 보임</td><td><b>가장 쉬움</b> — 물음이 하나씩</td><td>쉬움</td></tr>
+            <tr><td>긴 KSIC 세분류명</td><td>서너 줄로 접힘</td><td><b>칩 한 줄</b></td><td><b>줄 전체를 씀</b></td></tr>
+            <tr><td>업종 바꿔 비교</td><td><b>한 번에 됨</b></td><td>펼쳐서 다시</td><td>브레드크럼으로 올라가기</td></tr>
+            <tr><td>여러 업종 섞어 담기</td><td>안 됨</td><td>안 됨</td><td><b>됨</b></td></tr>
+            <tr><td>모바일</td><td>2×2로 접힘</td><td><b>그대로</b></td><td><b>그대로</b></td></tr>
+            <tr><td>지금 코드에서 드는 일</td><td>중간 — 새 레이아웃</td><td><b>가장 적음</b> — 지금 칩을 단계로 묶음</td><td>많음 — 경로 누적 상태가 새로 생김</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><b>추천은 B다.</b> 업종 이름이 짧아져서(‘게임’, ‘반도체·전자부품’) A안의 좁은 칸 문제는
+        많이 풀렸지만, B는 여전히 모바일에서 레이아웃이 안 바뀌고 지금 코드에서 드는 일이 가장 적다 —
+        현재 화면이 이미 ‘칩 한 줄 × 2’ 라 그 두 줄을 단계로 묶는 일에 가깝다.</p>
+      <p>다만 <b>C의 경로 누적은 살릴 값어치가 있다</b> — ‘게임 10곳’, ‘배터리·2차전지 5곳’ 처럼
+        한 칸이 작아서 한 업종만으로는 지원 후보가 안 찬다. B의 마지막 단 아래에
+        “다른 업종에서 더 담기” 한 줄만 붙이면 된다.</p>
+    </section>
+  </main>
+</div>
+
+<script>
+/* ════════════════════════════════════════════════════════════
+   프로토타입 엔진 — 세 안이 같은 데이터·같은 상태 모형을 쓴다.
+   고르는 방법만 다르다는 것을 코드로도 지키려고 렌더러만 셋으로 나눴다.
+
+   ── 분류는 취업 업종(사람인·잡코리아식)이다 ──
+   backend/src/job-industry.js 가 KSIC 업종코드를 열쇠로 써서 회사를 취업 시장의
+   말로 묶어 준다. 화면에 KSIC 는 한 글자도 안 나온다.
+
+   ── 깊이를 세지 않는다 ──
+   민간은 대분류 → 중분류 → 회사(3단), 공공은 대분류 → 기관 유형 → 소관·지역 →
+   기관(4단)이다. 공공기관 1,667곳을 유형 5개로만 나누면 한 칸에 890곳이 들어간다.
+   그래서 화면은 단계를 세는 대신 **배열을 만나면 회사** 로 읽는다.
+   ════════════════════════════════════════════════════════════ */
+const DATA = {"generatedAt":"2026-08-21T03:25:34.407Z","order":[["IT·웹·통신",["게임","소프트웨어·솔루션","포털·인터넷콘텐츠","통신서비스"]],["제조·화학",["반도체·전자부품","컴퓨터·통신장비","전기장비·전선","계측·광학기기","자동차·자동차부품","배터리·2차전지","기계·설비","조선·항공·방산","석유·화학","화장품·생활용품","금속·철강","식품·음료","섬유·의류·패션","가구·목재·제지","유리·요업·시멘트","에너지·환경","농수산·축산","기타 제조"]],["의료·제약·바이오",["제약","바이오·진단","의료기기"]],["판매·유통",["도소매·유통","무역·상사","물류·운송"]],["은행·금융업",["은행","증권·자산운용","보험","캐피탈·여신","지주회사"]],["건설업",["건설·건축","토목·플랜트","인테리어·건축자재","엔지니어링·설계","부동산"]],["미디어·엔터",["방송·영화·제작","음악·엔터테인먼트","광고·홍보","출판·인쇄"]],["서비스업",["호텔·여행·항공","외식·프랜차이즈","레저·테마파크","렌탈·임대","시설관리·보안"]],["교육업",["교육·교재","학원"]],["기관·공공",["공기업","준정부기관","기타공공기관","지방공기업","지방출자출연기관"]]],"tree":{"건설업":{"건설·건축":[{"n":"건영","s":"mid"},{"n":"경남기업","s":"large"},{"n":"계룡건설산업","s":"mid"},{"n":"금호건설","s":"mid"},{"n":"까뮤이앤씨","s":"mid"},{"n":"남광토건","s":"mid"},{"n":"대우건설","s":"large"},{"n":"동부건설","s":"mid"},{"n":"동양건설산업","s":"large"},{"n":"두산건설","s":"large"},{"n":"디엘건설","s":"large"},{"n":"삼부토건","s":"mid"},{"n":"삼환기업","s":"large"},{"n":"서한","s":"mid"},{"n":"서희건설","s":"mid"},{"n":"신세계건설","s":"large"},{"n":"쌍용건설","s":"large"},{"n":"에쓰씨엔지니어링","s":"large"},{"n":"우방","s":"large"},{"n":"웰크론한텍","s":"mid"},{"n":"이화공영","s":"mid"},{"n":"진흥기업","s":"large"},{"n":"코오롱글로벌","s":"large"},{"n":"태영건설","s":"large"},{"n":"특수건설","s":"mid"},{"n":"풍림산업","s":"mid"},{"n":"한신공영","s":"mid"},{"n":"한일건설","s":"mid"},{"n":"현대건설","s":"large"},{"n":"호반산업","s":"large"}],"엔지니어링·설계":[{"n":"도화엔지니어링","s":"mid"},{"n":"성도이엔지","s":"mid"},{"n":"유신","s":"mid"},{"n":"한국종합기술","s":"mid"},{"n":"한양이엔지","s":"mid"}],"토목·플랜트":[{"n":"금화피에스시","s":"mid"},{"n":"동아지질","s":"mid"},{"n":"삼호개발","s":"mid"},{"n":"수산인더스트리","s":"mid"},{"n":"일진파워","s":"mid"}],"인테리어·건축자재":[{"n":"국보디자인","s":"mid"},{"n":"세보엠이씨","s":"mid"},{"n":"에스와이","s":"mid"},{"n":"엑사이엔씨","s":"mid"}],"부동산":[{"n":"부방","s":"mid"},{"n":"자이에스앤디","s":"large"}]},"제조·화학":{"섬유·의류·패션":[{"n":"대현","s":"mid"},{"n":"셀텍","s":"large"},{"n":"신영와코루","s":"mid"},{"n":"신원","s":"mid"},{"n":"인디에프","s":"large"},{"n":"일신방직","s":"mid"},{"n":"전방","s":"mid"},{"n":"지엔코","s":"large"},{"n":"티비에이치글로벌","s":"mid"},{"n":"한섬","s":"large"},{"n":"한세실업","s":"mid"},{"n":"호전실업","s":"mid"}],"유리·요업·시멘트":[{"n":"동국알앤에스","s":"mid"},{"n":"동양","s":"large"},{"n":"동양파일","s":"mid"},{"n":"벽산","s":"mid"},{"n":"삼표시멘트","s":"large"},{"n":"성신양회","s":"mid"},{"n":"시알홀딩스","s":"mid"},{"n":"아세아시멘트","s":"mid"},{"n":"아이에스동서","s":"large"},{"n":"유니온","s":"mid"},{"n":"유진기업","s":"large"},{"n":"조선내화","s":"mid"},{"n":"케이씨씨글라스","s":"large"},{"n":"태경비케이","s":"mid"},{"n":"티씨케이","s":"mid"},{"n":"티웨이홀딩스","s":"large"},{"n":"퍼시픽글라스","s":"mid"},{"n":"한국내화","s":"mid"},{"n":"한국석유공업","s":"mid"},{"n":"한일시멘트","s":"mid"}],"식품·음료":[{"n":"남양유업","s":"mid"},{"n":"농심","s":"large"},{"n":"대상","s":"mid"},{"n":"대한제당","s":"mid"},{"n":"대한제분","s":"mid"},{"n":"롯데웰푸드","s":"large"},{"n":"롯데칠성음료","s":"large"},{"n":"마니커","s":"mid"},{"n":"매일유업","s":"mid"},{"n":"무학","s":"mid"},{"n":"보해양조","s":"mid"},{"n":"빙그레","s":"mid"},{"n":"사조대림","s":"large"},{"n":"사조동아원","s":"large"},{"n":"사조산업","s":"large"},{"n":"사조씨푸드","s":"large"},{"n":"사조오양","s":"large"},{"n":"사조해표","s":"mid"},{"n":"삼립","s":"mid"},{"n":"삼양사","s":"large"},{"n":"삼양식품","s":"mid"},{"n":"샘표식품","s":"mid"},{"n":"선진","s":"large"},{"n":"엠에스씨","s":"mid"},{"n":"오뚜기","s":"mid"},{"n":"오리온","s":"large"},{"n":"우성","s":"mid"},{"n":"이지바이오","s":"mid"},{"n":"이지홀딩스","s":"mid"},{"n":"정다운","s":"mid"},{"n":"진로발효","s":"mid"},{"n":"체리부로","s":"mid"},{"n":"케이티앤지","s":"large"},{"n":"코스맥스엔비티","s":"mid"},{"n":"크라운제과","s":"mid"},{"n":"팜스코","s":"large"},{"n":"팜스토리","s":"mid"},{"n":"풀무원","s":"mid"},{"n":"하림","s":"large"},{"n":"하이트진로","s":"large"},{"n":"한성기업","s":"mid"},{"n":"한일사료","s":"mid"},{"n":"해태제과식품","s":"mid"}],"금속·철강":[{"n":"경남스틸","s":"mid"},{"n":"고려아연","s":"large"},{"n":"고려제강","s":"mid"},{"n":"금강철강","s":"mid"},{"n":"남선알미늄","s":"large"},{"n":"넥스틸","s":"mid"},{"n":"대창","s":"mid"},{"n":"대창스틸","s":"mid"},{"n":"대한제강","s":"mid"},{"n":"동국산업","s":"mid"},{"n":"동국씨엠","s":"large"},{"n":"동국제강","s":"large"},{"n":"동양에스텍","s":"mid"},{"n":"동일산업","s":"mid"},{"n":"만호제강","s":"mid"},{"n":"문배철강","s":"mid"},{"n":"삼보산업","s":"mid"},{"n":"삼아알미늄","s":"mid"},{"n":"삼현철강","s":"mid"},{"n":"성광벤드","s":"mid"},{"n":"세아베스틸지주","s":"large"},{"n":"세아제강","s":"large"},{"n":"세아특수강","s":"large"},{"n":"세아홀딩스","s":"large"},{"n":"심팩메탈","s":"mid"},{"n":"아주스틸","s":"large"},{"n":"영풍","s":"large"},{"n":"원일특강","s":"mid"},{"n":"이구산업","s":"mid"},{"n":"조일알미늄","s":"mid"},{"n":"포스코스틸리온","s":"large"},{"n":"포스코엠텍","s":"large"},{"n":"풍산","s":"mid"},{"n":"피제이메탈","s":"mid"},{"n":"하이록코리아","s":"mid"},{"n":"해원에스티","s":"large"},{"n":"현대비앤지스틸","s":"large"},{"n":"현대제철","s":"large"},{"n":"화인베스틸","s":"mid"},{"n":"휴스틸","s":"mid"}],"반도체·전자부품":[{"n":"광전자","s":"mid"},{"n":"네패스","s":"mid"},{"n":"네패스아크","s":"mid"},{"n":"뉴프렉스","s":"mid"},{"n":"대덕전자","s":"mid"},{"n":"덕산네오룩스","s":"mid"},{"n":"두산","s":"large"},{"n":"두산테스나","s":"large"},{"n":"드림텍","s":"mid"},{"n":"디에이피","s":"large"},{"n":"디케이씨","s":"large"},{"n":"롯데에너지머티리얼즈","s":"large"},{"n":"멜파스","s":"mid"},{"n":"모다이노칩","s":"large"},{"n":"모아텍","s":"mid"},{"n":"비에이치","s":"mid"},{"n":"삼성전기","s":"large"},{"n":"삼성전자","s":"large"},{"n":"삼영전자공업","s":"mid"},{"n":"삼화콘덴서공업","s":"mid"},{"n":"서울바이오시스","s":"mid"},{"n":"서울반도체","s":"mid"},{"n":"시그네틱스","s":"large"},{"n":"심텍","s":"mid"},{"n":"아모텍","s":"mid"},{"n":"에이엔피","s":"mid"},{"n":"엘비루셈","s":"mid"},{"n":"엘컴텍","s":"mid"},{"n":"와이솔","s":"mid"},{"n":"우전","s":"large"},{"n":"웅진에너지","s":"mid"},{"n":"유아이엘","s":"mid"},{"n":"이녹스첨단소재","s":"mid"},{"n":"이수페타시스","s":"mid"},{"n":"이엘케이","s":"mid"},{"n":"이엠텍","s":"mid"},{"n":"인터플렉스","s":"large"},{"n":"자화전자","s":"mid"},{"n":"제이엠티","s":"mid"},{"n":"코리아써키트","s":"large"},{"n":"티엘아이","s":"large"},{"n":"파트론","s":"mid"},{"n":"피케이엘","s":"mid"},{"n":"하나마이크론","s":"mid"},{"n":"하나머티리얼즈","s":"mid"},{"n":"한국컴퓨터","s":"mid"},{"n":"한솔테크닉스","s":"large"},{"n":"한화시스템","s":"large"},{"n":"해성디에스","s":"mid"}],"기계·설비":[{"n":"계양전기","s":"mid"},{"n":"기신정기","s":"mid"},{"n":"대동","s":"mid"},{"n":"대동기어","s":"mid"},{"n":"동아엘텍","s":"mid"},{"n":"두산로보틱스","s":"large"},{"n":"두산밥캣","s":"large"},{"n":"두산에너빌리티","s":"large"},{"n":"디와이파워","s":"mid"},{"n":"로보스타","s":"large"},{"n":"리드","s":"large"},{"n":"모델솔루션","s":"large"},{"n":"삼목에스폼","s":"mid"},{"n":"삼화왕관","s":"mid"},{"n":"서연탑메탈","s":"mid"},{"n":"승일","s":"mid"},{"n":"심팩인더스트리","s":"mid"},{"n":"씨에스윈드","s":"mid"},{"n":"아세아텍","s":"mid"},{"n":"에스에이티","s":"mid"},{"n":"에이텍","s":"large"},{"n":"우진플라임","s":"mid"},{"n":"유진테크","s":"mid"},{"n":"이오테크닉스","s":"mid"},{"n":"제이브이엠","s":"mid"},{"n":"주성엔지니어링","s":"mid"},{"n":"지에스엔텍","s":"large"},{"n":"케이피에프","s":"mid"},{"n":"코미코","s":"mid"},{"n":"테스","s":"mid"},{"n":"테크윙","s":"mid"},{"n":"톱텍","s":"mid"},{"n":"파라텍","s":"mid"},{"n":"피에스케이","s":"mid"},{"n":"한국카본","s":"mid"},{"n":"한미반도체","s":"mid"},{"n":"한솔아이원스","s":"large"},{"n":"한온시스템","s":"large"},{"n":"한화엔진","s":"large"},{"n":"현대무벡스","s":"mid"},{"n":"현대에버다임","s":"large"},{"n":"현대엘리베이터","s":"mid"},{"n":"현진소재","s":"mid"},{"n":"화천기계","s":"mid"},{"n":"화천기공","s":"mid"}],"배터리·2차전지":[{"n":"세방전지","s":"mid"},{"n":"에코프로비엠","s":"large"},{"n":"엘앤에프","s":"mid"},{"n":"포스코퓨처엠","s":"large"},{"n":"한국아트라스비엑스","s":"mid"}],"계측·광학기기":[{"n":"디아이","s":"mid"},{"n":"세코닉스","s":"mid"},{"n":"우진","s":"mid"},{"n":"케이씨","s":"mid"},{"n":"케이씨텍","s":"mid"}],"가구·목재·제지":[{"n":"국일제지","s":"large"},{"n":"깨끗한나라","s":"mid"},{"n":"동화기업","s":"large"},{"n":"무림페이퍼","s":"mid"},{"n":"삼보판지","s":"mid"},{"n":"신대양제지","s":"mid"},{"n":"아세아제지","s":"mid"},{"n":"에넥스","s":"mid"},{"n":"에이스침대","s":"mid"},{"n":"유니드비티플러스","s":"large"},{"n":"이건홀딩스","s":"mid"},{"n":"지누스","s":"large"},{"n":"태림페이퍼","s":"large"},{"n":"태림포장","s":"large"},{"n":"퍼시스","s":"mid"},{"n":"한국팩키지","s":"mid"},{"n":"한솔제지","s":"large"},{"n":"한솔홈데코","s":"large"},{"n":"한창제지","s":"mid"},{"n":"현대리바트","s":"large"}],"자동차·자동차부품":[{"n":"경창산업","s":"mid"},{"n":"금호타이어","s":"mid"},{"n":"기아","s":"large"},{"n":"넥센타이어","s":"mid"},{"n":"대원강업","s":"large"},{"n":"두올","s":"mid"},{"n":"디아이씨","s":"mid"},{"n":"디와이덕양","s":"mid"},{"n":"모토닉","s":"mid"},{"n":"모트렉스","s":"mid"},{"n":"부산주공","s":"mid"},{"n":"삼보모터스","s":"mid"},{"n":"삼원강재","s":"large"},{"n":"상신브레이크","s":"mid"},{"n":"새론오토모티브","s":"mid"},{"n":"서연이화","s":"mid"},{"n":"성우하이텍","s":"mid"},{"n":"세동","s":"mid"},{"n":"씨티알모빌리티","s":"mid"},{"n":"에스엠벡셀","s":"large"},{"n":"에스엠화진","s":"large"},{"n":"에코플라스틱","s":"mid"},{"n":"엔브이에이치코리아","s":"mid"},{"n":"엠에스오토텍","s":"mid"},{"n":"영화금속","s":"mid"},{"n":"오텍","s":"mid"},{"n":"우리산업홀딩스","s":"mid"},{"n":"유니크","s":"mid"},{"n":"유성기업","s":"mid"},{"n":"인지컨트롤스","s":"mid"},{"n":"인팩","s":"mid"},{"n":"일지테크","s":"mid"},{"n":"지엠비코리아","s":"mid"},{"n":"케이비아이동국실업","s":"mid"},{"n":"케이엔더블유","s":"large"},{"n":"태양금속공업","s":"mid"},{"n":"평화산업","s":"mid"},{"n":"평화홀딩스","s":"mid"},{"n":"피에이치에이","s":"mid"},{"n":"한국무브넥스","s":"mid"},{"n":"한국타이어앤테크놀로지","s":"large"},{"n":"핸즈코퍼레이션","s":"mid"},{"n":"현대모비스","s":"large"},{"n":"현대위아","s":"large"},{"n":"현대자동차","s":"large"},{"n":"화승알앤에이","s":"mid"},{"n":"화승코퍼레이션","s":"mid"},{"n":"화신","s":"mid"},{"n":"화신정공","s":"mid"}],"석유·화학":[{"n":"강남제비스코","s":"mid"},{"n":"경농","s":"mid"},{"n":"국도화학","s":"mid"},{"n":"극동유화","s":"mid"},{"n":"금호석유화학","s":"large"},{"n":"남해화학","s":"large"},{"n":"넥센","s":"mid"},{"n":"노루페인트","s":"mid"},{"n":"대한유화","s":"mid"},{"n":"대한화섬","s":"large"},{"n":"동남합성","s":"mid"},{"n":"동방아그로","s":"mid"},{"n":"동성케미컬","s":"mid"},{"n":"동성화인텍","s":"mid"},{"n":"동원시스템즈","s":"large"},{"n":"동일고무벨트","s":"mid"},{"n":"동진쎄미켐","s":"mid"},{"n":"락앤락","s":"mid"},{"n":"롯데정밀화학","s":"large"},{"n":"롯데케미칼","s":"large"},{"n":"미원상사","s":"mid"},{"n":"미창석유공업","s":"mid"},{"n":"삼양엔씨켐","s":"large"},{"n":"삼양패키징","s":"large"},{"n":"서흥","s":"mid"},{"n":"솔브레인","s":"mid"},{"n":"송원산업","s":"mid"},{"n":"신화인터텍","s":"large"},{"n":"애경케미칼","s":"large"},{"n":"에스에프씨","s":"mid"},{"n":"에코프로에이치엔","s":"large"},{"n":"엔피씨","s":"mid"},{"n":"연우","s":"large"},{"n":"영보화학","s":"mid"},{"n":"원익머트리얼즈","s":"large"},{"n":"원익홀딩스","s":"large"},{"n":"유니드","s":"large"},{"n":"율촌화학","s":"large"},{"n":"이수스페셜티케미컬","s":"mid"},{"n":"이수화학","s":"mid"},{"n":"이엔에프테크놀로지","s":"mid"},{"n":"조광페인트","s":"mid"},{"n":"조비","s":"mid"},{"n":"카프로","s":"mid"},{"n":"케이씨씨","s":"large"},{"n":"코스모화학","s":"mid"},{"n":"코오롱머티리얼","s":"large"},{"n":"태경산업","s":"mid"},{"n":"태광산업","s":"large"},{"n":"테이팩스","s":"large"},{"n":"티케이케미칼","s":"large"},{"n":"퓨릿","s":"mid"},{"n":"한국큐빅","s":"mid"},{"n":"한솔케미칼","s":"large"},{"n":"한화","s":"large"},{"n":"한화솔루션","s":"large"},{"n":"현대바이오랜드","s":"large"},{"n":"효성티앤씨","s":"large"},{"n":"효성화학","s":"large"},{"n":"후성","s":"mid"},{"n":"휴비스","s":"mid"}],"컴퓨터·통신장비":[{"n":"블루콤","s":"mid"},{"n":"서원인텍","s":"mid"},{"n":"신도리코","s":"mid"},{"n":"아남전자","s":"mid"},{"n":"아이디스","s":"mid"},{"n":"에스코넥","s":"mid"},{"n":"유비쿼스","s":"mid"},{"n":"인탑스","s":"mid"},{"n":"코맥스","s":"mid"},{"n":"팅크웨어","s":"mid"},{"n":"한화비전","s":"large"}],"화장품·생활용품":[{"n":"그린케미칼","s":"mid"},{"n":"네오팜","s":"mid"},{"n":"미원화학","s":"mid"},{"n":"삼양케이씨아이","s":"large"},{"n":"아모레퍼시픽","s":"large"},{"n":"아모레퍼시픽홀딩스","s":"large"},{"n":"애경산업","s":"large"},{"n":"에스트라","s":"mid"},{"n":"에이블씨엔씨","s":"mid"},{"n":"에이피알","s":"mid"},{"n":"코스맥스","s":"mid"},{"n":"코스메카코리아","s":"mid"},{"n":"토니모리","s":"mid"},{"n":"한국콜마","s":"large"}],"에너지·환경":[{"n":"경남에너지","s":"mid"},{"n":"경동도시가스","s":"mid"},{"n":"대성에너지","s":"mid"},{"n":"부산도시가스","s":"large"},{"n":"삼천리","s":"large"},{"n":"서울도시가스","s":"mid"},{"n":"인선이엔티","s":"large"},{"n":"인천도시가스","s":"mid"},{"n":"지에스이","s":"mid"},{"n":"코원에너지서비스","s":"large"},{"n":"한진중공업홀딩스","s":"mid"}],"조선·항공·방산":[{"n":"대한조선","s":"mid"},{"n":"삼성중공업","s":"large"},{"n":"쎄트렉아이","s":"large"},{"n":"일진하이솔루스","s":"mid"},{"n":"케이조선","s":"mid"},{"n":"퍼스텍","s":"mid"},{"n":"한화에어로스페이스","s":"large"},{"n":"한화오션","s":"large"},{"n":"현대로템","s":"large"},{"n":"현대힘스","s":"mid"}],"전기장비·전선":[{"n":"가온전선","s":"large"},{"n":"경동나비엔","s":"mid"},{"n":"대원전선","s":"mid"},{"n":"대한전선","s":"large"},{"n":"동양이엔피","s":"mid"},{"n":"두산퓨얼셀","s":"large"},{"n":"모보","s":"large"},{"n":"엘에스일렉트릭","s":"large"},{"n":"원익피앤이","s":"large"},{"n":"유라테크","s":"mid"},{"n":"일진전기","s":"mid"},{"n":"제이에스전선","s":"large"},{"n":"쿠첸","s":"mid"},{"n":"하츠","s":"mid"},{"n":"한국단자공업","s":"mid"},{"n":"효성중공업","s":"large"}],"농수산·축산":[{"n":"동원수산","s":"mid"},{"n":"신라교역","s":"mid"}],"기타 제조":[{"n":"삼익악기","s":"mid"},{"n":"슈피겐코리아","s":"mid"}]},"은행·금융업":{"증권·자산운용":[{"n":"교보증권","s":"large"},{"n":"다올투자증권","s":"large"},{"n":"대신증권","s":"large"},{"n":"미래에셋증권","s":"large"},{"n":"부국증권","s":"large"},{"n":"삼성증권","s":"large"},{"n":"신영증권","s":"large"},{"n":"유안타증권","s":"large"},{"n":"카카오페이","s":"large"},{"n":"코리아에셋투자증권","s":"large"},{"n":"키움증권","s":"large"},{"n":"한국자산신탁","s":"large"},{"n":"한국토지신탁","s":"large"},{"n":"한양증권","s":"large"},{"n":"한화투자증권","s":"large"},{"n":"현대차증권","s":"large"}],"보험":[{"n":"삼성화재해상보험","s":"large"},{"n":"서울보증보험","s":"large"},{"n":"오렌지라이프생명보험","s":"large"},{"n":"인카금융서비스","s":"large"},{"n":"한화손해보험","s":"large"}],"지주회사":[{"n":"노루홀딩스","s":"mid"},{"n":"녹십자홀딩스","s":"mid"},{"n":"농심홀딩스","s":"large"},{"n":"대상홀딩스","s":"mid"},{"n":"동국홀딩스","s":"large"},{"n":"동아쏘시오홀딩스","s":"mid"},{"n":"동원산업","s":"large"},{"n":"디와이","s":"mid"},{"n":"롯데지주","s":"large"},{"n":"미원홀딩스","s":"mid"},{"n":"삼성에피스홀딩스","s":"large"},{"n":"삼양홀딩스","s":"large"},{"n":"샘표","s":"mid"},{"n":"서연","s":"mid"},{"n":"세아제강지주","s":"large"},{"n":"심텍홀딩스","s":"mid"},{"n":"아이디스홀딩스","s":"mid"},{"n":"에코프로","s":"large"},{"n":"영원무역홀딩스","s":"mid"},{"n":"오리온홀딩스","s":"large"},{"n":"웅진","s":"large"},{"n":"유수홀딩스","s":"mid"},{"n":"일진홀딩스","s":"mid"},{"n":"제일파마홀딩스","s":"mid"},{"n":"코스맥스비티아이","s":"mid"},{"n":"코오롱","s":"large"},{"n":"콜마홀딩스","s":"large"},{"n":"쿠쿠홀딩스","s":"mid"},{"n":"크라운해태홀딩스","s":"mid"},{"n":"티와이홀딩스","s":"large"},{"n":"풍산홀딩스","s":"mid"},{"n":"하림지주","s":"large"},{"n":"하이트진로홀딩스","s":"large"},{"n":"한국앤컴퍼니","s":"large"},{"n":"한미사이언스","s":"mid"},{"n":"한솔홀딩스","s":"large"},{"n":"한진칼","s":"large"},{"n":"현대지에프홀딩스","s":"large"},{"n":"효성","s":"large"}],"캐피탈·여신":[{"n":"미래에셋벤처투자","s":"large"},{"n":"산은캐피탈","s":"large"},{"n":"삼성카드","s":"large"},{"n":"우리금융캐피탈","s":"large"},{"n":"우리종합금융","s":"large"}],"은행":[{"n":"광주은행","s":"large"},{"n":"부산은행","s":"large"},{"n":"우리은행","s":"large"},{"n":"전북은행","s":"large"},{"n":"카카오뱅크","s":"large"},{"n":"케이뱅크","s":"large"},{"n":"푸른저축은행","s":"large"},{"n":"한국스탠다드차타드은행","s":"large"}]},"판매·유통":{"무역·상사":[{"n":"디아이동일","s":"mid"},{"n":"삼성물산","s":"large"},{"n":"소노스퀘어","s":"large"},{"n":"신송홀딩스","s":"mid"},{"n":"아이마켓코리아","s":"mid"},{"n":"영원무역","s":"mid"},{"n":"케이티알파","s":"large"},{"n":"포스코인터내셔널","s":"large"},{"n":"현대코퍼레이션","s":"mid"},{"n":"화승인더스트리","s":"mid"}],"도소매·유통":[{"n":"경방","s":"mid"},{"n":"광주신세계","s":"large"},{"n":"교촌에프앤비","s":"mid"},{"n":"다우데이타","s":"large"},{"n":"대성산업","s":"mid"},{"n":"도이치모터스","s":"mid"},{"n":"동서","s":"mid"},{"n":"롯데쇼핑","s":"large"},{"n":"롯데하이마트","s":"large"},{"n":"리드코프","s":"mid"},{"n":"모나미","s":"mid"},{"n":"삼영무역","s":"mid"},{"n":"삼천리자전거","s":"mid"},{"n":"셀트리온헬스케어","s":"mid"},{"n":"신성통상","s":"mid"},{"n":"신세계","s":"large"},{"n":"신세계인터내셔날","s":"large"},{"n":"신세계톰보이","s":"large"},{"n":"신흥","s":"mid"},{"n":"엔에스쇼핑","s":"large"},{"n":"원익","s":"large"},{"n":"원익큐브","s":"large"},{"n":"이마트","s":"large"},{"n":"인터파크","s":"mid"},{"n":"정원엔시스","s":"mid"},{"n":"제로투세븐","s":"mid"},{"n":"제이씨현시스템","s":"mid"},{"n":"코오롱모빌리티그룹","s":"large"},{"n":"큐렉소","s":"mid"},{"n":"큐로홀딩스","s":"large"},{"n":"폰드그룹","s":"large"},{"n":"풀무원식품","s":"mid"},{"n":"피씨디렉트","s":"mid"},{"n":"한국정보공학","s":"mid"},{"n":"한샘","s":"mid"},{"n":"한솔피엔에스","s":"large"},{"n":"한화갤러리아","s":"large"},{"n":"한화갤러리아타임월드","s":"large"},{"n":"현대그린푸드","s":"large"},{"n":"현대백화점","s":"large"},{"n":"현대홈쇼핑","s":"large"},{"n":"혜인","s":"mid"},{"n":"호텔신라","s":"large"},{"n":"흥구석유","s":"mid"}],"물류·운송":[{"n":"국보","s":"mid"},{"n":"대한해운","s":"large"},{"n":"동방","s":"mid"},{"n":"로젠","s":"large"},{"n":"삼일","s":"mid"},{"n":"선광","s":"mid"},{"n":"세방","s":"mid"},{"n":"유성티엔에스","s":"mid"},{"n":"인터지스","s":"large"},{"n":"케이씨티시","s":"large"},{"n":"태웅로직스","s":"mid"},{"n":"팬오션","s":"large"},{"n":"한국공항","s":"large"},{"n":"한솔로지스틱스","s":"large"},{"n":"한익스프레스","s":"mid"},{"n":"한진","s":"large"},{"n":"현대글로비스","s":"large"},{"n":"흥아해운","s":"large"}]},"서비스업":{"레저·테마파크":[{"n":"갤럭시아에스엠","s":"large"},{"n":"이월드","s":"large"},{"n":"파라다이스","s":"large"}],"시설관리·보안":[{"n":"고려신용정보","s":"mid"},{"n":"나이스디앤비","s":"mid"},{"n":"씨앤에스자산관리","s":"mid"},{"n":"에스원","s":"large"},{"n":"한국기업평가","s":"mid"}],"렌탈·임대":[{"n":"롯데렌탈","s":"large"},{"n":"코웨이","s":"large"},{"n":"쿠쿠홈시스","s":"mid"}],"호텔·여행·항공":[{"n":"대한항공","s":"large"},{"n":"레드캡투어","s":"mid"},{"n":"모나용평","s":"mid"},{"n":"아난티","s":"mid"},{"n":"아시아나항공","s":"large"},{"n":"에어부산","s":"large"},{"n":"자유투어","s":"mid"},{"n":"제주항공","s":"large"},{"n":"진에어","s":"large"},{"n":"참좋은여행","s":"mid"},{"n":"하나투어","s":"mid"}],"외식·프랜차이즈":[{"n":"신세계푸드","s":"large"}]},"교육업":{"학원":[{"n":"디지털대성","s":"mid"},{"n":"메가스터디교육","s":"mid"},{"n":"메가엠디","s":"mid"},{"n":"씨엠에스에듀","s":"mid"},{"n":"정상제이엘에스","s":"mid"}],"교육·교재":[{"n":"대교","s":"mid"},{"n":"데이원컴퍼니","s":"mid"},{"n":"멀티캠퍼스","s":"large"},{"n":"메가스터디","s":"mid"},{"n":"비상교육","s":"mid"},{"n":"웅진씽크빅","s":"large"}]},"IT·웹·통신":{"게임":[{"n":"골프존","s":"mid"},{"n":"네오위즈","s":"mid"},{"n":"넥슨지티","s":"mid"},{"n":"넷마블","s":"large"},{"n":"웹젠","s":"mid"},{"n":"위메이드","s":"mid"},{"n":"카카오게임즈","s":"large"},{"n":"컴투스","s":"mid"},{"n":"크래프톤","s":"large"},{"n":"펄어비스","s":"mid"}],"소프트웨어·솔루션":[{"n":"가비아","s":"mid"},{"n":"갤럭시아머니트리","s":"large"},{"n":"넥슨게임즈","s":"large"},{"n":"넵튠","s":"large"},{"n":"다날","s":"mid"},{"n":"대신정보통신","s":"mid"},{"n":"더존비즈온","s":"mid"},{"n":"디어유","s":"large"},{"n":"롯데이노베이트","s":"large"},{"n":"링네트","s":"mid"},{"n":"삼성에스디에스","s":"large"},{"n":"상상인","s":"mid"},{"n":"세중","s":"mid"},{"n":"안랩","s":"mid"},{"n":"윈스테크넷","s":"mid"},{"n":"인성정보","s":"mid"},{"n":"컴투스홀딩스","s":"mid"},{"n":"크레오에스지","s":"large"},{"n":"한국정보인증","s":"large"},{"n":"한컴","s":"large"},{"n":"현대오토에버","s":"large"},{"n":"현대이지웰","s":"large"},{"n":"휴맥스홀딩스","s":"mid"}],"포털·인터넷콘텐츠":[{"n":"다우기술","s":"large"},{"n":"사람인","s":"large"},{"n":"카카오","s":"large"},{"n":"키다리스튜디오","s":"large"},{"n":"한일네트웍스","s":"mid"}],"통신서비스":[{"n":"나이스정보통신","s":"mid"},{"n":"아이즈비전","s":"mid"},{"n":"에스케이브로드밴드","s":"large"},{"n":"케이티","s":"large"},{"n":"한국정보통신","s":"mid"},{"n":"현대퓨처넷","s":"large"}]},"의료·제약·바이오":{"바이오·진단":[{"n":"경보제약","s":"mid"},{"n":"녹십자엠에스","s":"mid"},{"n":"대웅바이오","s":"mid"},{"n":"메디톡스","s":"mid"},{"n":"바이오노트","s":"mid"},{"n":"삼성바이오로직스","s":"large"},{"n":"셀트리온","s":"large"},{"n":"씨젠","s":"mid"},{"n":"에스케이바이오팜","s":"large"},{"n":"에이치엘지노믹스","s":"mid"},{"n":"이수앱지스","s":"mid"},{"n":"지씨셀","s":"mid"},{"n":"지씨지놈","s":"mid"},{"n":"코오롱생명과학","s":"large"},{"n":"콜마비앤에이치","s":"large"},{"n":"파마리서치","s":"mid"},{"n":"휴젤","s":"large"}],"제약":[{"n":"경동제약","s":"mid"},{"n":"광동제약","s":"mid"},{"n":"녹십자","s":"mid"},{"n":"녹십자웰빙","s":"mid"},{"n":"대웅","s":"mid"},{"n":"대웅제약","s":"mid"},{"n":"대원제약","s":"mid"},{"n":"대화제약","s":"mid"},{"n":"동국생명과학","s":"mid"},{"n":"동국제약","s":"mid"},{"n":"동성제약","s":"large"},{"n":"동아에스티","s":"mid"},{"n":"동화약품","s":"mid"},{"n":"명문제약","s":"mid"},{"n":"명인제약","s":"mid"},{"n":"바스칸바이오제약","s":"large"},{"n":"보령","s":"mid"},{"n":"부광약품","s":"large"},{"n":"삼양바이오팜","s":"large"},{"n":"삼진제약","s":"mid"},{"n":"삼천당제약","s":"mid"},{"n":"서울제약","s":"large"},{"n":"셀트리온제약","s":"large"},{"n":"신풍제약","s":"mid"},{"n":"씨티씨바이오","s":"mid"},{"n":"안국약품","s":"mid"},{"n":"알보젠코리아","s":"mid"},{"n":"에스티팜","s":"mid"},{"n":"에이프로젠","s":"mid"},{"n":"영진약품","s":"large"},{"n":"유한양행","s":"mid"},{"n":"이연제약","s":"mid"},{"n":"일동제약","s":"mid"},{"n":"일동홀딩스","s":"mid"},{"n":"일양약품","s":"mid"},{"n":"제일약품","s":"mid"},{"n":"종근당","s":"mid"},{"n":"종근당바이오","s":"mid"},{"n":"테라젠이텍스","s":"mid"},{"n":"한독","s":"mid"},{"n":"한미약품","s":"mid"},{"n":"한올바이오파마","s":"mid"},{"n":"화일약품","s":"mid"},{"n":"환인제약","s":"mid"},{"n":"휴메딕스","s":"mid"},{"n":"휴온스","s":"mid"},{"n":"휴온스글로벌","s":"mid"}],"의료기기":[{"n":"바텍","s":"mid"},{"n":"아이센스","s":"mid"},{"n":"에스디바이오센서","s":"mid"},{"n":"오스템임플란트","s":"mid"},{"n":"인바디","s":"mid"},{"n":"휴비츠","s":"mid"}]},"미디어·엔터":{"출판·인쇄":[{"n":"삼성출판사","s":"mid"},{"n":"예림당","s":"mid"}],"광고·홍보":[{"n":"에코마케팅","s":"mid"},{"n":"오리콤","s":"large"},{"n":"와이즈버즈","s":"large"},{"n":"이노션","s":"large"},{"n":"인크로스","s":"large"},{"n":"제일기획","s":"large"},{"n":"케어랩스","s":"large"},{"n":"플레이디","s":"mid"}],"방송·영화·제작":[{"n":"더핑크퐁컴퍼니","s":"mid"},{"n":"쇼박스","s":"large"},{"n":"스튜디오드래곤","s":"large"},{"n":"스튜디오에스","s":"large"},{"n":"초록뱀미디어","s":"large"},{"n":"케이티스카이라이프","s":"large"},{"n":"콘텐트리중앙","s":"large"},{"n":"키이스트","s":"large"},{"n":"티엔엔터테인먼트","s":"large"}],"음악·엔터테인먼트":[{"n":"와이지엔터테인먼트","s":"mid"},{"n":"하이브","s":"large"}]},"기관·공공":{"공기업":{"산업통상부":[{"n":"강원랜드","s":"public"},{"n":"한국가스공사","s":"public"},{"n":"한국가스기술공사","s":"public"},{"n":"한국광해광업공단","s":"public"},{"n":"한국석유공사","s":"public"}],"문화체육관광부":[{"n":"그랜드코리아레저","s":"public"}],"국토교통부":[{"n":"에스알","s":"public"},{"n":"인천국제공항공사","s":"public"},{"n":"제주국제자유도시개발센터","s":"public"},{"n":"주택도시보증공사","s":"public"},{"n":"한국공항공사","s":"public"},{"n":"한국도로공사","s":"public"},{"n":"한국부동산원","s":"public"},{"n":"한국철도공사","s":"public"},{"n":"한국토지주택공사","s":"public"}],"기후에너지환경부":[{"n":"한국남동발전","s":"public"},{"n":"한국남부발전","s":"public"},{"n":"한국동서발전","s":"public"},{"n":"한국서부발전","s":"public"},{"n":"한국수력원자력","s":"public"},{"n":"한국수자원공사","s":"public"},{"n":"한국전력공사","s":"public"},{"n":"한국전력기술","s":"public"},{"n":"한국중부발전","s":"public"},{"n":"한국지역난방공사","s":"public"},{"n":"한전KDN","s":"public"},{"n":"한전KPS","s":"public"}],"농림축산식품부":[{"n":"한국마사회","s":"public"}],"재정경제부":[{"n":"한국조폐공사","s":"public"}],"해양수산부":[{"n":"해양환경공단","s":"public"}]},"준정부기관":{"보건복지부":[{"n":"건강보험심사평가원","s":"public"},{"n":"국민건강보험공단","s":"public"},{"n":"국민건강보험공단 일산병원","s":"public"},{"n":"국민연금공단","s":"public"},{"n":"서울요양원","s":"public"},{"n":"한국사회보장정보원","s":"public"}],"인사혁신처":[{"n":"공무원연금공단","s":"public"}],"국토교통부":[{"n":"국가철도공단","s":"public"},{"n":"국토안전관리원","s":"public"},{"n":"한국교통안전공단","s":"public"},{"n":"한국국토정보공사","s":"public"}],"기후에너지환경부":[{"n":"국립공원공단","s":"public"},{"n":"국립생태원","s":"public"},{"n":"한국에너지공단","s":"public"},{"n":"한국원자력환경공단","s":"public"},{"n":"한국전기안전공사","s":"public"},{"n":"한국전력거래소","s":"public"},{"n":"한국환경공단","s":"public"},{"n":"한국환경산업기술원","s":"public"}],"고용노동부":[{"n":"근로복지공단","s":"public"},{"n":"한국고용정보원","s":"public"},{"n":"한국산업안전보건공단","s":"public"},{"n":"한국산업인력공단","s":"public"},{"n":"한국장애인고용공단","s":"public"}],"중소벤처기업부":[{"n":"기술보증기금","s":"public"},{"n":"소상공인시장진흥공단","s":"public"},{"n":"중소벤처기업진흥공단","s":"public"}],"산업통상부":[{"n":"대한무역투자진흥공사","s":"public"},{"n":"한국가스안전공사","s":"public"},{"n":"한국무역보험공사","s":"public"},{"n":"한국산업기술기획평가원","s":"public"},{"n":"한국산업기술진흥원","s":"public"},{"n":"한국산업단지공단","s":"public"},{"n":"한국석유관리원","s":"public"}],"문화체육관광부":[{"n":"서울올림픽기념국민체육진흥공단","s":"public"},{"n":"한국관광공사","s":"public"}],"금융위원회":[{"n":"신용보증기금","s":"public"},{"n":"예금보험공사","s":"public"},{"n":"한국자산관리공사","s":"public"},{"n":"한국주택금융공사","s":"public"}],"과학기술정보통신부":[{"n":"우체국금융개발원","s":"public"},{"n":"우체국물류지원단","s":"public"},{"n":"정보통신기획평가원","s":"public"},{"n":"한국방송통신전파진흥원","s":"public"},{"n":"한국연구재단","s":"public"},{"n":"한국인터넷진흥원","s":"public"},{"n":"한국지능정보사회진흥원","s":"public"}],"농림축산식품부":[{"n":"축산물품질평가원","s":"public"},{"n":"한국농수산식품유통공사","s":"public"},{"n":"한국농어촌공사","s":"public"}],"외교부":[{"n":"한국국제협력단","s":"public"}],"경찰청":[{"n":"한국도로교통공단","s":"public"}],"법무부":[{"n":"한국법무보호복지공단","s":"public"}],"국가보훈부":[{"n":"한국보훈복지의료공단","s":"public"}],"산림청":[{"n":"한국산림복지진흥원","s":"public"},{"n":"한국수목원정원관리원","s":"public"}],"공정거래위원회":[{"n":"한국소비자원","s":"public"}],"행정안전부":[{"n":"한국승강기안전공단","s":"public"}],"교육부":[{"n":"한국장학재단","s":"public"}],"기획예산처":[{"n":"한국재정정보원","s":"public"}],"해양수산부":[{"n":"한국해양교통안전공단","s":"public"}]},"기타공공기관":{"국가보훈부":[{"n":"88관광개발","s":"public"},{"n":"독립기념관","s":"public"}],"국토교통부":[{"n":"가덕도신공항건설공단","s":"public"},{"n":"건설기술교육원","s":"public"},{"n":"공간정보산업진흥원","s":"public"},{"n":"공간정보품질관리원","s":"public"},{"n":"국립항공박물관","s":"public"},{"n":"국토교통과학기술진흥원","s":"public"},{"n":"대한건설기계안전관리원","s":"public"},{"n":"새만금개발공사","s":"public"},{"n":"자동차손해배상진흥원","s":"public"},{"n":"주택관리공단","s":"public"},{"n":"코레일관광개발","s":"public"},{"n":"코레일네트웍스","s":"public"},{"n":"코레일로지스","s":"public"},{"n":"코레일유통","s":"public"},{"n":"코레일테크","s":"public"},{"n":"한국도로공사서비스","s":"public"},{"n":"한국해외인프라도시개발지원공사","s":"public"},{"n":"항공안전기술원","s":"public"}],"농림축산식품부":[{"n":"가축위생방역지원본부","s":"public"},{"n":"국립농업박물관","s":"public"},{"n":"국제식물검역인증원","s":"public"},{"n":"농림수산식품교육문화정보원","s":"public"},{"n":"농림식품기술기획평가원","s":"public"},{"n":"농업정책보험금융원","s":"public"},{"n":"축산환경관리원","s":"public"},{"n":"한국식품산업클러스터진흥원","s":"public"},{"n":"한식진흥원","s":"public"}],"교육부":[{"n":"강원대학교병원","s":"public"},{"n":"강원대학교치과병원","s":"public"},{"n":"경북대학교병원","s":"public"},{"n":"경북대학교치과병원","s":"public"},{"n":"경상국립대학교병원","s":"public"},{"n":"국가평생교육진흥원","s":"public"},{"n":"동북아역사재단","s":"public"},{"n":"부산대학교병원","s":"public"},{"n":"부산대학교치과병원","s":"public"},{"n":"분당서울대학교병원","s":"public"},{"n":"사립학교교직원연금공단","s":"public"},{"n":"서울대학교병원","s":"public"},{"n":"서울대학교치과병원","s":"public"},{"n":"전남대학교병원","s":"public"},{"n":"전북대학교병원","s":"public"},{"n":"제주대학교병원","s":"public"},{"n":"충남대학교병원","s":"public"},{"n":"충북대학교병원","s":"public"},{"n":"한국고전번역원","s":"public"},{"n":"한국교육학술정보원","s":"public"},{"n":"한국사학진흥재단","s":"public"},{"n":"한국영유아보육·교육진흥원","s":"public"},{"n":"한국학중앙연구원","s":"public"}],"고용노동부":[{"n":"건설근로자공제회","s":"public"},{"n":"노사발전재단","s":"public"},{"n":"한국고용노동교육원","s":"public"},{"n":"한국기술교육대학교","s":"public"},{"n":"한국사회적기업진흥원","s":"public"},{"n":"한국잡월드","s":"public"},{"n":"한국폴리텍","s":"public"}],"국무조정실":[{"n":"건축공간연구원","s":"public"},{"n":"경제인문사회연구회","s":"public"},{"n":"과학기술정책연구원","s":"public"},{"n":"국토연구원","s":"public"},{"n":"대외경제정책연구원","s":"public"},{"n":"산업연구원","s":"public"},{"n":"에너지경제연구원","s":"public"},{"n":"육아정책연구소","s":"public"},{"n":"정보통신정책연구원","s":"public"},{"n":"통일연구원","s":"public"},{"n":"한국개발연구원","s":"public"},{"n":"한국교육개발원","s":"public"},{"n":"한국교육과정평가원","s":"public"},{"n":"한국교통연구원","s":"public"},{"n":"한국노동연구원","s":"public"},{"n":"한국농촌경제연구원","s":"public"},{"n":"한국법제연구원","s":"public"},{"n":"한국보건사회연구원","s":"public"},{"n":"한국여성정책연구원","s":"public"},{"n":"한국조세재정연구원","s":"public"},{"n":"한국직업능력연구원","s":"public"},{"n":"한국청소년정책연구원","s":"public"},{"n":"한국해양수산개발원","s":"public"},{"n":"한국행정연구원","s":"public"},{"n":"한국형사·법무정책연구원","s":"public"},{"n":"한국환경연구원","s":"public"},{"n":"KDI국제정책대학원","s":"public"}],"문화체육관광부":[{"n":"게임물관리위원회","s":"public"},{"n":"국립박물관문화재단","s":"public"},{"n":"국립아시아문화전당재단","s":"public"},{"n":"국악방송","s":"public"},{"n":"국제방송교류재단","s":"public"},{"n":"대한장애인체육회","s":"public"},{"n":"대한체육회","s":"public"},{"n":"세종학당재단","s":"public"},{"n":"스포츠윤리센터","s":"public"},{"n":"영상물등급위원회","s":"public"},{"n":"영화진흥위원회","s":"public"},{"n":"예술경영지원센터","s":"public"},{"n":"예술의전당","s":"public"},{"n":"태권도진흥재단","s":"public"},{"n":"한국공예디자인문화진흥원","s":"public"},{"n":"한국도박문제예방치유원","s":"public"},{"n":"한국문학번역원","s":"public"},{"n":"한국문화관광연구원","s":"public"},{"n":"한국문화예술교육진흥원","s":"public"},{"n":"한국문화예술위원회","s":"public"},{"n":"한국문화정보원","s":"public"},{"n":"한국문화진흥","s":"public"},{"n":"한국스포츠레저","s":"public"},{"n":"한국언론진흥재단","s":"public"},{"n":"한국영상자료원","s":"public"},{"n":"한국예술인복지재단","s":"public"},{"n":"한국저작권보호원","s":"public"},{"n":"한국저작권위원회","s":"public"},{"n":"한국체육산업개발","s":"public"},{"n":"한국출판문화산업진흥원","s":"public"},{"n":"한국콘텐츠진흥원","s":"public"}],"중소벤처기업부":[{"n":"공영홈쇼핑","s":"public"},{"n":"신용보증재단중앙회","s":"public"},{"n":"장애인기업종합지원센터","s":"public"},{"n":"중소기업기술정보진흥원","s":"public"},{"n":"중소벤처기업연구원","s":"public"},{"n":"창업진흥원","s":"public"},{"n":"한국벤처투자","s":"public"},{"n":"한국중소벤처기업유통원","s":"public"}],"과학기술정보통신부":[{"n":"과학기술사업화진흥원","s":"public"},{"n":"국가과학기술인력개발원","s":"public"},{"n":"국가수리과학연구소","s":"public"},{"n":"국립광주과학관","s":"public"},{"n":"국립대구과학관","s":"public"},{"n":"국립부산과학관","s":"public"},{"n":"기초과학연구원","s":"public"},{"n":"동남권원자력의학원","s":"public"},{"n":"소프트웨어정책연구소","s":"public"},{"n":"연구개발특구진흥재단","s":"public"},{"n":"우체국시설관리단","s":"public"},{"n":"정보통신산업진흥원","s":"public"},{"n":"한국과학기술기획평가원","s":"public"},{"n":"한국과학창의재단","s":"public"},{"n":"한국나노기술원","s":"public"},{"n":"한국데이터산업진흥원","s":"public"},{"n":"한국여성과학기술인육성재단","s":"public"},{"n":"한국우편사업진흥원","s":"public"},{"n":"한국원자력의학원","s":"public"}],"보건복지부":[{"n":"국가생명윤리정책원","s":"public"},{"n":"국가아동권리보장원","s":"public"},{"n":"국립암센터","s":"public"},{"n":"국립중앙의료원","s":"public"},{"n":"대구경북첨단의료산업진흥재단","s":"public"},{"n":"대한적십자사","s":"public"},{"n":"오송첨단의료산업진흥재단","s":"public"},{"n":"의료기관평가인증원","s":"public"},{"n":"중앙사회서비스원","s":"public"},{"n":"한국건강증진개발원","s":"public"},{"n":"한국공공조직은행","s":"public"},{"n":"한국국제보건의료재단","s":"public"},{"n":"한국노인인력개발원","s":"public"},{"n":"한국보건복지인재원","s":"public"},{"n":"한국보건산업진흥원","s":"public"},{"n":"한국보건의료연구원","s":"public"},{"n":"한국보건의료인국가시험원","s":"public"},{"n":"한국보건의료정보원","s":"public"},{"n":"한국사회복지협의회","s":"public"},{"n":"한국생명존중희망재단","s":"public"},{"n":"한국의료분쟁조정중재원","s":"public"},{"n":"한국자활복지개발원","s":"public"},{"n":"한국장기조직기증원","s":"public"},{"n":"한국장애인개발원","s":"public"},{"n":"한국한의약진흥원","s":"public"}],"국가유산청":[{"n":"국가유산진흥원","s":"public"}],"기후에너지환경부":[{"n":"국립낙동강생물자원관","s":"public"},{"n":"국립호남권생물자원관","s":"public"},{"n":"수도권매립지관리공사","s":"public"},{"n":"한국물기술인증원","s":"public"},{"n":"한국상하수도협회","s":"public"},{"n":"한국수자원조사기술원","s":"public"},{"n":"한국에너지기술평가원","s":"public"},{"n":"한국에너지재단","s":"public"},{"n":"한국에너지정보문화재단","s":"public"},{"n":"한국전력국제원자력대학원대학교","s":"public"},{"n":"한국환경보전원","s":"public"},{"n":"한전원자력연료","s":"public"},{"n":"한전MCS","s":"public"}],"해양수산부":[{"n":"국립울진해양과학관","s":"public"},{"n":"국립인천해양박물관","s":"public"},{"n":"국립해양박물관","s":"public"},{"n":"국립해양생물자원관","s":"public"},{"n":"극지연구소","s":"public"},{"n":"부산항만공사","s":"public"},{"n":"선박해양플랜트연구소","s":"public"},{"n":"여수광양항만공사","s":"public"},{"n":"울산항만공사","s":"public"},{"n":"인천항만공사","s":"public"},{"n":"한국수산자원공단","s":"public"},{"n":"한국어촌어항공단","s":"public"},{"n":"한국항로표지기술원","s":"public"},{"n":"한국해양과학기술원","s":"public"},{"n":"한국해양수산연수원","s":"public"},{"n":"한국해양조사협회","s":"public"},{"n":"한국해양진흥공사","s":"public"},{"n":"해양수산과학기술진흥원","s":"public"}],"방위사업청":[{"n":"국방과학연구소","s":"public"},{"n":"국방기술진흥연구소","s":"public"},{"n":"국방기술품질원","s":"public"}],"국방부":[{"n":"국방전직교육원","s":"public"},{"n":"전쟁기념사업회","s":"public"},{"n":"한국국방연구원","s":"public"}],"통일부":[{"n":"남북교류협력지원협회","s":"public"},{"n":"북한이탈주민지원재단","s":"public"}],"법무부":[{"n":"대한법률구조공단","s":"public"},{"n":"정부법무공단","s":"public"}],"산업통상부":[{"n":"대한석탄공사","s":"public"},{"n":"무역안보관리원","s":"public"},{"n":"한국디자인진흥원","s":"public"},{"n":"한국로봇산업진흥원","s":"public"},{"n":"한국산업기술시험원","s":"public"},{"n":"한국세라믹기술원","s":"public"},{"n":"한국제품안전관리원","s":"public"},{"n":"한국탄소산업진흥원","s":"public"}],"행정안전부":[{"n":"민주화운동기념사업회","s":"public"},{"n":"일제강제동원피해자지원재단","s":"public"},{"n":"전국재해구호협회","s":"public"}],"금융위원회":[{"n":"서민금융진흥원","s":"public"},{"n":"중소기업은행","s":"public"},{"n":"한국산업은행","s":"public"}],"방송미디어통신위원회":[{"n":"시청자미디어재단","s":"public"},{"n":"한국방송광고진흥공사","s":"public"}],"식품의약품안전처":[{"n":"식품안전정보원","s":"public"},{"n":"한국마약퇴치운동본부","s":"public"},{"n":"한국식품안전관리인증원","s":"public"},{"n":"한국의료기기안전정보원","s":"public"},{"n":"한국의약품안전관리원","s":"public"}],"기상청":[{"n":"아시아·태평양경제협력체 기후센터","s":"public"},{"n":"차세대수치예보모델개발사업단","s":"public"},{"n":"한국기상산업기술원","s":"public"}],"성평등가족부":[{"n":"양육비이행관리원","s":"public"},{"n":"한국건강가정진흥원","s":"public"},{"n":"한국양성평등교육진흥원","s":"public"},{"n":"한국여성인권진흥원","s":"public"},{"n":"한국청소년상담복지개발원","s":"public"},{"n":"한국청소년활동진흥원","s":"public"}],"재외동포청":[{"n":"재외동포협력센터","s":"public"}],"공정거래위원회":[{"n":"한국공정거래조정원","s":"public"}],"관세청":[{"n":"한국관세정보원","s":"public"},{"n":"한국원산지정보원","s":"public"}],"외교부":[{"n":"한국국제교류재단","s":"public"}],"농촌진흥청":[{"n":"한국농업기술진흥원","s":"public"}],"산림청":[{"n":"한국등산·트레킹지원센터","s":"public"},{"n":"한국임업진흥원","s":"public"},{"n":"한국치산기술협회","s":"public"}],"지식재산처":[{"n":"한국발명진흥회","s":"public"},{"n":"한국지식재산보호원","s":"public"},{"n":"한국지식재산연구원","s":"public"},{"n":"한국특허기술진흥원","s":"public"},{"n":"한국특허전략개발원","s":"public"},{"n":"한국특허정보원","s":"public"}],"소방청":[{"n":"한국소방산업기술원","s":"public"}],"재정경제부":[{"n":"한국수출입은행","s":"public"},{"n":"한국투자공사","s":"public"}],"원자력안전위원회":[{"n":"한국원자력안전기술원","s":"public"},{"n":"한국원자력안전재단","s":"public"},{"n":"한국원자력통제기술원","s":"public"}],"국가데이터처":[{"n":"한국통계정보원","s":"public"},{"n":"한국통계진흥원","s":"public"}]},"지방공기업":{"경기도":[{"n":"가평군상수도","s":"public"},{"n":"가평군시설관리공단","s":"public"},{"n":"가평군하수도","s":"public"},{"n":"경기관광공사","s":"public"},{"n":"경기교통공사","s":"public"},{"n":"경기도고덕국제화계획지구","s":"public"},{"n":"경기도판교테크노밸리조성사업","s":"public"},{"n":"경기주택도시공사","s":"public"},{"n":"경기평택항만공사","s":"public"},{"n":"고양도시관리공사","s":"public"},{"n":"고양시상수도","s":"public"},{"n":"고양시하수도","s":"public"},{"n":"과천도시공사","s":"public"},{"n":"과천시상수도","s":"public"},{"n":"과천시지식정보타운조성사업","s":"public"},{"n":"과천시하수도","s":"public"},{"n":"광명도시공사","s":"public"},{"n":"광명시상수도","s":"public"},{"n":"광명시하수도","s":"public"},{"n":"광주도시관리공사","s":"public"},{"n":"광주시상수도","s":"public"},{"n":"광주시하수도","s":"public"},{"n":"구리농수산물공사","s":"public"},{"n":"구리도시공사","s":"public"},{"n":"구리시상수도","s":"public"},{"n":"구리시하수도","s":"public"},{"n":"군포도시공사","s":"public"},{"n":"군포시상수도","s":"public"},{"n":"군포시하수도","s":"public"},{"n":"김포도시공사","s":"public"},{"n":"김포시상수도","s":"public"},{"n":"김포시하수도","s":"public"},{"n":"남양주도시공사","s":"public"},{"n":"남양주시상수도","s":"public"},{"n":"남양주시하수도","s":"public"},{"n":"동두천시 시설관리공단","s":"public"},{"n":"동두천시상수도","s":"public"},{"n":"동두천시하수도","s":"public"},{"n":"부천도시공사","s":"public"},{"n":"부천시상수도","s":"public"},{"n":"부천시하수도","s":"public"},{"n":"성남도시개발공사","s":"public"},{"n":"성남시공영개발","s":"public"},{"n":"성남시상수도","s":"public"},{"n":"성남시하수도","s":"public"},{"n":"수원도시공사","s":"public"},{"n":"수원시상수도","s":"public"},{"n":"수원시하수도","s":"public"},{"n":"시흥도시공사","s":"public"},{"n":"시흥시공영개발","s":"public"},{"n":"시흥시상수도","s":"public"},{"n":"시흥시하수도","s":"public"},{"n":"안산도시공사","s":"public"},{"n":"안산시상수도","s":"public"},{"n":"안산시하수도","s":"public"},{"n":"안성시공영개발","s":"public"},{"n":"안성시상수도","s":"public"},{"n":"안성시시설관리공단","s":"public"},{"n":"안성시하수도","s":"public"},{"n":"안양도시공사","s":"public"},{"n":"안양시공영개발","s":"public"},{"n":"안양시상수도","s":"public"},{"n":"안양시하수도","s":"public"},{"n":"양주도시공사","s":"public"},{"n":"양주시상수도","s":"public"},{"n":"양주시하수도","s":"public"},{"n":"양평공사","s":"public"},{"n":"양평군상수도","s":"public"},{"n":"양평군하수도","s":"public"},{"n":"여주도시공사(시설)","s":"public"},{"n":"여주시상수도","s":"public"},{"n":"여주시하수도","s":"public"},{"n":"연천군상수도","s":"public"},{"n":"연천군시설관리공단","s":"public"},{"n":"연천군하수도","s":"public"},{"n":"오산도시공사","s":"public"},{"n":"오산시상수도","s":"public"},{"n":"오산시하수도","s":"public"},{"n":"용인도시공사","s":"public"},{"n":"용인시상수도","s":"public"},{"n":"용인시하수도","s":"public"},{"n":"의왕도시공사","s":"public"},{"n":"의왕시공영개발","s":"public"},{"n":"의왕시상수도","s":"public"},{"n":"의왕시하수도","s":"public"},{"n":"의정부도시공사","s":"public"},{"n":"의정부시공영개발","s":"public"},{"n":"의정부시상수도","s":"public"},{"n":"의정부시하수도","s":"public"},{"n":"이천시상수도","s":"public"},{"n":"이천시시설관리공단","s":"public"},{"n":"이천시하수도","s":"public"},{"n":"파주도시공사","s":"public"},{"n":"파주시상수도","s":"public"},{"n":"파주시하수도","s":"public"},{"n":"평택도시공사","s":"public"},{"n":"평택시상수도","s":"public"},{"n":"평택시하수도","s":"public"},{"n":"포천도시공사","s":"public"},{"n":"포천시상수도","s":"public"},{"n":"포천시하수도","s":"public"},{"n":"하남도시공사","s":"public"},{"n":"하남시상수도","s":"public"},{"n":"하남시하수도","s":"public"},{"n":"화성도시공사","s":"public"},{"n":"화성시상수도","s":"public"},{"n":"화성시하수도","s":"public"}],"서울특별시":[{"n":"강남구도시관리공단(시설)","s":"public"},{"n":"강동구도시관리공단(시설)","s":"public"},{"n":"강북구도시관리공단(시설)","s":"public"},{"n":"강서구시설관리공단","s":"public"},{"n":"관악구시설관리공단","s":"public"},{"n":"광진구시설관리공단","s":"public"},{"n":"구로구시설관리공단","s":"public"},{"n":"금천구시설관리공단","s":"public"},{"n":"노원구시설관리공단(시설)","s":"public"},{"n":"도봉구시설관리공단","s":"public"},{"n":"동대문구시설관리공단","s":"public"},{"n":"동작구시설관리공단","s":"public"},{"n":"마포구시설관리공단","s":"public"},{"n":"서대문구도시관리공단(시설)","s":"public"},{"n":"서울교통공사","s":"public"},{"n":"서울농수산식품공사","s":"public"},{"n":"서울물재생시설공단","s":"public"},{"n":"서울시설공단","s":"public"},{"n":"서울에너지공사","s":"public"},{"n":"서울주택도시공사","s":"public"},{"n":"서울특별시상수도","s":"public"},{"n":"서울특별시하수도","s":"public"},{"n":"성동구도시관리공단(시설)","s":"public"},{"n":"성북구도시관리공단(시설)","s":"public"},{"n":"송파구시설관리공단","s":"public"},{"n":"양천구시설관리공단","s":"public"},{"n":"영등포구시설관리공단","s":"public"},{"n":"용산구시설관리공단","s":"public"},{"n":"은평구시설관리공단","s":"public"},{"n":"종로구시설관리공단","s":"public"},{"n":"중구시설관리공단","s":"public"},{"n":"중랑구시설관리공단","s":"public"}],"강원특별자치도":[{"n":"강릉관광개발공사","s":"public"},{"n":"강릉시공영개발","s":"public"},{"n":"강릉시상수도","s":"public"},{"n":"강릉시하수도","s":"public"},{"n":"강원특별자치도개발공사","s":"public"},{"n":"고성군상수도","s":"public"},{"n":"동해시상수도","s":"public"},{"n":"동해시시설관리공단","s":"public"},{"n":"동해시하수도","s":"public"},{"n":"삼척시상수도","s":"public"},{"n":"속초시상수도","s":"public"},{"n":"속초시시설관리공단","s":"public"},{"n":"속초시하수도","s":"public"},{"n":"양양군상수도","s":"public"},{"n":"영월군상수도","s":"public"},{"n":"영월군시설관리공단","s":"public"},{"n":"원주시공영개발","s":"public"},{"n":"원주시상수도","s":"public"},{"n":"원주시시설관리공단","s":"public"},{"n":"원주시하수도","s":"public"},{"n":"인제군상수도","s":"public"},{"n":"정선군상수도","s":"public"},{"n":"정선군시설관리공단","s":"public"},{"n":"철원군상수도","s":"public"},{"n":"춘천도시공사","s":"public"},{"n":"춘천시공영개발","s":"public"},{"n":"춘천시상수도","s":"public"},{"n":"춘천시하수도","s":"public"},{"n":"태백시상수도","s":"public"},{"n":"태백시시설관리공단","s":"public"},{"n":"평창군상수도","s":"public"},{"n":"평창군시설관리공단","s":"public"},{"n":"홍천군상수도","s":"public"}],"경상남도":[{"n":"거제시상수도","s":"public"},{"n":"거제시하수도","s":"public"},{"n":"거제해양관광개발공사","s":"public"},{"n":"거창골프장사업소","s":"public"},{"n":"거창군상수도","s":"public"},{"n":"거창군하수도","s":"public"},{"n":"경상남도개발공사","s":"public"},{"n":"고성군하수도","s":"public"},{"n":"김해시도시개발공사","s":"public"},{"n":"김해시상수도","s":"public"},{"n":"김해시하수도","s":"public"},{"n":"밀양시상수도","s":"public"},{"n":"밀양시시설관리공단","s":"public"},{"n":"밀양시하수도","s":"public"},{"n":"사천시 시설관리공단","s":"public"},{"n":"사천시상수도","s":"public"},{"n":"사천시하수도","s":"public"},{"n":"양산시상수도","s":"public"},{"n":"양산시시설관리공단","s":"public"},{"n":"양산시하수도","s":"public"},{"n":"의령친환경골프장관리사업소","s":"public"},{"n":"진주시 시설관리공단","s":"public"},{"n":"진주시공영개발","s":"public"},{"n":"진주시상수도","s":"public"},{"n":"진주시하수도","s":"public"},{"n":"창녕군상수도","s":"public"},{"n":"창녕군시설관리공단","s":"public"},{"n":"창녕군하수도","s":"public"},{"n":"창원레포츠파크","s":"public"},{"n":"창원시상수도","s":"public"},{"n":"창원시설공단","s":"public"},{"n":"창원시주택건설","s":"public"},{"n":"창원시하수도","s":"public"},{"n":"통영관광개발공사","s":"public"},{"n":"통영시상수도","s":"public"},{"n":"통영시하수도","s":"public"},{"n":"함안군상수도","s":"public"},{"n":"함안지방공사","s":"public"},{"n":"합천군 시설관리공단","s":"public"},{"n":"합천군상수도","s":"public"}],"경상북도":[{"n":"경산시상수도","s":"public"},{"n":"경산시하수도","s":"public"},{"n":"경상북도개발공사","s":"public"},{"n":"경상북도문화관광공사","s":"public"},{"n":"경주시상수도","s":"public"},{"n":"경주시시설관리공단","s":"public"},{"n":"경주시하수도","s":"public"},{"n":"구미도시공사","s":"public"},{"n":"구미시상수도","s":"public"},{"n":"구미시하수도","s":"public"},{"n":"김천시상수도","s":"public"},{"n":"김천시시설관리공단","s":"public"},{"n":"김천시하수도","s":"public"},{"n":"문경관광공사","s":"public"},{"n":"문경시상수도","s":"public"},{"n":"문경시하수도","s":"public"},{"n":"상주시상수도","s":"public"},{"n":"상주시하수도","s":"public"},{"n":"안동시상수도","s":"public"},{"n":"안동시시설관리공단","s":"public"},{"n":"안동시하수도","s":"public"},{"n":"영덕군상수도","s":"public"},{"n":"영덕군하수도","s":"public"},{"n":"영양고추유통공사","s":"public"},{"n":"영주시상수도","s":"public"},{"n":"영주시하수도","s":"public"},{"n":"영천시상수도","s":"public"},{"n":"영천시시설관리공단","s":"public"},{"n":"영천시하수도","s":"public"},{"n":"예천군상수도","s":"public"},{"n":"예천군하수도","s":"public"},{"n":"울진군상수도","s":"public"},{"n":"의성군상수도","s":"public"},{"n":"청도공영사업공사","s":"public"},{"n":"칠곡군상수도","s":"public"},{"n":"칠곡군하수도","s":"public"},{"n":"포항시상수도","s":"public"},{"n":"포항시설관리공단","s":"public"},{"n":"포항시하수도","s":"public"}],"충청남도":[{"n":"계룡시공영개발","s":"public"},{"n":"계룡시상수도","s":"public"},{"n":"계룡시하수도","s":"public"},{"n":"공주시상수도","s":"public"},{"n":"공주시하수도","s":"public"},{"n":"금산군상수도","s":"public"},{"n":"금산군하수도","s":"public"},{"n":"논산시상수도","s":"public"},{"n":"논산시하수도","s":"public"},{"n":"당진도시공사","s":"public"},{"n":"당진시상수도","s":"public"},{"n":"당진시하수도","s":"public"},{"n":"보령시상수도","s":"public"},{"n":"보령시시설관리공단","s":"public"},{"n":"보령시하수도","s":"public"},{"n":"부여군상수도","s":"public"},{"n":"부여군시설관리공단","s":"public"},{"n":"부여군하수도","s":"public"},{"n":"서산시상수도","s":"public"},{"n":"서산시시설관리공단","s":"public"},{"n":"서산시하수도","s":"public"},{"n":"서천군상수도","s":"public"},{"n":"아산시공영개발","s":"public"},{"n":"아산시상수도","s":"public"},{"n":"아산시시설관리공단","s":"public"},{"n":"아산시하수도","s":"public"},{"n":"예산군상수도","s":"public"},{"n":"예산군하수도","s":"public"},{"n":"천안도시공사","s":"public"},{"n":"천안시공영개발","s":"public"},{"n":"천안시상수도","s":"public"},{"n":"천안시하수도","s":"public"},{"n":"충청남도개발공사","s":"public"},{"n":"태안군상수도","s":"public"},{"n":"태안군하수도","s":"public"},{"n":"홍성군상수도","s":"public"},{"n":"홍성군하수도","s":"public"}],"전북특별자치도":[{"n":"고창군상수도","s":"public"},{"n":"군산시상수도","s":"public"},{"n":"군산시하수도","s":"public"},{"n":"김제시상수도","s":"public"},{"n":"김제시하수도","s":"public"},{"n":"남원시상수도","s":"public"},{"n":"남원시하수도","s":"public"},{"n":"부안군상수도","s":"public"},{"n":"완주군상수도","s":"public"},{"n":"완주군시설관리공단","s":"public"},{"n":"완주군하수도","s":"public"},{"n":"익산시공영개발","s":"public"},{"n":"익산시도시관리공단","s":"public"},{"n":"익산시상수도","s":"public"},{"n":"익산시하수도","s":"public"},{"n":"장수한우지방공사","s":"public"},{"n":"전북개발공사","s":"public"},{"n":"전주시상수도","s":"public"},{"n":"전주시시설관리공단","s":"public"},{"n":"전주시하수도","s":"public"},{"n":"정읍시상수도","s":"public"},{"n":"정읍시하수도","s":"public"}],"전라남도":[{"n":"광양시공영개발","s":"public"},{"n":"광양시상수도","s":"public"},{"n":"광양시하수도","s":"public"},{"n":"나주시상수도","s":"public"},{"n":"나주시하수도","s":"public"},{"n":"목포시공영개발","s":"public"},{"n":"목포시상수도","s":"public"},{"n":"목포시하수도","s":"public"},{"n":"순천시공영개발","s":"public"},{"n":"순천시상수도","s":"public"},{"n":"순천시하수도","s":"public"},{"n":"여수시도시관리공단","s":"public"},{"n":"여수시상수도","s":"public"},{"n":"여수시하수도","s":"public"},{"n":"영광군상수도","s":"public"},{"n":"영광군하수도","s":"public"},{"n":"영암군상수도","s":"public"},{"n":"영암군하수도","s":"public"},{"n":"완도해양치유관리공단","s":"public"},{"n":"전남개발공사","s":"public"},{"n":"화순군상수도","s":"public"},{"n":"화순군하수도","s":"public"}],"광주광역시":[{"n":"광주광산구시설관리공단","s":"public"},{"n":"광주광역시관광공사","s":"public"},{"n":"광주광역시남구시설공단","s":"public"},{"n":"광주광역시도시공사","s":"public"},{"n":"광주광역시북구시설관리공단","s":"public"},{"n":"광주광역시상수도","s":"public"},{"n":"광주광역시서구시설관리공단","s":"public"},{"n":"광주광역시하수도","s":"public"},{"n":"광주교통공사","s":"public"},{"n":"광주환경공단","s":"public"}],"부산광역시":[{"n":"기장군도시관리공단(시설)","s":"public"},{"n":"부산관광공사","s":"public"},{"n":"부산광역시 남구 시설관리공단","s":"public"},{"n":"부산광역시상수도","s":"public"},{"n":"부산광역시하수도","s":"public"},{"n":"부산교통공사","s":"public"},{"n":"부산도시공사","s":"public"},{"n":"부산시설공단","s":"public"},{"n":"부산환경공단","s":"public"}],"충청북도":[{"n":"단양관광공사","s":"public"},{"n":"단양군상수도","s":"public"},{"n":"보은군상수도","s":"public"},{"n":"보은군하수도","s":"public"},{"n":"영동군상수도","s":"public"},{"n":"옥천군상수도","s":"public"},{"n":"옥천군하수도","s":"public"},{"n":"음성군공영개발","s":"public"},{"n":"음성군상수도","s":"public"},{"n":"음성군하수도","s":"public"},{"n":"제천시상수도","s":"public"},{"n":"제천시하수도","s":"public"},{"n":"증평군하수도","s":"public"},{"n":"진천군상수도","s":"public"},{"n":"진천군하수도","s":"public"},{"n":"청주도시공사","s":"public"},{"n":"청주시상수도","s":"public"},{"n":"청주시하수도","s":"public"},{"n":"충북개발공사","s":"public"},{"n":"충주시공영개발","s":"public"},{"n":"충주시상수도","s":"public"},{"n":"충주시시설관리공단","s":"public"},{"n":"충주시하수도","s":"public"}],"대구광역시":[{"n":"대구공공시설관리공단","s":"public"},{"n":"대구광역시상수도","s":"public"},{"n":"대구광역시하수도","s":"public"},{"n":"대구교통공사","s":"public"},{"n":"대구농수산물유통관리공사","s":"public"},{"n":"대구달성군시설관리공단","s":"public"},{"n":"대구도시개발공사","s":"public"}],"대전광역시":[{"n":"대전관광공사","s":"public"},{"n":"대전광역시상수도","s":"public"},{"n":"대전광역시하수도","s":"public"},{"n":"대전교통공사","s":"public"},{"n":"대전도시공사","s":"public"},{"n":"대전시시설관리공단","s":"public"}],"세종특별자치시":[{"n":"세종도시교통공사","s":"public"},{"n":"세종특별자치시공영개발","s":"public"},{"n":"세종특별자치시상수도","s":"public"},{"n":"세종특별자치시시설관리공단","s":"public"},{"n":"세종특별자치시하수도","s":"public"}],"울산광역시":[{"n":"울산광역시남구도시관리공단(시설)","s":"public"},{"n":"울산광역시북구시설관리공단","s":"public"},{"n":"울산광역시상수도","s":"public"},{"n":"울산광역시중구도시관리공단(시설)","s":"public"},{"n":"울산광역시하수도","s":"public"},{"n":"울산도시공사","s":"public"},{"n":"울산시설공단","s":"public"},{"n":"울주군시설관리공단","s":"public"}],"인천광역시":[{"n":"인천경제자유구역사업","s":"public"},{"n":"인천관광공사","s":"public"},{"n":"인천광역시 미추홀구시설관리공단","s":"public"},{"n":"인천광역시강화군시설관리공단","s":"public"},{"n":"인천광역시계양구시설관리공단","s":"public"},{"n":"인천광역시남동구도시관리공단(시설)","s":"public"},{"n":"인천광역시부평구시설관리공단","s":"public"},{"n":"인천광역시상수도","s":"public"},{"n":"인천광역시서구시설관리공단","s":"public"},{"n":"인천광역시연수구시설안전관리공단","s":"public"},{"n":"인천광역시중구시설관리공단","s":"public"},{"n":"인천광역시하수도","s":"public"},{"n":"인천교통공사","s":"public"},{"n":"인천도시공사","s":"public"},{"n":"인천시설공단","s":"public"},{"n":"인천환경공단","s":"public"}],"제주특별자치도":[{"n":"제주관광공사","s":"public"},{"n":"제주에너지공사","s":"public"},{"n":"제주특별자치도개발공사","s":"public"},{"n":"제주특별자치도공영버스","s":"public"},{"n":"제주특별자치도상수도","s":"public"},{"n":"제주특별자치도하수도","s":"public"}]},"지방출자출연기관":{"전라남도":[{"n":"1004섬요트관광","s":"public"},{"n":"2026여수세계섬박람회 조직위원회","s":"public"},{"n":"강진군민장학재단","s":"public"},{"n":"강진문화관광재단","s":"public"},{"n":"곡성군미래교육재단","s":"public"},{"n":"광양시어린이보육재단","s":"public"},{"n":"김대중노벨평화상기념관","s":"public"},{"n":"나주교육진흥재단","s":"public"},{"n":"나주시농업농촌융복합산업진흥재단","s":"public"},{"n":"나주시문화재단","s":"public"},{"n":"나주시천연염색문화재단","s":"public"},{"n":"남도음식문화큰잔치","s":"public"},{"n":"남도장터","s":"public"},{"n":"남도장학회","s":"public"},{"n":"남해안권발효식품산업지원센터","s":"public"},{"n":"녹색에너지연구원","s":"public"},{"n":"농업회사법인 순천만가든마켓","s":"public"},{"n":"농업회사법인고흥군유통","s":"public"},{"n":"농업회사법인영광군유통","s":"public"},{"n":"담양군문화재단","s":"public"},{"n":"담양군복지재단","s":"public"},{"n":"담양장학회","s":"public"},{"n":"명량대첩기념사업회","s":"public"},{"n":"목포국제축구센터","s":"public"},{"n":"목포문화재단","s":"public"},{"n":"목포복지재단","s":"public"},{"n":"목포수산물유통센터","s":"public"},{"n":"목포수산식품수출센터","s":"public"},{"n":"목포수산식품지원센터","s":"public"},{"n":"목포시의료원","s":"public"},{"n":"목포인재육성재단","s":"public"},{"n":"무안군승달장학회","s":"public"},{"n":"무안황토건축문화재단","s":"public"},{"n":"백운장학회","s":"public"},{"n":"보성군장학재단","s":"public"},{"n":"사랑나눔복지재단","s":"public"},{"n":"순천로컬푸드","s":"public"},{"n":"순천문화재단","s":"public"},{"n":"순천바이오헬스케어연구센터","s":"public"},{"n":"순천시인재육성장학회재단","s":"public"},{"n":"신안교통재단","s":"public"},{"n":"신안군복지재단","s":"public"},{"n":"신안군장학재단","s":"public"},{"n":"신안신재생에너지재단","s":"public"},{"n":"영광군미래교육재단","s":"public"},{"n":"영암군문화재단","s":"public"},{"n":"영암군미래교육재단","s":"public"},{"n":"예술섬","s":"public"},{"n":"완도군행복복지재단","s":"public"},{"n":"완도전복","s":"public"},{"n":"완도해조류박람회조직위원회","s":"public"},{"n":"장보고장학회","s":"public"},{"n":"장성먹거리통합지원센터","s":"public"},{"n":"장성장학회","s":"public"},{"n":"장흥군나눔복지재단","s":"public"},{"n":"장흥군버섯산업연구원","s":"public"},{"n":"장흥군인재육성장학회","s":"public"},{"n":"장흥축제관광재단","s":"public"},{"n":"전남바이오산업진흥원","s":"public"},{"n":"전남신용보증재단","s":"public"},{"n":"전남여성가족재단","s":"public"},{"n":"전남연구원","s":"public"},{"n":"전남인재평생교육진흥원","s":"public"},{"n":"전남정보문화산업진흥원","s":"public"},{"n":"전남테크노파크","s":"public"},{"n":"전라남도 환경산업진흥원","s":"public"},{"n":"전라남도강진의료원","s":"public"},{"n":"전라남도관광재단","s":"public"},{"n":"전라남도국제농업박람회","s":"public"},{"n":"전라남도문화재단","s":"public"},{"n":"전라남도사회서비스원","s":"public"},{"n":"전라남도세계친환경디자인박람회조직위원회","s":"public"},{"n":"전라남도순천의료원","s":"public"},{"n":"전라남도중소기업진흥원","s":"public"},{"n":"전라남도청소년미래재단","s":"public"},{"n":"진도군상권활성화재단","s":"public"},{"n":"진도군인재육성장학회","s":"public"},{"n":"진도청정푸드밸리","s":"public"},{"n":"탑글로리","s":"public"},{"n":"포뮬러원국제자동차경주대회조직위원회","s":"public"},{"n":"한국학 호남진흥원","s":"public"},{"n":"함평축제관광재단","s":"public"},{"n":"해남군 교육재단","s":"public"},{"n":"해남먹거리통합지원센터","s":"public"},{"n":"해남문화관광재단","s":"public"},{"n":"화순군문화관광재단","s":"public"},{"n":"화순장학회","s":"public"},{"n":"화신산업개발","s":"public"}],"서울특별시":[{"n":"120다산콜재단","s":"public"},{"n":"강남문화재단","s":"public"},{"n":"강남복지재단","s":"public"},{"n":"강동문화재단","s":"public"},{"n":"강북구꿈나무키움장학재단","s":"public"},{"n":"강북문화재단","s":"public"},{"n":"강서희망나눔복지재단","s":"public"},{"n":"관악문화재단","s":"public"},{"n":"관악일자리행복","s":"public"},{"n":"관악중소벤처진흥원","s":"public"},{"n":"광진문화재단","s":"public"},{"n":"광진복지재단","s":"public"},{"n":"구로구장학회","s":"public"},{"n":"구로문화재단","s":"public"},{"n":"구로희망복지재단","s":"public"},{"n":"금천문화재단","s":"public"},{"n":"금천미래장학회","s":"public"},{"n":"금천일자리","s":"public"},{"n":"노원교육복지재단","s":"public"},{"n":"노원문화재단","s":"public"},{"n":"노원어르신행복","s":"public"},{"n":"노원환경재단","s":"public"},{"n":"대한민국동작","s":"public"},{"n":"도봉문화재단","s":"public"},{"n":"동대문문화재단","s":"public"},{"n":"동작문화재단","s":"public"},{"n":"동작복지재단","s":"public"},{"n":"마포문화재단","s":"public"},{"n":"마포복지재단","s":"public"},{"n":"마포인재육성장학재단","s":"public"},{"n":"서울경제진흥원","s":"public"},{"n":"서울관광재단","s":"public"},{"n":"서울디자인재단","s":"public"},{"n":"서울문화재단","s":"public"},{"n":"서울시립교향악단","s":"public"},{"n":"서울시복지재단","s":"public"},{"n":"서울시여성가족재단","s":"public"},{"n":"서울신용보증재단","s":"public"},{"n":"서울에이아이재단","s":"public"},{"n":"서울연구원","s":"public"},{"n":"서울의료원","s":"public"},{"n":"서울장학재단","s":"public"},{"n":"서울투자진흥재단","s":"public"},{"n":"서울특별시50플러스재단","s":"public"},{"n":"서울특별시평생교육진흥원","s":"public"},{"n":"서초다산장학재단","s":"public"},{"n":"서초문화재단","s":"public"},{"n":"서초복지돌봄재단","s":"public"},{"n":"서초여성일자리","s":"public"},{"n":"성동구인재육성장학재단","s":"public"},{"n":"성동문화재단","s":"public"},{"n":"성동미래일자리","s":"public"},{"n":"성북문화재단","s":"public"},{"n":"성북복지재단","s":"public"},{"n":"세종문화회관","s":"public"},{"n":"송파구인재육성장학재단","s":"public"},{"n":"송파문화재단","s":"public"},{"n":"양천문화재단","s":"public"},{"n":"양천사랑복지재단","s":"public"},{"n":"영등포구미래교육재단","s":"public"},{"n":"영등포문화재단","s":"public"},{"n":"용산문화재단","s":"public"},{"n":"용산복지재단","s":"public"},{"n":"우면산내셔널트러스트","s":"public"},{"n":"은평구민장학재단","s":"public"},{"n":"은평문화재단","s":"public"},{"n":"종로문화재단","s":"public"},{"n":"종로복지재단","s":"public"},{"n":"중구문화재단","s":"public"},{"n":"중구인재육성장학재단","s":"public"},{"n":"중랑문화재단","s":"public"}],"강원특별자치도":[{"n":"2018평창기념재단","s":"public"},{"n":"강릉과학산업진흥원","s":"public"},{"n":"강릉농산물도매시장","s":"public"},{"n":"강릉문화재단","s":"public"},{"n":"강릉시 미래인재육성재단","s":"public"},{"n":"강릉시민축구단","s":"public"},{"n":"강원관광재단","s":"public"},{"n":"강원디자인진흥원","s":"public"},{"n":"강원문화재단","s":"public"},{"n":"강원수출","s":"public"},{"n":"강원신용보증재단","s":"public"},{"n":"강원심층수","s":"public"},{"n":"강원역사문화연구원","s":"public"},{"n":"강원연구원","s":"public"},{"n":"강원인재원","s":"public"},{"n":"강원정보문화산업진흥원","s":"public"},{"n":"강원중도개발공사","s":"public"},{"n":"강원테크노파크","s":"public"},{"n":"강원특별자치도 사회서비스원","s":"public"},{"n":"강원특별자치도강릉의료원","s":"public"},{"n":"강원특별자치도경제진흥원","s":"public"},{"n":"강원특별자치도삼척의료원","s":"public"},{"n":"강원특별자치도속초의료원","s":"public"},{"n":"강원특별자치도영월의료원","s":"public"},{"n":"강원특별자치도원주의료원","s":"public"},{"n":"강원혁신도시발전지원센터","s":"public"},{"n":"고성문화재단","s":"public"},{"n":"고성향토장학회","s":"public"},{"n":"나라","s":"public"},{"n":"동해문화관광재단","s":"public"},{"n":"동해시민장학재단","s":"public"},{"n":"북방물류산업진흥원","s":"public"},{"n":"블랙밸리컨트리클럽","s":"public"},{"n":"삼척관광문화재단","s":"public"},{"n":"삼척시도계장학재단","s":"public"},{"n":"삼척향토장학재단","s":"public"},{"n":"속초문화관광재단","s":"public"},{"n":"스크립스코리아항체연구원","s":"public"},{"n":"아름다운인제관광","s":"public"},{"n":"양구군스포츠재단","s":"public"},{"n":"양구문화재단","s":"public"},{"n":"양양군인재육성장학회","s":"public"},{"n":"양양문화재단","s":"public"},{"n":"영월문화관광재단","s":"public"},{"n":"영월산업진흥원","s":"public"},{"n":"영월에너지스테이션","s":"public"},{"n":"영월장학회","s":"public"},{"n":"원덕읍향토장학회","s":"public"},{"n":"원주문화재단","s":"public"},{"n":"원주미래산업진흥원","s":"public"},{"n":"원주부론일반산업단지","s":"public"},{"n":"원주의료기기산업진흥원","s":"public"},{"n":"원주화훼특화관광단지개발","s":"public"},{"n":"율곡국학진흥원","s":"public"},{"n":"인제군문화재단","s":"public"},{"n":"정선군상권활성화재단","s":"public"},{"n":"정선아리랑문화재단","s":"public"},{"n":"정선의료재단","s":"public"},{"n":"정선장학회","s":"public"},{"n":"철원문화재단","s":"public"},{"n":"철원장학회","s":"public"},{"n":"철원플라즈마산업기술연구원","s":"public"},{"n":"춘천레저태권도조직위원회","s":"public"},{"n":"춘천문화재단","s":"public"},{"n":"춘천미래동행재단","s":"public"},{"n":"춘천바이오산업진흥원","s":"public"},{"n":"춘천시 주민자치지원센터","s":"public"},{"n":"춘천인재육성장학재단","s":"public"},{"n":"춘천지역먹거리통합지원센터","s":"public"},{"n":"춘천학곡도시개발","s":"public"},{"n":"태백가덕산풍력발전","s":"public"},{"n":"태백시문화재단","s":"public"},{"n":"태백시민향토장학회","s":"public"},{"n":"태백시복지재단","s":"public"},{"n":"평창관광문화재단","s":"public"},{"n":"평창유산재단","s":"public"},{"n":"평창인재육성장학재단","s":"public"},{"n":"평창푸드통합지원센터","s":"public"},{"n":"한국기후변화연구원","s":"public"},{"n":"한국여성수련원","s":"public"},{"n":"해양심층수산업 고성진흥원","s":"public"},{"n":"홍천메디칼허브연구소","s":"public"},{"n":"홍천문화재단","s":"public"},{"n":"화천군인재육성재단","s":"public"},{"n":"화천군청정산업진흥재단","s":"public"},{"n":"화천한옥학교","s":"public"},{"n":"횡성문화관광재단","s":"public"},{"n":"횡성인재육성장학회","s":"public"}],"울산광역시":[{"n":"2028울산국제정원박람회조직위원회","s":"public"},{"n":"고래문화재단","s":"public"},{"n":"울산경제일자리진흥원","s":"public"},{"n":"울산광역시 남구장학재단","s":"public"},{"n":"울산광역시 복지가족진흥사회서비스원","s":"public"},{"n":"울산광역시북구교육진흥재단","s":"public"},{"n":"울산문화관광재단","s":"public"},{"n":"울산복합도시개발","s":"public"},{"n":"울산신용보증재단","s":"public"},{"n":"울산연구원","s":"public"},{"n":"울산정보산업진흥원","s":"public"},{"n":"울산테크노파크","s":"public"},{"n":"울주문화재단","s":"public"},{"n":"울주복지재단","s":"public"}],"경기도":[{"n":"가평군 인재육성재단","s":"public"},{"n":"가평군복지재단","s":"public"},{"n":"경기대진테크노파크","s":"public"},{"n":"경기도 농수산진흥원","s":"public"},{"n":"경기도경제과학진흥원","s":"public"},{"n":"경기도미래세대재단","s":"public"},{"n":"경기도사회서비스원","s":"public"},{"n":"경기도사회적경제원","s":"public"},{"n":"경기도수원월드컵경기장관리재단","s":"public"},{"n":"경기도시장상권진흥원","s":"public"},{"n":"경기도여성가족재단","s":"public"},{"n":"경기도의료원","s":"public"},{"n":"경기도일자리재단","s":"public"},{"n":"경기도평생교육진흥원","s":"public"},{"n":"경기문화재단","s":"public"},{"n":"경기복지재단","s":"public"},{"n":"경기신용보증재단","s":"public"},{"n":"경기아트센터","s":"public"},{"n":"경기연구원","s":"public"},{"n":"경기용인테크노밸리","s":"public"},{"n":"경기콘텐츠진흥원","s":"public"},{"n":"경기테크노파크","s":"public"},{"n":"경기환경에너지진흥원","s":"public"},{"n":"고양국제박람회재단","s":"public"},{"n":"고양문화재단","s":"public"},{"n":"고양산업진흥원","s":"public"},{"n":"고양시청소년재단","s":"public"},{"n":"고양연구원","s":"public"},{"n":"과천문화재단","s":"public"},{"n":"과천시애향장학회","s":"public"},{"n":"과천시청소년재단","s":"public"},{"n":"광명문화재단","s":"public"},{"n":"광명시인재육성재단","s":"public"},{"n":"광명시자원봉사센터","s":"public"},{"n":"광명시청소년재단","s":"public"},{"n":"광주시문화재단","s":"public"},{"n":"광주시민장학회","s":"public"},{"n":"구리문화재단","s":"public"},{"n":"구리시상권활성화재단","s":"public"},{"n":"구리시청소년재단","s":"public"},{"n":"군포문화재단","s":"public"},{"n":"군포사랑장학회","s":"public"},{"n":"군포산업진흥원","s":"public"},{"n":"군포시청소년재단","s":"public"},{"n":"김포문화재단","s":"public"},{"n":"김포복지재단","s":"public"},{"n":"김포빅데이터","s":"public"},{"n":"김포산업지원센터","s":"public"},{"n":"김포시민장학회","s":"public"},{"n":"김포시청소년재단","s":"public"},{"n":"김포에프씨","s":"public"},{"n":"남양주문화재단","s":"public"},{"n":"남양주시복지재단","s":"public"},{"n":"남양주시정연구원","s":"public"},{"n":"부천문화재단","s":"public"},{"n":"부천산업진흥원","s":"public"},{"n":"부천시여성청소년재단","s":"public"},{"n":"부천시정연구원","s":"public"},{"n":"부천아트센터","s":"public"},{"n":"부천장학재단","s":"public"},{"n":"성남문화재단","s":"public"},{"n":"성남산업진흥원","s":"public"},{"n":"성남시상권활성화재단","s":"public"},{"n":"성남시의료원","s":"public"},{"n":"성남시장학회","s":"public"},{"n":"성남시정연구원","s":"public"},{"n":"성남시청소년청년재단","s":"public"},{"n":"세미원","s":"public"},{"n":"수원도시재단","s":"public"},{"n":"수원문화재단","s":"public"},{"n":"수원시국제교류센터","s":"public"},{"n":"수원시장학재단","s":"public"},{"n":"수원시정연구원","s":"public"},{"n":"수원시청소년청년재단","s":"public"},{"n":"수원컨벤션센터","s":"public"},{"n":"수원FC","s":"public"},{"n":"시흥도시재생지원센터","s":"public"},{"n":"시흥매화산단개발","s":"public"},{"n":"시흥산업진흥원","s":"public"},{"n":"시흥시인재양성재단","s":"public"},{"n":"시흥시정연구원","s":"public"},{"n":"시흥시청소년청년재단","s":"public"},{"n":"안산도시개발","s":"public"},{"n":"안산문화재단","s":"public"},{"n":"안산미래연구원","s":"public"},{"n":"안산시 상권활성화재단","s":"public"},{"n":"안산시청소년재단","s":"public"},{"n":"안산인재육성재단","s":"public"},{"n":"안산환경재단","s":"public"},{"n":"안성산업진흥원","s":"public"},{"n":"안성시민장학회","s":"public"},{"n":"안성테크노밸리","s":"public"},{"n":"안양 군포 의왕 과천 공동급식지원센터","s":"public"},{"n":"안양문화예술재단","s":"public"},{"n":"안양산업진흥원","s":"public"},{"n":"안양시 인재육성재단","s":"public"},{"n":"안양시민프로축구단","s":"public"},{"n":"안양시청소년재단","s":"public"},{"n":"양주시희망장학재단","s":"public"},{"n":"양주역세권개발피에프브이","s":"public"},{"n":"양평군교육발전위원회","s":"public"},{"n":"양평문화재단","s":"public"},{"n":"여주세종문화관광재단","s":"public"},{"n":"여주시인재육성장학회","s":"public"},{"n":"연천군청소년육성재단","s":"public"},{"n":"오산교육재단","s":"public"},{"n":"오산문화재단","s":"public"},{"n":"오산운암뜰도시개발프로젝트금융투자","s":"public"},{"n":"용인문화재단","s":"public"},{"n":"용인시산업진흥원","s":"public"},{"n":"용인시시민프로축구단","s":"public"},{"n":"용인시자원봉사센터","s":"public"},{"n":"용인시장학재단","s":"public"},{"n":"용인시정연구원","s":"public"},{"n":"용인시청소년미래재단","s":"public"},{"n":"의왕시인재육성재단","s":"public"},{"n":"의왕시청소년재단","s":"public"},{"n":"의정부도시교육재단","s":"public"},{"n":"의정부리듬시티","s":"public"},{"n":"의정부리듬시티자산관리","s":"public"},{"n":"의정부문화재단","s":"public"},{"n":"의정부시민장학회","s":"public"},{"n":"이천문화재단","s":"public"},{"n":"이천시자원봉사센터","s":"public"},{"n":"이천시청소년재단","s":"public"},{"n":"자나라인","s":"public"},{"n":"차세대융합기술연구원","s":"public"},{"n":"코리아경기도","s":"public"},{"n":"킨텍스","s":"public"},{"n":"파주디엠지곤돌라","s":"public"},{"n":"파주문화재단","s":"public"},{"n":"파주시청소년재단","s":"public"},{"n":"파주시행복장학회","s":"public"},{"n":"파주장단콩웰빙마루","s":"public"},{"n":"평택복지재단","s":"public"},{"n":"평택산업진흥원","s":"public"},{"n":"평택시국제교류재단","s":"public"},{"n":"평택시로컬푸드재단","s":"public"},{"n":"평택시문화재단","s":"public"},{"n":"평택시장학재단","s":"public"},{"n":"평택시청소년재단","s":"public"},{"n":"포천문화관광재단","s":"public"},{"n":"포천시 농업재단","s":"public"},{"n":"포천시청소년재단","s":"public"},{"n":"푸르메여주팜","s":"public"},{"n":"하남교육재단","s":"public"},{"n":"하남문화재단","s":"public"},{"n":"하남시자원봉사센터","s":"public"},{"n":"한국도자재단","s":"public"},{"n":"한국만화영상진흥원","s":"public"},{"n":"화성산업진흥원","s":"public"},{"n":"화성시 환경재단","s":"public"},{"n":"화성시문화관광재단","s":"public"},{"n":"화성시사회복지재단","s":"public"},{"n":"화성시여성가족청소년재단","s":"public"},{"n":"화성시연구원","s":"public"},{"n":"화성시인재육성재단","s":"public"},{"n":"화성에프씨","s":"public"},{"n":"화성푸드통합지원센터","s":"public"}],"인천광역시":[{"n":"강화군복지재단","s":"public"},{"n":"남동문화재단","s":"public"},{"n":"남동스마트밸리개발","s":"public"},{"n":"서구문화재단","s":"public"},{"n":"서동이장학회","s":"public"},{"n":"연수구청소년재단","s":"public"},{"n":"연수문화재단","s":"public"},{"n":"연수큰재장학재단","s":"public"},{"n":"옹진군인재육성재단","s":"public"},{"n":"옹진복지재단","s":"public"},{"n":"인천광역시 사회서비스원","s":"public"},{"n":"인천광역시 여성가족재단","s":"public"},{"n":"인천광역시계양구인재양성장학교육재단","s":"public"},{"n":"인천광역시부평구문화재단","s":"public"},{"n":"인천광역시의료원","s":"public"},{"n":"인천글로벌캠퍼스운영재단","s":"public"},{"n":"인천동구장학재단","s":"public"},{"n":"인천문화재단","s":"public"},{"n":"인천서구복지재단","s":"public"},{"n":"인천스마트시티","s":"public"},{"n":"인천신용보증재단","s":"public"},{"n":"인천연구원","s":"public"},{"n":"인천인재평생교육진흥원","s":"public"},{"n":"인천종합에너지","s":"public"},{"n":"인천중구문화재단","s":"public"},{"n":"인천테크노파크","s":"public"},{"n":"인천투자펀드","s":"public"},{"n":"중구월디장학회","s":"public"}],"경상남도":[{"n":"거제시문화예술재단","s":"public"},{"n":"거제시희망복지재단","s":"public"},{"n":"거창군장학회","s":"public"},{"n":"거창문화재단","s":"public"},{"n":"거창화강석연구센터","s":"public"},{"n":"경남로봇랜드재단","s":"public"},{"n":"경남무역","s":"public"},{"n":"경남문화예술진흥원","s":"public"},{"n":"경남신용보증재단","s":"public"},{"n":"경남연구원","s":"public"},{"n":"경남테크노파크","s":"public"},{"n":"경남항노화연구원","s":"public"},{"n":"경상남도 관광재단","s":"public"},{"n":"경상남도 사회서비스원","s":"public"},{"n":"경상남도 여성가족재단","s":"public"},{"n":"경상남도 투자경제진흥원","s":"public"},{"n":"경상남도마산의료원","s":"public"},{"n":"경상남도미래세대재단","s":"public"},{"n":"경상남도인재평생교육진흥원","s":"public"},{"n":"경상남도장학회","s":"public"},{"n":"경상남도환경재단","s":"public"},{"n":"고성교육재단","s":"public"},{"n":"고성문화관광재단","s":"public"},{"n":"김해대동첨단산업단지","s":"public"},{"n":"김해문화관광재단","s":"public"},{"n":"김해시미래인재장학재단","s":"public"},{"n":"김해시복지재단","s":"public"},{"n":"김해에프씨","s":"public"},{"n":"김해연구원","s":"public"},{"n":"김해의생명산업진흥원","s":"public"},{"n":"김해인재양성재단","s":"public"},{"n":"김해테크노밸리","s":"public"},{"n":"남해군관광문화재단","s":"public"},{"n":"남해군인재육성재단","s":"public"},{"n":"남해마늘연구소","s":"public"},{"n":"농업회사법인의령군토요애유통","s":"public"},{"n":"농업회사법인합천유통","s":"public"},{"n":"덕산일반산업단지","s":"public"},{"n":"마산해양신도시","s":"public"},{"n":"밀양문화관광재단","s":"public"},{"n":"밀양물산","s":"public"},{"n":"밀양시민장학재단","s":"public"},{"n":"빅아일랜드인거제피에프브이","s":"public"},{"n":"사천문화재단","s":"public"},{"n":"사천시 복지 청소년재단","s":"public"},{"n":"사천시미생물발효재단","s":"public"},{"n":"사천시인재육성장학재단","s":"public"},{"n":"사천아이씨도시개발","s":"public"},{"n":"산청축제관광재단","s":"public"},{"n":"양산문화재단","s":"public"},{"n":"양산시복지재단","s":"public"},{"n":"양산시인재육성장학재단","s":"public"},{"n":"영남일반산업단지","s":"public"},{"n":"진주문화관광재단","s":"public"},{"n":"진주바이오산업진흥원","s":"public"},{"n":"진주뿌리산단개발","s":"public"},{"n":"진주시복지재단","s":"public"},{"n":"진주시상권활성화재단","s":"public"},{"n":"창녕군인재육성장학재단","s":"public"},{"n":"창녕양파앤마늘식품연구원","s":"public"},{"n":"창원문화재단","s":"public"},{"n":"창원복지재단","s":"public"},{"n":"창원산업진흥원","s":"public"},{"n":"창원시상권활성화재단","s":"public"},{"n":"창원시장학회","s":"public"},{"n":"창원시정연구원","s":"public"},{"n":"창원에프씨","s":"public"},{"n":"창원자족형복합행정타운","s":"public"},{"n":"통영국제음악재단","s":"public"},{"n":"통영문화재단","s":"public"},{"n":"통영시지속가능발전교육재단","s":"public"},{"n":"평성인더스트리아","s":"public"},{"n":"하동군장학재단","s":"public"},{"n":"하동차앤바이오진흥원","s":"public"},{"n":"함안군장학재단","s":"public"},{"n":"함양군장학회","s":"public"},{"n":"합천군인재육성재단","s":"public"}],"경상북도":[{"n":"경북문화재단","s":"public"},{"n":"경북바이오산업연구원","s":"public"},{"n":"경북신용보증재단","s":"public"},{"n":"경북여성정책개발원","s":"public"},{"n":"경북연구원","s":"public"},{"n":"경북자동차임베디드연구원","s":"public"},{"n":"경북테크노파크","s":"public"},{"n":"경북통상","s":"public"},{"n":"경북행복재단","s":"public"},{"n":"경북IT융합산업기술원","s":"public"},{"n":"경산문화관광재단","s":"public"},{"n":"경산시장학회","s":"public"},{"n":"경상북도 농식품유통교육진흥원","s":"public"},{"n":"경상북도경제진흥원","s":"public"},{"n":"경상북도김천의료원","s":"public"},{"n":"경상북도안동의료원","s":"public"},{"n":"경상북도인재평생교육재단","s":"public"},{"n":"경상북도포항의료원","s":"public"},{"n":"경상북도호국보훈재단","s":"public"},{"n":"경상북도환경연수원","s":"public"},{"n":"경주문화재단","s":"public"},{"n":"경주스마트미디어센터","s":"public"},{"n":"경주시장학회","s":"public"},{"n":"경주화백컨벤션센터","s":"public"},{"n":"고령문화관광재단","s":"public"},{"n":"구미먹거리통합지원센터","s":"public"},{"n":"구미문화재단","s":"public"},{"n":"구미시장학재단","s":"public"},{"n":"구미전자정보기술원","s":"public"},{"n":"김천복지재단","s":"public"},{"n":"김천시인재양성재단","s":"public"},{"n":"독도재단","s":"public"},{"n":"문경관광개발","s":"public"},{"n":"문경시상권활성화재단","s":"public"},{"n":"문경시장학회","s":"public"},{"n":"봉화축제관광재단","s":"public"},{"n":"상주시장학회","s":"public"},{"n":"새마을재단","s":"public"},{"n":"성주군별고을장학회","s":"public"},{"n":"신경주역세권공영개발","s":"public"},{"n":"신경주지역개발","s":"public"},{"n":"신라문화유산연구원","s":"public"},{"n":"안동시장학회","s":"public"},{"n":"안동시한국정신문화재단","s":"public"},{"n":"영덕군교육발전위원회","s":"public"},{"n":"영덕문화관광재단","s":"public"},{"n":"영덕복지재단","s":"public"},{"n":"영양군영양축제관광재단","s":"public"},{"n":"영양군인재육성장학회","s":"public"},{"n":"영주문화관광재단","s":"public"},{"n":"영주시인재육성장학회","s":"public"},{"n":"영주한국효문화진흥원","s":"public"},{"n":"영천시장학회","s":"public"},{"n":"예천군민장학회","s":"public"},{"n":"예천문화관광재단","s":"public"},{"n":"울릉군 인재육성재단","s":"public"},{"n":"울릉샘물","s":"public"},{"n":"울진군의료원","s":"public"},{"n":"울진군장학재단","s":"public"},{"n":"울진유통농업회사법인","s":"public"},{"n":"의성군장학회","s":"public"},{"n":"청도군인재육성장학회","s":"public"},{"n":"청도우리정신문화재단","s":"public"},{"n":"청송군인재육성장학회","s":"public"},{"n":"청송문화관광재단","s":"public"},{"n":"칠곡문화관광재단","s":"public"},{"n":"포항국제전시컨벤션센터","s":"public"},{"n":"포항문화재단","s":"public"},{"n":"포항소재산업진흥원","s":"public"},{"n":"포항시장학회","s":"public"},{"n":"포항시청소년재단","s":"public"},{"n":"포항테크노파크","s":"public"},{"n":"한국국학진흥원","s":"public"},{"n":"호이장학회","s":"public"},{"n":"환동해산업연구원","s":"public"}],"충청남도":[{"n":"계룡시 문화관광재단","s":"public"},{"n":"계룡시애향장학회","s":"public"},{"n":"공주문화관광재단","s":"public"},{"n":"공주시한마음장학회","s":"public"},{"n":"공주의료원","s":"public"},{"n":"금산교육사랑장학재단","s":"public"},{"n":"금산문화관광축제재단","s":"public"},{"n":"금산인삼약초산업진흥원","s":"public"},{"n":"남공주산업단지개발","s":"public"},{"n":"논산문화관광재단","s":"public"},{"n":"논산시장학회","s":"public"},{"n":"논산시청소년청년재단","s":"public"},{"n":"농업회사법인 동부팜","s":"public"},{"n":"당진문화재단","s":"public"},{"n":"당진시복지재단","s":"public"},{"n":"당진시청소년재단","s":"public"},{"n":"당진장학회","s":"public"},{"n":"대산3산업단지개발","s":"public"},{"n":"대산그린컴플렉스","s":"public"},{"n":"만세보령장학회","s":"public"},{"n":"백제문화재단","s":"public"},{"n":"보령축제관광재단","s":"public"},{"n":"부여군굿뜨래장학회","s":"public"},{"n":"부여군지역공동체활성화재단","s":"public"},{"n":"서산문화재단","s":"public"},{"n":"서산시복지재단","s":"public"},{"n":"서산의료원","s":"public"},{"n":"서산인재육성재단","s":"public"},{"n":"서천군지속가능지역재단","s":"public"},{"n":"서천문화관광재단","s":"public"},{"n":"선장그린컴플렉스","s":"public"},{"n":"아산리더스밸리산업단지개발","s":"public"},{"n":"아산문화재단","s":"public"},{"n":"아산시먹거리재단","s":"public"},{"n":"아산시미래장학회","s":"public"},{"n":"아산시청소년재단","s":"public"},{"n":"아산신창산업단지개발","s":"public"},{"n":"아산하이테크밸리","s":"public"},{"n":"예산군청소년복지재단","s":"public"},{"n":"예산사랑장학회","s":"public"},{"n":"천안과학산업진흥원","s":"public"},{"n":"천안문화재단","s":"public"},{"n":"천안복지재단","s":"public"},{"n":"천안북부일반산업단지","s":"public"},{"n":"천안사랑장학재단","s":"public"},{"n":"천안시민프로축구단","s":"public"},{"n":"천안시청소년재단","s":"public"},{"n":"천안의료원","s":"public"},{"n":"천안제6산단","s":"public"},{"n":"청양군 지역활성화재단","s":"public"},{"n":"청양군청소년재단","s":"public"},{"n":"청양사랑인재육성장학회","s":"public"},{"n":"충남경제진흥원","s":"public"},{"n":"충남문화관광재단","s":"public"},{"n":"충남사회서비스원","s":"public"},{"n":"충남신용보증재단","s":"public"},{"n":"충남역사문화연구원","s":"public"},{"n":"충남연구원","s":"public"},{"n":"충남콘텐츠진흥원","s":"public"},{"n":"충남테크노파크","s":"public"},{"n":"충남평생교육진흥원","s":"public"},{"n":"태안군사랑장학회","s":"public"},{"n":"한국유교문화진흥원","s":"public"},{"n":"헬스케어스파산업진흥원","s":"public"},{"n":"홍성군청소년복지재단","s":"public"},{"n":"홍성사랑장학회","s":"public"},{"n":"홍성의료원","s":"public"},{"n":"홍주문화관광재단","s":"public"}],"전북특별자치도":[{"n":"고창군장학재단","s":"public"},{"n":"고창문화관광재단","s":"public"},{"n":"고창식품산업연구원","s":"public"},{"n":"군산교육발전진흥재단","s":"public"},{"n":"군산먹거리통합지원센터","s":"public"},{"n":"군산문화관광재단","s":"public"},{"n":"군산시민발전","s":"public"},{"n":"군산시상권활성화재단","s":"public"},{"n":"김제사랑장학재단","s":"public"},{"n":"김제지평선먹거리통합지원센터","s":"public"},{"n":"남원시바이오산업연구원","s":"public"},{"n":"농업회사법인 고창황토배기유통","s":"public"},{"n":"농업회사법인순창장류","s":"public"},{"n":"농업회사법인한국절임","s":"public"},{"n":"무주군교육발전장학재단","s":"public"},{"n":"발효미생물산업진흥원","s":"public"},{"n":"부안군근농인재육성재단","s":"public"},{"n":"부안군문화재단","s":"public"},{"n":"순창군옥천장학회","s":"public"},{"n":"순창발효관광재단","s":"public"},{"n":"에코융합섬유연구원","s":"public"},{"n":"완주공공급식지원센터","s":"public"},{"n":"완주군인재육성재단","s":"public"},{"n":"완주농공단지개발","s":"public"},{"n":"완주문화재단","s":"public"},{"n":"완주테크노밸리","s":"public"},{"n":"익산문화관광재단","s":"public"},{"n":"익산사랑장학재단","s":"public"},{"n":"익산엘이디협동화단지개발","s":"public"},{"n":"익산푸드통합지원센터","s":"public"},{"n":"임실고추앤농산물가공판매","s":"public"},{"n":"임실군애향장학회","s":"public"},{"n":"임실치즈앤식품연구소","s":"public"},{"n":"임실치즈테마파크","s":"public"},{"n":"자동차융합기술원","s":"public"},{"n":"장수군애향교육진흥재단","s":"public"},{"n":"전북국제협력진흥원","s":"public"},{"n":"전북바이오융합산업진흥원","s":"public"},{"n":"전북신용보증재단","s":"public"},{"n":"전북여성가족재단","s":"public"},{"n":"전북연구원","s":"public"},{"n":"전북테크노파크","s":"public"},{"n":"전북특별자치도 군산의료원","s":"public"},{"n":"전북특별자치도 남원의료원","s":"public"},{"n":"전북특별자치도 사회서비스원","s":"public"},{"n":"전북특별자치도경제통상진흥원","s":"public"},{"n":"전북특별자치도문화관광재단","s":"public"},{"n":"전북특별자치도콘텐츠융합진흥원","s":"public"},{"n":"전북특별자치도평생교육장학진흥원","s":"public"},{"n":"전주관광재단","s":"public"},{"n":"전주농생명소재연구원","s":"public"},{"n":"전주문화재단","s":"public"},{"n":"전주시복지재단전주사람","s":"public"},{"n":"전주시정연구원","s":"public"},{"n":"전주인재육성재단","s":"public"},{"n":"전주정보문화산업진흥원","s":"public"},{"n":"전주푸드통합지원센터","s":"public"},{"n":"정읍시민장학재단","s":"public"},{"n":"진안군의료원","s":"public"},{"n":"진안사랑장학재단","s":"public"},{"n":"진안홍삼연구소","s":"public"},{"n":"춘향장학재단","s":"public"}],"광주광역시":[{"n":"광산장학회","s":"public"},{"n":"광주광역시 경제진흥상생일자리재단","s":"public"},{"n":"광주광역시 기후에너지진흥원","s":"public"},{"n":"광주광역시 사회서비스원","s":"public"},{"n":"광주광역시 여성가족재단","s":"public"},{"n":"광주광역시광주문화재단","s":"public"},{"n":"광주광역시동구문화관광재단","s":"public"},{"n":"광주광역시인재평생교육진흥원","s":"public"},{"n":"광주남구로컬푸드센터","s":"public"},{"n":"광주디자인진흥원","s":"public"},{"n":"광주미래차모빌리티진흥원","s":"public"},{"n":"광주서구장학재단","s":"public"},{"n":"광주신용보증재단","s":"public"},{"n":"광주연구원","s":"public"},{"n":"광주정보문화산업진흥원","s":"public"},{"n":"광주테크노파크","s":"public"},{"n":"글로벌광주방송재단","s":"public"},{"n":"한국씨이에스","s":"public"}],"충청북도":[{"n":"괴산군문화예술체육진흥재단","s":"public"},{"n":"괴산군민장학회","s":"public"},{"n":"단양장학회","s":"public"},{"n":"법현일반산업단지","s":"public"},{"n":"보은군민장학회","s":"public"},{"n":"생거진천문화재단","s":"public"},{"n":"서오창테크노밸리","s":"public"},{"n":"성본산업단지","s":"public"},{"n":"영동군 문화관광재단","s":"public"},{"n":"영동군민장학회","s":"public"},{"n":"오송바이오진흥재단","s":"public"},{"n":"옥천군장학회","s":"public"},{"n":"음성용산일반산업단지","s":"public"},{"n":"음성장학회","s":"public"},{"n":"제2생극산업단지","s":"public"},{"n":"제천문화재단","s":"public"},{"n":"제천복지재단","s":"public"},{"n":"제천시인재육성재단","s":"public"},{"n":"제천한방천연물산업진흥재단","s":"public"},{"n":"증평군민장학회","s":"public"},{"n":"증평복지재단","s":"public"},{"n":"진천군장학회","s":"public"},{"n":"진천메가폴리스개발","s":"public"},{"n":"진천테크노폴리스개발","s":"public"},{"n":"청주복지재단","s":"public"},{"n":"청주시문화산업진흥재단","s":"public"},{"n":"청주시정연구원","s":"public"},{"n":"청주시활성화재단","s":"public"},{"n":"청주테크노폴리스","s":"public"},{"n":"충북과학기술혁신원","s":"public"},{"n":"충북문화재단","s":"public"},{"n":"충북신용보증재단","s":"public"},{"n":"충북여성재단","s":"public"},{"n":"충북연구원","s":"public"},{"n":"충북인재평생교육진흥원","s":"public"},{"n":"충북테크노파크","s":"public"},{"n":"충북학사","s":"public"},{"n":"충주드림파크개발","s":"public"},{"n":"충주문화관광재단","s":"public"},{"n":"충주비즈코어시티","s":"public"},{"n":"충주시장학회","s":"public"},{"n":"충청북도 청주의료원","s":"public"},{"n":"충청북도 충주의료원","s":"public"},{"n":"충청북도기업진흥원","s":"public"},{"n":"충청북도사회서비스원","s":"public"},{"n":"충청북도역사문화연구원","s":"public"},{"n":"한국석회석신소재연구재단","s":"public"}],"대구광역시":[{"n":"군위문화관광재단","s":"public"},{"n":"달서문화재단","s":"public"},{"n":"달서인재육성장학재단","s":"public"},{"n":"달성교육재단","s":"public"},{"n":"달성문화재단","s":"public"},{"n":"달성복지재단","s":"public"},{"n":"대구광역시 행복진흥사회서비스원","s":"public"},{"n":"대구광역시북구청소년교육진흥재단","s":"public"},{"n":"대구동구교육재단","s":"public"},{"n":"대구디지털혁신진흥원","s":"public"},{"n":"대구문화예술진흥원","s":"public"},{"n":"대구신용보증재단","s":"public"},{"n":"대구의료원","s":"public"},{"n":"대구정책연구원","s":"public"},{"n":"대구중구도심재생문화재단","s":"public"},{"n":"대구테크노파크","s":"public"},{"n":"동구문화재단","s":"public"},{"n":"서구인재육성재단","s":"public"},{"n":"수성문화재단","s":"public"},{"n":"수성미래교육재단","s":"public"},{"n":"엑스코","s":"public"},{"n":"행복북구문화재단","s":"public"}],"부산광역시":[{"n":"금정문화재단","s":"public"},{"n":"남구장학회","s":"public"},{"n":"동래장학회","s":"public"},{"n":"벡스코","s":"public"},{"n":"부산강서구장학회","s":"public"},{"n":"부산경제진흥원","s":"public"},{"n":"부산과학기술고등교육진흥원","s":"public"},{"n":"부산광역시글로벌도시재단","s":"public"},{"n":"부산광역시사회서비스원","s":"public"},{"n":"부산기술창업투자원","s":"public"},{"n":"부산남구문화재단","s":"public"},{"n":"부산디자인진흥원","s":"public"},{"n":"부산문화재단","s":"public"},{"n":"부산문화회관","s":"public"},{"n":"부산북구장학회","s":"public"},{"n":"부산사상구장학회","s":"public"},{"n":"부산서구장학회","s":"public"},{"n":"부산신용보증재단","s":"public"},{"n":"부산여성가족과 평생교육진흥원","s":"public"},{"n":"부산연구원","s":"public"},{"n":"부산의료원","s":"public"},{"n":"부산정보산업진흥원","s":"public"},{"n":"부산진구장학회","s":"public"},{"n":"부산진문화재단","s":"public"},{"n":"부산테크노파크","s":"public"},{"n":"수영구장학재단","s":"public"},{"n":"아시아드CC","s":"public"},{"n":"연제구상권활성화재단","s":"public"},{"n":"영화의전당","s":"public"},{"n":"중구장학회","s":"public"},{"n":"행복영도장학회","s":"public"}],"세종특별자치시":[{"n":"농업회사법인세종로컬푸드","s":"public"},{"n":"세종벤처밸리산업단지","s":"public"},{"n":"세종스마트그린","s":"public"},{"n":"세종시문화관광재단","s":"public"},{"n":"세종신용보증재단","s":"public"},{"n":"세종연구원","s":"public"},{"n":"세종일자리경제진흥원","s":"public"},{"n":"세종테크노파크","s":"public"},{"n":"세종특별자치시 사회서비스원","s":"public"}],"대전광역시":[{"n":"대덕경제재단","s":"public"},{"n":"대덕문화관광재단","s":"public"},{"n":"대전고암미술문화재단","s":"public"},{"n":"대전과학산업진흥원","s":"public"},{"n":"대전광역시 사회서비스원","s":"public"},{"n":"대전디자인진흥원","s":"public"},{"n":"대전문화재단","s":"public"},{"n":"대전신용보증재단","s":"public"},{"n":"대전연구원","s":"public"},{"n":"대전일자리경제진흥원","s":"public"},{"n":"대전청년내일재단","s":"public"},{"n":"대전테크노파크","s":"public"},{"n":"대전투자금융","s":"public"},{"n":"대전평생교육진흥원","s":"public"},{"n":"동구차세대인재육성장학재단","s":"public"},{"n":"서구인재육성장학재단","s":"public"},{"n":"유성구행복누리재단","s":"public"},{"n":"정보문화산업진흥원","s":"public"},{"n":"한국효문화진흥원","s":"public"}],"제주특별자치도":[{"n":"서귀포의료원","s":"public"},{"n":"제주4·3평화재단","s":"public"},{"n":"제주국제컨벤션센터","s":"public"},{"n":"제주문화예술재단","s":"public"},{"n":"제주신용보증재단","s":"public"},{"n":"제주여성가족연구원","s":"public"},{"n":"제주연구원","s":"public"},{"n":"제주의료원","s":"public"},{"n":"제주콘텐츠진흥원","s":"public"},{"n":"제주테크노파크","s":"public"},{"n":"제주특별자치도 사회서비스원","s":"public"},{"n":"제주특별자치도경제통상진흥원","s":"public"},{"n":"제주평생교육장학진흥원","s":"public"},{"n":"제주한의약연구원","s":"public"}]}}}};
+const TREE = DATA.tree, ORDER = DATA.order;
+const PUBLIC_MAJOR = '기관·공공';
+
+/* 기업 형태 — 단계가 아니라 필터다. 중소기업 칩은 만들지 않는다(목록에 0곳이라
+   눌러도 빈 화면이 나오고, 그건 고장으로 읽힌다). */
+const SIZES = [
+  { id: 'large',  label: '대기업' },
+  { id: 'mid',    label: '중견기업' },
+  { id: 'public', label: '공공기관' },
+];
+
+const STEPS_PRIVATE = [
+  { t: '업종 대분류', s: '사람인·잡코리아가 쓰는 10개 분류' },
+  { t: '업종 중분류', s: '게임·반도체·제약처럼 실제로 쓰는 말' },
+  { t: '회사',        s: '체크한 곳이 지원 후보가 됩니다' },
+];
+const STEPS_PUBLIC = [
+  { t: '업종 대분류', s: '사람인·잡코리아가 쓰는 10개 분류' },
+  { t: '기관 유형',   s: '채용 일정과 경쟁률이 여기서 갈립니다' },
+  { t: '소관·지역',   s: '중앙은 소관부처, 지방은 시·도' },
+  { t: '기관',        s: '체크한 곳이 지원 후보가 됩니다' },
+];
+const stepsOf = st => (st.path[0] === PUBLIC_MAJOR ? STEPS_PUBLIC : STEPS_PRIVATE);
+
+/* 분류를 보다 만난 것들. 화면에 그대로 적는다 — 리뷰에서 반드시 나오는 질문이다. */
+const NOTES = {
+  '지주회사':
+    '지주회사는 <b>업종이 아니라 회사의 형태</b>예요. 무엇을 하는 회사인지는 <b>자회사</b>에 있습니다 — 리포트의 ‘밖으로 벌려 둔 사업’ 칸을 보세요.',
+  '자동차·자동차부품':
+    '타이어(한국타이어·금호타이어)를 여기에 넣었어요. 표준산업분류는 <b>고무제품</b>으로 묶지만, 지원하는 사람에게는 자동차 쪽이 맞습니다.',
+  '바이오·진단':
+    '삼성바이오로직스·셀트리온이 <b>제약</b>이 아니라 여기 있습니다. 신고 업종이 ‘기초 의약 물질 및 생물학적 제제’ 라서요.',
+};
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const num = n => n.toLocaleString('ko-KR');
+
+/* ── 트리 걷기 ────────────────────────────────────────────── */
+function at(path) {
+  let node = TREE;
+  for (const k of path) {
+    if (node == null || Array.isArray(node)) return null;
+    node = node[k];
+  }
+  return node ?? null;
+}
+const isLeaf = node => Array.isArray(node);
+
+const keep = (st, list) => (list || []).filter(c => !st.size || c.s === st.size);
+function countAt(st, node) {
+  if (node == null) return 0;
+  if (isLeaf(node)) return keep(st, node).length;
+  return Object.values(node).reduce((n, v) => n + countAt(st, v), 0);
+}
+
+/* 지금 자리에서 고를 수 있는 것들. 곳수 0인 칸은 만들지 않는다 —
+   형태 필터를 걸면 통째로 비는 업종이 생기는데, 눌러 봤자 빈 목록이면 고장으로 읽힌다. */
+function options(st) {
+  const node = at(st.path);
+  if (node == null || isLeaf(node)) return [];
+  /* 1단계만 분류표 순서를 따른다(지원자가 많은 쪽이 앞). 아래는 곳수 순이 낫다 —
+     '기타 제조 2곳' 이 '반도체 49곳' 위에 있을 이유가 없다. */
+  const keys = st.path.length === 0
+    ? ORDER.map(([m]) => m)
+    : Object.keys(node);
+  const out = keys.map(k => ({ id: k, n: countAt(st, node[k]) })).filter(o => o.n > 0);
+  return st.path.length === 0 ? out : out.sort((a, b) => b.n - a.n);
+}
+const companies = st => { const n = at(st.path); return isLeaf(n) ? keep(st, n) : []; };
+const atLeaf = st => isLeaf(at(st.path));
+
+/* ── 상태 ────────────────────────────────────────────────── */
+function newState() { return { size: null, path: [], picked: [], paths: [], skipped: {} }; }
+
+/* ── 선택지가 하나뿐인 단계는 건너뛴다 ────────────────────────
+   '외식·프랜차이즈' 는 1곳이고, 공공 '기타공공기관 > 어느 부처' 도 한 칸뿐인 경우가
+   있다. 누를 것이 하나만 있는 화면은 고르는 것이 아니라 확인 도장을 찍는 일이라,
+   자동으로 정하고 **건너뛰었다는 사실만 진행 표시에 남긴다**. */
+function settle(st) {
+  st.skipped = {};
+  let guard = 0;
+  while (!atLeaf(st) && guard++ < 8) {
+    const o = options(st);
+    if (o.length !== 1) break;
+    st.skipped[st.path.length] = true;
+    st.path.push(o[0].id);
+  }
+}
+
+function pick(st, name, path) {
+  const i = st.picked.findIndex(p => p.name === name);
+  if (i >= 0) st.picked.splice(i, 1);
+  else st.picked.push({ name, path });
+}
+const isPicked = (st, name) => st.picked.some(p => p.name === name);
+const pathOf = st => st.path.slice(1).join(' · ') || st.path[0] || '';
+
+/* ── 공통 조각 ────────────────────────────────────────────── */
+function filterHtml(st) {
+  const total = countAt(st, TREE);
+  return `<div class="m-filter">
+    <b>기업 형태</b>
+    <button type="button" class="m-chip ${!st.size ? 'on' : ''}" data-act="size" data-val="">전체</button>
+    ${SIZES.map(s => `<button type="button" class="m-chip ${st.size === s.id ? 'on' : ''}"
+        data-act="size" data-val="${s.id}">${esc(s.label)}</button>`).join('')}
+    <span class="m-hint">지금 ${num(total)}곳 · 중소기업은 이 목록에 없어요</span>
+  </div>`;
+}
+
+function stepsHtml(st) {
+  const S = stepsOf(st);
+  const val = S.map((_, i) => i < S.length - 1
+    ? st.path[i]
+    : (st.picked.length ? `${st.picked.length}곳 담김` : null));
+  const first = val.findIndex(x => !x);
+  return `<div class="m-steps">${S.map((s, i) => {
+    const v = val[i];
+    const cls = v ? (st.skipped[i] ? 'done skip' : 'done') : (i === first ? 'on' : '');
+    const label = v ? (st.skipped[i] ? `${v} (자동)` : v) : s.t;
+    return `<span class="m-step ${cls}" title="${esc(label)}"><i>${i + 1}</i>${esc(label)}</span>${
+      i < S.length - 1 ? '<span class="m-arw">›</span>' : ''}`;
+  }).join('')}</div>`;
+}
+
+function noteHtml(st) {
+  const hit = st.path.map(k => NOTES[k]).filter(Boolean)[0];
+  return hit ? `<div class="m-note">${hit}</div>` : '';
+}
+
+/* 담은 회사 옆에 붙는 경로. 중분류 이름이 짧아져서(‘게임’, ‘반도체·전자부품’)
+   KSIC 를 쓰던 때처럼 꼬리표가 회사 이름보다 길어지는 일은 없어졌다. */
+function cartHtml(st) {
+  const n = st.picked.length;
+  return `<div class="m-cart">
+    <div class="m-cart-h">
+      <b>지원 후보</b><span>마지막 단계에서 체크한 곳만 담깁니다</span>
+      <button type="button" class="m-cta" ${n ? '' : 'disabled'} data-act="go">
+        ${n ? `${n}곳으로 자소서 코치 열기` : '아직 담긴 곳이 없어요'}
+      </button>
+    </div>
+    ${n ? `<div class="m-cart-l">${st.picked.map(p => `
+      <span class="m-tag" title="${esc(p.path)}">${esc(p.name)}<em>${esc(p.path)}</em>
+        <button type="button" data-act="unpick" data-name="${esc(p.name)}" aria-label="${esc(p.name)} 빼기">×</button>
+      </span>`).join('')}</div>`
+      : `<p class="m-cart-e">마지막 단계까지 내려가면 체크박스가 나옵니다.</p>`}
+  </div>`;
+}
+
+/* ══ A안 · 다단 컬럼 ══════════════════════════════════════ */
+function renderA(st) {
+  const S = stepsOf(st);
+  const col = (i, body) => `
+    <div class="m-col">
+      <div class="m-col-h"><b>${i + 1}. ${esc(S[i].t)}</b><small>${esc(S[i].s)}</small></div>
+      <div class="m-col-b">${body}</div>
+    </div>`;
+  const empty = t => `<div class="m-empty">${t}</div>`;
+  const opt = (o, on, depth) => `
+    <button type="button" class="m-opt ${on ? 'on' : ''}" data-act="go-to" data-val="${esc(o.id)}"
+            data-depth="${depth}" title="${esc(o.id)}">
+      <span class="m-opt-t">${esc(o.id)}</span><span class="m-n">${num(o.n)}</span>
+    </button>`;
+
+  /* 칸마다 그 단계의 목록을 그린다. 이미 지나온 단계는 고른 것이 표시된 상태로 남는다. */
+  const cols = S.map((_, i) => {
+    if (i > st.path.length) return col(i, empty('앞 단계를 먼저 고르세요'));
+    const sub = { ...st, path: st.path.slice(0, i) };
+    if (i === S.length - 1 && st.path.length >= i) {
+      const list = companies({ ...st, path: st.path.slice(0, i + 1) });
+      if (!list.length) return col(i, empty('앞 단계를 먼저 고르세요'));
+      return col(i, list.map(c => `
+        <label class="m-opt">
+          <input type="checkbox" data-act="pick" data-name="${esc(c.n)}" ${isPicked(st, c.n) ? 'checked' : ''}>
+          <span class="m-opt-t">${esc(c.n)}</span>
+        </label>`).join(''));
+    }
+    return col(i, options(sub).map(o => opt(o, st.path[i] === o.id, i)).join('') || empty('항목이 없어요'));
+  }).join('');
+
+  return `<div class="m-head"><h4>어느 회사에 지원할까요?</h4>
+      <span>왼쪽부터 채우세요 · 마지막 칸만 복수 선택</span></div>
+    ${filterHtml(st)}${stepsHtml(st)}
+    <div class="m-cols" style="grid-template-columns:repeat(${S.length},minmax(0,1fr))">${cols}</div>
+    ${noteHtml(st)}${cartHtml(st)}`;
+}
+
+/* ══ B안 · 단계 토글 ══════════════════════════════════════ */
+function renderB(st) {
+  const S = stepsOf(st);
+  const open = Math.min(st.path.length, S.length - 1);
+
+  const chip = (o, on, depth) => `
+    <button type="button" class="m-chip ${on ? 'on' : ''}" data-act="go-to" data-val="${esc(o.id)}"
+            data-depth="${depth}">
+      ${esc(o.id)}<span class="m-n">${num(o.n)}</span>
+    </button>`;
+
+  const acc = S.map((s, i) => {
+    const locked = i > st.path.length;
+    const isOpen = i === open;
+    const isLast = i === S.length - 1;
+    const chosen = isLast ? null : st.path[i];
+    const done = chosen != null || (isLast && st.picked.length);
+    const pickTxt = isLast
+      ? (st.picked.length ? `${st.picked.length}곳 체크` : '')
+      : (chosen ? (st.skipped[i] ? `${chosen} (자동)` : chosen) : '');
+
+    let body = '';
+    if (isOpen) {
+      body = isLast
+        ? `<div class="m-chips">${companies(st).map(c => `
+            <label class="m-chip m-chip--box ${isPicked(st, c.n) ? 'on' : ''}">
+              <input type="checkbox" data-act="pick" data-name="${esc(c.n)}" ${isPicked(st, c.n) ? 'checked' : ''}>
+              ${esc(c.n)}
+            </label>`).join('')}</div>`
+        : `<div class="m-chips">${options({ ...st, path: st.path.slice(0, i) })
+            .map(o => chip(o, st.path[i] === o.id, i)).join('')}</div>`;
+    }
+
+    return `<div class="m-ac ${isOpen ? 'is-open' : ''} ${locked ? 'is-locked' : ''} ${done ? 'is-done' : ''}">
+      <button type="button" class="m-ac-h" data-act="${locked ? '' : 'open'}" data-val="${i}">
+        <span class="m-ac-n">${done && !isOpen ? '✓' : i + 1}</span>
+        <span class="m-ac-t"><b>${esc(s.t)}</b><small>${esc(s.s)}</small></span>
+        <span class="m-ac-pick" title="${esc(pickTxt)}">${esc(pickTxt)}</span>
+      </button>
+      ${body ? `<div class="m-ac-b">${body}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  return `<div class="m-head"><h4>어느 회사에 지원할까요?</h4>
+      <span>한 단계씩 고르면 다음 단이 열립니다 · 마지막 단만 복수 선택</span></div>
+    ${filterHtml(st)}${stepsHtml(st)}
+    <div class="m-acc">${acc}</div>
+    ${noteHtml(st)}${cartHtml(st)}`;
+}
+
+/* ══ C안 · 드릴다운 누적 ══════════════════════════════════ */
+function renderC(st) {
+  const S = stepsOf(st);
+  const depth = st.path.length;
+  const head = S[Math.min(depth, S.length - 1)];
+
+  const crumbBtn = (i, label) => `<button type="button" data-act="up" data-val="${i}"
+      class="${depth === i ? 'now' : ''}" title="${esc(label)}">${esc(label)}</button>`;
+  const crumb = `<div class="m-crumb">${crumbBtn(0, '전체')}${
+    st.path.map((k, i) => `<span class="m-arw">›</span>${crumbBtn(i + 1, k)}`).join('')}</div>`;
+
+  const rows = atLeaf(st)
+    ? companies(st).map(c => `
+        <label class="m-row">
+          <input type="checkbox" data-act="pick" data-name="${esc(c.n)}" ${isPicked(st, c.n) ? 'checked' : ''}>
+          <span class="m-row-t">${esc(c.n)}</span>
+        </label>`).join('')
+    : options(st).map(o => `
+        <button type="button" class="m-row" data-act="go-to" data-val="${esc(o.id)}" data-depth="${depth}">
+          <span class="m-row-t">${esc(o.id)}<small>${num(o.n)}곳</small></span><span class="m-go">›</span>
+        </button>`).join('');
+
+  const here = st.picked.filter(p => p.path === pathOf(st)).length;
+  /* 곳수는 저장할 때의 값을 쓰지 않고 **지금 담긴 것을 센다.** 저장한 뒤에 담은
+     목록에서 회사를 빼면, 굳어 있는 숫자는 "1곳" 이라고 우기는 칩이 된다(실측). */
+  const saved = st.paths.map((p, i) => ({ ...p, i, n: st.picked.filter(x => x.path === p.label).length }))
+    .filter(p => p.n > 0);
+  const pathsHtml = saved.length ? `<div class="m-paths">${saved.map(p => `
+    <span class="m-path" title="${esc(p.label)}"><b>${esc(p.label)}</b> ${p.n}곳
+      <button type="button" data-act="dropPath" data-val="${p.i}" aria-label="빼기">×</button>
+    </span>`).join('')}</div>` : '';
+
+  return `<div class="m-head"><h4>어느 회사에 지원할까요?</h4>
+      <span>한 단계씩 파고듭니다 · 여러 업종에서 담을 수 있어요</span></div>
+    ${filterHtml(st)}${crumb}
+    <div class="m-drill">
+      <div class="m-drill-h"><b>${esc(head.t)}<small>${esc(head.s)}</small></b>
+        ${atLeaf(st) && here ? `<button type="button" class="m-all" data-act="savePath">이 업종 담고 다른 업종 보기</button>` : ''}
+      </div>
+      <div class="m-rows">${rows || '<div class="m-empty">항목이 없어요</div>'}</div>
+    </div>
+    ${pathsHtml}${noteHtml(st)}${cartHtml(st)}`;
+}
+
+/* ── 붙이기 ───────────────────────────────────────────────── */
+function mount(el, render) {
+  const st = newState();
+
+  /* ── 다시 그릴 때 스크롤 위치를 지킨다 ──────────────────────
+     회사를 하나 체크할 때마다 담은 목록이 바뀌어서 통째로 다시 그린다. 목록이 길면
+     그대로 두면 **체크할 때마다 맨 위로 튄다** — 세 번째 회사부터는 아예 못 고른다. */
+  const SCROLLERS = '.m-col-b, .m-ac-b, .m-rows';
+  const paint = () => {
+    const memo = [...el.querySelectorAll(SCROLLERS)].map(n => n.scrollTop);
+    settle(st);
+    el.innerHTML = render(st);
+    el.querySelectorAll(SCROLLERS).forEach((n, i) => { if (memo[i]) n.scrollTop = memo[i]; });
+  };
+
+  el.addEventListener('click', e => {
+    const t = e.target.closest('[data-act]');
+    if (!t) return;
+    const act = t.dataset.act, val = t.dataset.val;
+
+    if (act === 'size') {
+      /* 형태를 바꾸면 고른 업종이 목록에서 사라질 수 있다(공공 ↔ 민간). 그대로 두면
+         "업종은 골랐는데 아무것도 없는" 화면이 되므로, 남을 수 있는 데까지만 되돌린다. */
+      st.size = val || null;
+      while (st.path.length && countAt(st, at(st.path)) === 0) st.path.pop();
+    }
+    else if (act === 'go-to') {
+      /* 어느 단계에서 눌렀는지는 **버튼이 들고 있다**(data-depth). DOM 을 거슬러
+         올라가 컬럼 순서로 알아내던 방식은 안이 셋이라 셋 다 달랐고, 자동으로 건너뛴
+         단계가 끼면 어긋났다. 그리는 쪽이 아는 값을 그대로 적어 두는 편이 맞다.
+         이미 고른 것을 다시 누르면 그 단계를 푼다. */
+      const i = +t.dataset.depth;
+      const was = st.path[i];
+      st.path = st.path.slice(0, i);
+      if (was !== val) st.path.push(val);
+    }
+    else if (act === 'pick') { pick(st, t.dataset.name, pathOf(st)); }
+    else if (act === 'unpick') { pick(st, t.dataset.name); }
+    else if (act === 'open' || act === 'up') { st.path = st.path.slice(0, +val); }
+    else if (act === 'savePath') {
+      const label = pathOf(st);
+      const n = st.picked.filter(p => p.path === label).length;
+      if (n && !st.paths.some(p => p.label === label)) st.paths.push({ label });
+      st.path = st.path.slice(0, 1);
+    }
+    else if (act === 'dropPath') {
+      const p = st.paths.splice(+val, 1)[0];
+      st.picked = st.picked.filter(x => x.path !== p.label);
+    }
+    else if (act === 'go') {
+      alert(`자소서 코치로 넘길 회사 ${st.picked.length}곳\n\n` +
+        st.picked.map(p => `· ${p.name}  (${p.path})`).join('\n') +
+        '\n\n※ 프로토타입이라 실제로 이동하지는 않습니다.');
+      return;
+    }
+    else return;
+    paint();
+  });
+
+  paint();
+}
+
+mount(document.getElementById('mk-a'), renderA);
+mount(document.getElementById('mk-b'), renderB);
+mount(document.getElementById('mk-c'), renderC);
+
+/* 왼쪽 목차 */
+document.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => {
+  document.getElementById('p-' + b.dataset.go)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}));
+</script>
+</body>
+</html>

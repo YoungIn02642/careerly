@@ -282,12 +282,58 @@ async function financialsUncached(corpCode, { year = new Date().getFullYear() } 
 
    합계만 낸다. 성별·고용형태별로 여러 줄이 오는데, 자소서에 쓸 말은 "이 회사는 몇 명
    규모인가" 하나다. 남녀 구분을 화면에 올릴 이유가 없다. */
-async function employees(corpCode, year) {
-  const d = await callDart('empSttus.json', {
+/* ── 관계사 (타법인 출자 현황) ────────────────────────────────
+   "무엇으로 돈을 버는가" 의 나머지 절반이다. 사업부문이 본체의 일이라면, 여기는
+   **이 회사가 돈을 넣어 둔 다른 사업**이다. 투자목적이 '경영 참여' 인 곳은 사실상
+   계열사라 그 회사의 사업이 곧 이 회사의 사업 범위다.
+   실측: 강남제비스코 → 강남화성(주) 82.59% '경영 참여' 등 17건.
+
+   단순 투자(시세차익)는 뺀다 — 취업생에게 "이 회사가 무슨 일을 하나" 를 말해 주지
+   않고, 개수만 늘려 목록을 읽기 어렵게 만든다. */
+async function affiliates(corpCode, year) {
+  const d = await callDart('otrCprInvstmntSttus.json', {
     corp_code: corpCode, bsns_year: String(year), reprt_code: REPORT_ANNUAL,
   });
   const rows = d && Array.isArray(d.list) ? d.list : [];
-  if (!rows.length) return null;
+  if (!rows.length) return [];
+
+  return rows
+    .map(r => ({
+      name: String(r.inv_prm || '').trim(),
+      /* 원문에 줄바꿈이 섞여 온다('경영
+ 참여') — 한 줄로 편다. */
+      purpose: String(r.invstmnt_purps || '').replace(/\s+/g, ' ').trim(),
+      stake: toNumber(r.bsis_blce_qota_rt),
+      since: String(r.frst_acqs_de || '').trim(),
+    }))
+    .filter(a => a.name && /경영\s*참여/.test(a.purpose))
+    .sort((a, b) => (b.stake || 0) - (a.stake || 0))
+    .slice(0, 8);
+}
+
+/* ── 직원현황 응답 → 화면이 쓰는 값 ──────────────────────────
+   순수 함수로 떼어 둔다. 아래 employees() 는 네트워크를 타서 테스트가 못 부르는데,
+   실제로 틀렸던 것은 호출이 아니라 **이 접기 규칙**이었다(합계 줄 이중계산).
+   고정 응답을 넣어 검증할 수 있어야 같은 실수를 다시 잡는다. */
+function foldEmployees(all, year) {
+  if (!Array.isArray(all) || !all.length) return null;
+
+  /* ── 합계 줄을 걷어낸다 ─────────────────────────────────────
+     회사에 따라 부문별 줄 **뒤에 합계 줄을 한 번 더** 붙여서 신고한다. 그대로 더하면
+     인원이 정확히 두 배가 된다. 실측(삼성전자 2025):
+       DX 남 38,119 · DX 여 12,698 · DS 남 56,154 · DS 여 21,910
+       성별합계 남 94,273 · 성별합계 여 34,608   ← 위 넷의 합
+     화면에는 257,762명(실제 128,881명의 두 배)이 떴고, 사업부문에도 '성별합계 50%'
+     라는 없는 부문이 1위로 올라왔다.
+
+     '전사'·'전체' 는 합계가 아니다 — 부문을 나누지 않은 회사가 쓰는 유일한 줄이라
+     빼면 인원이 0이 된다(카카오·NAVER). 부문으로서 쓸모없다는 것은 화면이 따로
+     말한다(company-cover.js NO_SPLIT).
+
+     합계 줄만 온 회사에서는 걷어낼 것이 없으니 원본을 그대로 쓴다. */
+  const TOTAL_ROW = /^(성별\s*)?(합계|총계|소계|계)$/;
+  const detailed = all.filter(r => !TOTAL_ROW.test(String(r.fo_bbm || '').trim()));
+  const rows = detailed.length ? detailed : all;
 
   /* 응답은 사업부문 × 성별로 여러 줄이 온다. 인원은 더하고, 근속연수·급여는
      **인원으로 가중평균** 한다 — 줄마다 단순평균하면 3명짜리 부문과 3만명짜리 부문이
@@ -310,14 +356,46 @@ async function employees(corpCode, year) {
   }
   if (total <= 0) return null;
 
+  /* ── 사업부문(fo_bbm)을 버리지 않는다 ────────────────────────
+     여태 인원 합계만 쓰고 이 값을 흘렸는데, **"이 회사가 무엇을 하는가" 에 대해
+     DART 가 실제로 주는 유일한 정형 값**이다(사업부별 매출은 본문에만 있다 —
+     routes/companyAnalysis.js 의 2026-08 조사 기록). 회사가 인력을 어디에 두고
+     있는지가 곧 주력 사업이다. 실측: 강남제비스코 → '도료' 627명.
+
+     '〃'(같음 표시)로 오는 줄이 있어 앞 줄의 부문을 물려받게 한다 — 그대로 두면
+     화면에 '〃 44명' 이 뜬다. */
+  const segMap = new Map();
+  let lastName = '';
+  for (const r of rows) {
+    const raw = String(r.fo_bbm || '').trim();
+    const name = (!raw || raw === '〃' || raw === '"') ? lastName : raw;
+    if (name) lastName = name;
+    const n = toNumber(r.sm);
+    if (!name || !n) continue;
+    segMap.set(name, (segMap.get(name) || 0) + n);
+  }
+  const segments = [...segMap.entries()]
+    .map(([name, count]) => ({ name, count, pct: Math.round((count / total) * 100) }))
+    .sort((a, b) => b.count - a.count);
+
   return {
     count: total,
     regular: regular || null,
     contract: contract || null,
     tenureYears: tenureN ? Math.round((tenureW / tenureN) * 10) / 10 : null,
     avgPay: payN ? Math.round(payW / payN) : null,
+    /* 부문이 하나뿐이면 '단일 사업' 이라는 뜻이라 그것도 정보다. 그대로 넘긴다.
+       다만 이름이 '전사' 처럼 나누지 않았다는 뜻일 수 있어, 그 판단은 화면이 한다. */
+    segments,
     year,
   };
+}
+
+async function employees(corpCode, year) {
+  const d = await callDart('empSttus.json', {
+    corp_code: corpCode, bsns_year: String(year), reprt_code: REPORT_ANNUAL,
+  });
+  return foldEmployees(d && Array.isArray(d.list) ? d.list : [], year);
 }
 
 /* ── 경쟁사 ──────────────────────────────────────────────────
@@ -425,6 +503,12 @@ async function analyze(name) {
     profile: prof,
     financials: fin,
     employees: emp,
+    /* 관계사 — 사업부문과 함께 '무엇을 하는 회사인가' 를 채운다. 실패해도 리포트는
+       살아야 하므로 빈 배열로 떨어진다(경쟁사와 같은 규약). */
+    affiliates: fin
+      ? await affiliates(corp.code, fin.baseYear)
+          .catch(e => { console.warn('[dart] 관계사 조회 실패:', e.message); return []; })
+      : [],
     /* 우리 회사 매출을 기준으로 비슷한 덩치만 남긴다(competitors 주석 참고). */
     competitors: await competitors(withIndustry, { baseRevenue: revenueOf(fin) })
       .catch(e => { console.warn('[dart] 경쟁사 조회 실패:', e.message); return []; }),
@@ -449,7 +533,8 @@ function status() {
 function reloadCache() { _corps = null; _byName = null; return status(); }
 
 module.exports = {
-  isConfigured, analyze, findCorp, profile, financials, competitors, employees,
+  isConfigured, analyze, findCorp, profile, financials, competitors, employees, affiliates,
+  foldEmployees,              // 직원현황 접기 규칙 — 테스트가 고정 응답으로 검증한다
   status, reloadCache, callDart, toNumber, allCorps, CORPS_PATH, INDUSTRY_PATH,
   SIZE_LOW, SIZE_HIGH,        // 경쟁사 규모 배수 — 테스트가 대칭인지 확인한다
 };
