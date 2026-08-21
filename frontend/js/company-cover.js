@@ -1084,11 +1084,54 @@ window.CompanyCover = (() => {
            ${esc(jobs.reason || '이 회사 이름으로 열린 공고가 없습니다.')}
            대기업 공채는 자사 채용 사이트로만 올라오는 일이 많아, 없는 것이 정상인 경우도 있어요.</div>`;
 
+    /* ── 나가기 전에 담게 한다 ──────────────────────────────
+       아래 링크를 누르면 학생은 우리 화면을 떠난다. 그전에 공고를 담아 두면 4단계가
+       그것을 이어받으므로 **돌아올 이유**가 생긴다. 담긴 게 없을 때만 권하고, 담았으면
+       다음 단계로 가는 길을 준다 — 같은 말을 두 번 하지 않는다. */
+    const takenJobs = evidenceOf(selected.name).filter(e => e.kind === 'job').length;
+    const nudge = takenJobs
+      ? `<div class="co-nudge co-nudge--done">
+           <i class="ti ti-check"></i>
+           <span>공고 <b>${takenJobs}건</b> 담김 — 자소서 코치가 이어받습니다.</span>
+           <button type="button" class="wf-btn wf-btn--sm wf-btn--primary" data-gonext>자소서 코치로 →</button>
+         </div>`
+      : jobs.items?.length
+        ? `<div class="co-nudge">
+             <i class="ti ti-bookmark"></i>
+             <span>나가기 전에 — 지원할 공고를 <b>담아 두면</b> 자소서 코치가 회사·공고 칸을
+               채운 채로 시작합니다.</span>
+           </div>`
+        /* 공고가 0건이어도 4단계는 시작할 수 있다(21-5). 여기서 길을 막으면 학생은
+           "공고를 못 찾았으니 끝" 으로 읽는다. */
+        : `<div class="co-nudge">
+             <i class="ti ti-pencil"></i>
+             <span>공고가 없어도 <b>회사만으로</b> 자소서를 시작할 수 있어요.</span>
+             <button type="button" class="wf-btn wf-btn--sm" data-gonext>자소서 코치로 →</button>
+           </div>`;
+
+    /* ── 링크 순서: 자사 채용페이지가 먼저다 (팀 결정 2026-08-21) ──
+       사람인·잡코리아는 우리와 기능이 겹치는 서비스다. 거기로 보내면 학생이 굳이
+       돌아올 이유가 없다. 자사 채용페이지는 공고만 있고 자소서를 봐주지 않으니
+       돌아올 이유가 남는다 — 게다가 대기업 공채는 실제로 자사 사이트에만 올라오는
+       일이 많아 **학생에게도 그쪽이 더 정확하다.**
+
+       다만 검색 링크를 없애지는 않는다. 표(career-pages.json)는 손으로 채우는 것이라
+       대부분의 회사는 아직 비어 있고, 링크가 통째로 사라지면 학생은 공고를 찾을 길을
+       잃는다. 자사 링크가 있으면 그것을 크게, 검색은 작게 뒤로 물린다. */
+    const own = analysis.careerPage;
     return `
       ${list}
-      <div class="co-kw" style="margin-top:16px">
+      ${nudge}
+      ${own ? `<div class="co-own">
+        <a class="wf-btn wf-btn--primary" href="${esc(own)}" target="_blank" rel="noopener noreferrer">
+          <i class="ti ti-external-link"></i> ${esc(selected.name)} 채용 사이트
+        </a>
+        <small>공채는 여기에만 올라오는 일이 많아요</small>
+      </div>` : ''}
+      <div class="co-kw" style="margin-top:${own ? '10' : '16'}px">
+        ${own ? '<span class="co-more-label">그 외에서 찾기</span>' : ''}
         ${sites.map(([label, url]) =>
-          `<a class="wf-btn wf-btn--sm" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)}에서 더 찾기</a>`).join('')}
+          `<a class="wf-btn wf-btn--sm" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)}${own ? '' : '에서 더 찾기'}</a>`).join('')}
       </div>
       <p class="jd-hint">회사 인재상 문구는 자소서에 쓰지 마세요 —
         어느 회사에나 있는 말이라 읽는 사람에게 아무 정보가 되지 않습니다.</p>`;
@@ -1242,6 +1285,11 @@ window.CompanyCover = (() => {
         source: el.dataset.source || '',
         url: el.dataset.url || '',
       })));
+
+    /* 4단계로 넘어가는 유일한 버튼. 스텝바로도 갈 수 있지만, 공고를 담은 직후가
+       가장 넘어가기 좋은 순간이라 그 자리에 길을 둔다. */
+    box.querySelectorAll('[data-gonext]').forEach(el =>
+      el.addEventListener('click', () => Roadmap.goNext('company')));
 
     box.querySelectorAll('[data-add]').forEach(el =>
       el.addEventListener('click', () => pick({
