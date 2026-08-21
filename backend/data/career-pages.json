@@ -1,0 +1,14 @@
+{
+  "note": "회사 자사 채용페이지 URL. 손으로 채우는 표다 — 추측해서 넣지 않는다(/recruit·/careers 를 찍으면 404 를 뿌린다). 넣기 전에 backend/scripts/check-career-pages.js 로 실제로 열리는지 확인한다.",
+  "checkedAt": "2026-08-21",
+  "pages": {
+    "삼성전자": "https://www.samsungcareers.com",
+    "현대자동차": "https://talent.hyundai.com",
+    "카카오": "https://careers.kakao.com",
+    "케이티": "https://recruit.kt.com",
+    "신세계": "https://job.shinsegae.com",
+    "대한항공": "https://recruit.koreanair.co.kr",
+    "하이브": "https://careers.hybecorp.com",
+    "롯데지주": "https://recruit.lotte.co.kr"
+  }
+}

@@ -25,6 +25,7 @@ const WORKNET = require('../worknet-jobs');
 const ALIO = require('../alio-jobs');
 const SECTORS = require('../company-sectors');
 const JOB = require('../job-industry');
+const CAREER = require('../career-pages');
 const KSIC = require('../ksic');
 
 const router = express.Router();
@@ -282,6 +283,10 @@ router.get('/analysis', async (req, res) => {
     /* 회사별 채용공고(워크넷). 대기업 공채는 자사 사이트로만 올라오는 일이 많아
        0건이 정상인 경우가 있다 — 그래서 사유(reason)도 같이 내려보낸다. */
     jobs,
+
+    /* 자사 채용페이지 링크. 없으면 null 이고 화면은 검색 링크로 물러난다.
+       바로 위 jobs 의 '0건이 정상' 인 경우에 특히 이게 답이다 — 공채가 여기 있다. */
+    careerPage: CAREER.urlOf(name),
 
     interview: GUIDE.interviewQuestions({ company: name, hasNews: Boolean(news?.items?.length) }),
   });
