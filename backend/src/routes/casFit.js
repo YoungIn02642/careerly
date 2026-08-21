@@ -141,6 +141,7 @@ router.post('/fit', ah(async (req, res) => {
 
   let matches = [];
   let aiError = null;
+  let aiStatus = null;
   if (hasSpec) {
     try {
       matches = parseMatches(
@@ -153,10 +154,19 @@ router.post('/fit', ah(async (req, res) => {
         await callModel(buildPrompt({ jobName, traits, spec }), SYSTEM, { num_predict: 4000 }),
         traits);
     } catch (e) {
-      console.error('[cas-fit] AI 매칭 실패:', e.message);
+      console.error('[cas-fit] AI 매칭 실패:', e.status, e.message);
       /* 매칭이 없으면 근거 없는 상태로 채점된다 — 점수는 낮게 나오지만 화면은 산다.
-         무엇이 빠졌는지는 알려 준다(조용히 낮은 점수를 주면 오해한다). */
+         무엇이 빠졌는지는 알려 준다(조용히 낮은 점수를 주면 오해한다).
+
+         ── 원인을 뭉개지 않는다 (실측) ──
+         예전에는 무슨 오류든 "AI 매칭에 실패했어요. 잠시 후 다시 시도해 주세요." 한 줄로
+         나갔다. 그런데 실제로 가장 많이 나는 원인은 **Groq 무료 쿼터 초과(429)** 다
+         (실측: 같은 요청을 연달아 6번 보내면 1번이 429. 업무특성 35항목 프롬프트에
+         max_tokens 4000 이라 분당 토큰 한도를 금방 친다). 이건 '잠시 후' 가 맞지만,
+         키 오타(503)나 폐기된 모델(503)은 몇 번을 다시 눌러도 똑같다.
+         ai-provider 가 이미 원인별로 문장을 갈라 두었으니 그걸 그대로 올린다. */
       aiError = e.message;
+      aiStatus = e.status || null;
     }
   }
 
@@ -171,8 +181,11 @@ router.post('/fit', ah(async (req, res) => {
     hasSpec,
     /* 근거를 못 붙인 이유를 구분해서 준다 — 스펙이 없는 것과 AI 가 죽은 것은 다르다. */
     notice: !hasSpec ? '스펙을 입력하면 내 활동과 업무특성을 맞춰 점수를 냅니다.'
-      : aiError ? 'AI 매칭에 실패해 근거 없이 계산했어요. 잠시 후 다시 시도해 주세요.'
+      : aiError ? `근거를 못 붙여 바닥 점수로 계산했어요 — ${aiError}`
       : undefined,
+    /* 화면이 '다시 시도하면 되는 것' 과 '설정을 고쳐야 하는 것' 을 가를 수 있게
+       상태코드도 같이 준다(429 = 쿼터, 503 = 키·모델 설정, 504 = 시간 초과). */
+    aiStatus,
     provider: matches.length ? PROVIDER : null,
     model: matches.length ? modelLabel() : null,
   });

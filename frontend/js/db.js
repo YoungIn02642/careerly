@@ -194,6 +194,24 @@ window.DB = (() => {
     return api('POST', '/api/cas/analyze', { text });
   }
 
+  /* 적합도 캐시를 언제 버려야 하는지 알려 주는 지문.
+     ── 왜 필요한가 (실측) ──
+     화면(cas-fit.js)은 AI 호출을 아끼려고 결과를 담아 두는데, 예전에는 **직업 코드만**
+     보고 "같은 직업이면 그대로" 로 판단했다. 그래서 스펙을 새로 넣어도 직업이 그대로면
+     다시 부르지 않았고, 스펙이 없던 시절에 계산한 '아직 근거 없음' 이 계속 떴다.
+     저장은 됐는데 화면만 안 바뀌는 것이라, 사용자에게는 채점이 고장난 것으로 보인다.
+
+     지문에 넣는 값은 **casFit 이 서버로 실제로 보내는 필드 그대로**다. 여기에 없는
+     필드를 보내기 시작하면 그 변화는 캐시를 못 깨우므로, 아래 casFit 을 고칠 때
+     이 함수도 같이 고친다. */
+  function specFingerprint() {
+    if (!_mySpec) return '';
+    const a = (_mySpec.activities || [])
+      .map(x => [x.name, x.type, x.typeLabel, x.duration, x.role, x.outcome].join(''));
+    return JSON.stringify([_mySpec.dept, _mySpec.gpa, _mySpec.gpaMax,
+                           _mySpec.scores || null, _mySpec.certs || [], a]);
+  }
+
   /* 직무 적합도 — 이 직업의 업무특성과 내 스펙을 견줘 1000점으로 채점한다.
      내 스펙을 같이 보내야 매칭이 되고, 안 보내면 근거 없는 바닥 점수만 나온다. */
   async function casFit(jobCode, jobName) {
@@ -436,7 +454,7 @@ window.DB = (() => {
     checkUsername, verifyStatus, verifyRequest,
     createUser, login, logout, withdraw, changePassword, completeOnboarding, confirmPayment, updateUser, requestRoleChange, upsertSpec, getProfile, updateProfile,
     classifyCompany, suggestCompanies, suggestCerts, suggestMajors, suggestUniversities, classifyMajor, jobCatalog,
-    analyzeCas, casFit, coachJd, draftJd, motiveJd, guideJd, companyAnalysis, companyBusiness, companySectors,
+    analyzeCas, casFit, specFingerprint, coachJd, draftJd, motiveJd, guideJd, companyAnalysis, companyBusiness, companySectors,
     companyPublicOrgs,
     specupExams, specupActivities,
     insightCategories, insightFeatured, listInsights, getInsight, createInsight, updateInsight, deleteInsight,

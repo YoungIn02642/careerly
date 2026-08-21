@@ -21,7 +21,12 @@
 window.CASFit = (() => {
 
   let _state = null;          // { loading } | 서버 응답 | { error }
-  let _forJob = null;         // 지금 담긴 결과가 어느 직업 것인지
+  /* 지금 담긴 결과가 **어느 직업 · 어느 스펙** 것인지.
+     예전에는 직업 코드만 담았다. 그래서 스펙을 새로 넣어도 직업이 그대로면 캐시가
+     살아 있어, 스펙이 없던 시절의 '아직 근거 없음' 이 계속 보였다(저장은 됐는데
+     화면만 안 바뀐다 — 사용자에게는 채점이 고장난 것으로 보인다).
+     스펙 지문은 db.js 가 만든다 — 서버로 보내는 필드와 같은 곳에 두어야 갈리지 않는다. */
+  let _forKey = null;
   let _openAxis = null;       // 펼친 축
 
   const esc = s => String(s ?? '').replace(/[&<>"']/g,
@@ -57,7 +62,7 @@ window.CASFit = (() => {
       return;
     }
 
-    if (_forJob !== rm.job) request(rm);
+    if (_forKey !== keyOf(rm)) request(rm);
 
     if (!_state || _state.loading) {
       el.innerHTML = card(`<div class="fit-loading">
@@ -95,7 +100,9 @@ window.CASFit = (() => {
             얼마나 뒷받침하는지 계산했어요.
             ${r.matchCount ? `근거가 붙은 항목 <b>${r.matchCount}개</b>.` : ''}
           </div>
-          ${r.notice ? `<div class="fit-notice">${esc(r.notice)}</div>` : ''}
+          ${r.notice ? `<div class="fit-notice">${esc(r.notice)}
+            ${RETRYABLE.has(r.aiStatus) ? '<button type="button" class="fit-btn" data-retry>다시 시도</button>' : ''}
+          </div>` : ''}
         </div>
       </div>`;
   }
@@ -159,7 +166,17 @@ window.CASFit = (() => {
     </p>`;
   }
 
+  /* '다시 누르면 되는' 실패만 버튼을 준다 — 쿼터 초과(429)·시간 초과(504)·일시 오류(502).
+     키 오타나 폐기된 모델(503)은 몇 번을 눌러도 같으므로 버튼을 만들지 않는다. 되지도
+     않는 버튼을 주면 사용자가 원인을 찾는 대신 계속 누른다. */
+  const RETRYABLE = new Set([429, 502, 504]);
+
   function bind(el) {
+    const again = el.querySelector('[data-retry]');
+    /* 캐시 키를 비우고 다시 그린다 — 직업도 스펙도 그대로라 키만으로는 다시 부르지
+       않는다(그게 캐시의 목적이다). 실패한 결과를 들고 갇히지 않게 하는 유일한 통로다. */
+    if (again) again.addEventListener('click', () => { _forKey = null; render(); });
+
     el.querySelectorAll('[data-axis]').forEach(b => b.addEventListener('click', () => {
       const k = b.dataset.axis;
       _openAxis = _openAxis === k ? null : k;
@@ -167,18 +184,21 @@ window.CASFit = (() => {
     }));
   }
 
-  /* 같은 직업이면 다시 부르지 않는다. 매칭은 AI 호출이라 탭을 옮길 때마다 부르면
-     느리고 돈이 든다. */
+  /* 같은 직업 · 같은 스펙이면 다시 부르지 않는다. 매칭은 AI 호출이라 탭을 옮길 때마다
+     부르면 느리고 돈이 든다(무료 쿼터도 여기서 샌다). 둘 중 하나라도 바뀌면 부른다. */
+  const keyOf = rm => `${rm.job}|${DB.specFingerprint ? DB.specFingerprint() : ''}`;
+
   function request(rm) {
-    _forJob = rm.job;
+    _forKey = keyOf(rm);
     _state = { loading: true };
     DB.casFit(rm.job, rm.jobName || '')
       .then(res => { _state = res; render(); })
       .catch(e => { _state = { error: e.message }; render(); });
   }
 
-  /* 직무가 바뀌면 다음 render 에서 다시 부른다. */
-  function reset() { _forJob = null; _state = null; _openAxis = null; }
+  /* 직무가 바뀌면 다음 render 에서 다시 부른다. 스펙 변화는 키가 알아서 잡으므로
+     여기서 따로 부를 필요가 없다. */
+  function reset() { _forKey = null; _state = null; _openAxis = null; }
 
   return { render, reset };
 })();
