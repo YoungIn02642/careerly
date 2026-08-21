@@ -316,10 +316,31 @@ async function fetchPosting(raw, deepTried = false) {
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
     } catch (e) {
-      const timeout = /timeout|aborted/i.test(e.message);
+      /* ── 왜 못 열었는지를 갈라서 말한다 (실측 2026-08-21) ────
+         로컬에서는 잘 되던 잡코리아가 **배포 서버에서만** "공고 페이지를 열지
+         못했습니다" 로 떨어졌다. 그 한 줄로는 사용자가 할 수 있는 게 없다 —
+         우리 잘못인지, 사이트가 막은 것인지, 주소가 틀린 것인지 알 수 없다.
+
+         취업 사이트는 데이터센터 IP 나 해외 접속을 막는 일이 흔하다. 그때는
+         연결 자체가 끊기므로(ECONNRESET·ECONNREFUSED) 브라우저로 여는 것은
+         멀쩡하다 — 그러니 **복사해 붙여넣으라고** 안내하는 편이 맞다.
+         원인 코드도 같이 실어 준다. 안 그러면 다음에 또 추측만 하게 된다. */
+      const code = String(e?.cause?.code || e?.code || '');
+      if (/timeout|aborted/i.test(e.message)) {
+        return { ok: false, kind: 'error', message: '공고 페이지가 제때 응답하지 않았습니다.' };
+      }
+      if (/^(ENOTFOUND|EAI_AGAIN)$/.test(code)) {
+        return { ok: false, kind: 'bad-url', message: '주소를 찾을 수 없습니다. 오타가 없는지 확인해 주세요.' };
+      }
+      if (/^(ECONNRESET|ECONNREFUSED|EPROTO|EHOSTUNREACH|ENETUNREACH|CERT_|ERR_TLS|UND_ERR)/.test(code)) {
+        return {
+          ok: false, kind: 'blocked',
+          message: `이 사이트가 우리 서버에서 오는 접속을 막고 있어요 (${code}).`,
+        };
+      }
       return {
         ok: false, kind: 'error',
-        message: timeout ? '공고 페이지가 제때 응답하지 않았습니다.' : '공고 페이지를 열지 못했습니다.',
+        message: `공고 페이지를 열지 못했습니다${code ? ` (${code})` : ''}.`,
       };
     }
 
