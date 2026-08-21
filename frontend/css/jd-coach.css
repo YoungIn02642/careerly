@@ -706,6 +706,12 @@ a.wf-btn { text-decoration: none; }
 .jd-ai-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
 .jd-ai-state { font-size: 12.8px; line-height: 1.5; color: var(--wf-mute); }
 .jd-ai-state b { font-weight: 500; color: var(--wf-error); }
+/* 결과 옆의 '채우러 가기' — 버튼처럼 보이면 초안 만들기와 헷갈린다. 글자 링크로 둔다. */
+.jd-inline-link {
+  padding: 0; border: 0; background: none;
+  font: inherit; color: var(--wf-ink); text-decoration: underline; cursor: pointer;
+}
+.jd-inline-link:hover { color: var(--wf-body); }
 
 /* ── 왼쪽: 역량 ─────────────────────────────────────────── */
 .jd-comp-pane {

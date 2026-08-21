@@ -1481,21 +1481,18 @@
     const tabs = _lastTabs || [];
     const tab = tabs[_tab];
 
-    /* 위 STAR 칸에 적은 것이 초안의 재료다. 한 칸도 안 적혀 있으면 모델이 아는 것이
-       활동 이름·기간·역할뿐이라 문단이 뻔해진다 — 그럴 땐 만들기 전에 알려준다. */
+    /* 위 STAR 칸에 적은 것이 초안의 **재료**다. 비어 있으면 모델이 아는 것이 활동
+       이름·기간·역할뿐이라 문단이 뻔해진다.
+
+       ── 예전에는 여기서 confirm 으로 막았다 (사용자 지시로 걷어냄) ──
+       "취소하면 STAR 부터 채웁니다" 라고 물었고 확인을 누르면 그대로 만들어졌으니
+       기능상으로는 처음부터 됐다. 그런데 **팝업이 뜨는 것 자체가 막힌 것으로 읽힌다** —
+       STAR 를 다 채우기 전에는 초안을 못 본다고 여기게 된다. 순서가 거꾸로다:
+       초안을 한 번 보고 나서야 무엇을 적어야 할지 알게 되는 사람이 더 많다.
+
+       그래서 **바로 만들고, 재료가 빠졌다는 말은 결과 옆에 남긴다.** 막지 않되
+       모르게 하지도 않는다 — 21-5 에서 '공고 없이도 시작' 을 열어 둔 것과 같은 판단이다. */
     const star = currentStar();
-    if (!star) {
-      const go = confirm(
-        '위 STAR 칸이 비어 있어요.\n\n'
-        + '거기에 적은 내용이 초안의 재료라, 비어 있으면 활동 이름·기간·역할만 가지고 '
-        + '뻔한 문단이 나옵니다.\n\n확인을 누르면 그대로 만들고, 취소하면 STAR 부터 채웁니다.');
-      if (!go) {
-        _starOpen = 'S';
-        repaintStarInput(document.getElementById('jd-result'));
-        document.querySelector('.jd-starin')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        return;
-      }
-    }
 
     btn.disabled = true;
     if (stateEl) stateEl.textContent = '초안을 쓰는 중… (1분 이상 걸릴 수 있어요)';
@@ -1522,9 +1519,20 @@
       ta.dispatchEvent(new Event('input'));
 
       if (stateEl) {
-        stateEl.innerHTML = out.blankCount
+        const blanks = out.blankCount
           ? `<b>빈칸 ${out.blankCount}개</b>를 본인 사실로 채우세요`
           : '넣었어요';
+        /* STAR 없이 만든 문단이 뻔하다는 것을 **결과를 보여준 뒤에** 말한다.
+           만들기 전에 말하면 경고이고, 만든 뒤에 말하면 다음에 할 일이 된다. */
+        stateEl.innerHTML = star ? blanks
+          : `${blanks} · 위 <b>STAR</b> 를 채우면 더 구체적으로 나와요 `
+            + '<button type="button" class="jd-inline-link" data-open-star>채우러 가기</button>';
+        const goStar = stateEl.querySelector('[data-open-star]');
+        if (goStar) goStar.addEventListener('click', () => {
+          _starOpen = 'S';
+          repaintStarInput(document.getElementById('jd-result'));
+          document.querySelector('.jd-starin')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
       }
       paintAiNotes(i, out);
     } catch (e) {
