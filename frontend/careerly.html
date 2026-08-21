@@ -961,6 +961,14 @@
         </div>
         <div class="jd-block-peek" data-peek></div>
         <div class="jd-block-body">
+          <!-- 공고 주소로 본문 가져오기. 요즘 공고는 복사를 막아 둔 곳이 많은데,
+               그 차단은 클라이언트 JS 라 서버가 열면 없는 것과 같다(사용자 지적). -->
+          <div class="jd-url">
+            <input id="jd-url" type="url" class="jd-url-input" inputmode="url"
+              placeholder="공고 주소를 붙여넣으면 본문을 가져옵니다 (복사가 막힌 공고에)" />
+            <button type="button" id="jd-url-go" class="wf-btn wf-btn--sm">가져오기</button>
+          </div>
+          <div id="jd-url-msg" class="jd-url-msg" hidden></div>
           <textarea id="jd-text" class="jd-text" data-grow
             placeholder="공고 본문을 그대로 붙여넣어 주세요. 모집분야·근무조건·전형절차가 섞여 있어도 됩니다."></textarea>
           <div class="jd-block-foot">

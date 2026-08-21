@@ -30,7 +30,15 @@ window.DB = (() => {
     });
     let data = null;
     try { data = await res.json(); } catch { /* 본문 없음 */ }
-    if (!res.ok) throw new Error(data?.error || `요청에 실패했습니다. (${res.status})`);
+    if (!res.ok) {
+      const e = new Error(data?.error || `요청에 실패했습니다. (${res.status})`);
+      /* 상태코드와 서버가 갈라 준 사유를 살려 둔다. 메시지만 남기면 화면이
+         "다시 시도하면 되는 것"과 "설정을 고쳐야 하는 것"을 구분할 수 없다
+         (cas-fit 의 aiStatus 와 같은 이유). */
+      e.status = res.status;
+      if (data?.kind) e.kind = data.kind;
+      throw e;
+    }
     return data;
   }
 
@@ -262,6 +270,14 @@ window.DB = (() => {
     });
   }
 
+  /* 채용공고 주소 → 본문. 복사를 막아 둔 공고 때문에 있다 — 그 차단은 브라우저에서만
+     걸리므로 서버가 열면 원문이 그대로 온다.
+     실패는 422 로 오고 kind 로 사유가 갈린다(blocked·image·empty·gone·bad-url).
+     화면이 사유마다 다른 안내를 붙여야 하니 kind 를 에러에 실어 던진다. */
+  async function jdPosting(url) {
+    return api('POST', '/api/jd/posting', { url });
+  }
+
   /* 취업 업종 트리 — 회사 찾기 첫 화면이 쓰는 목록.
      계열(company-sectors.js sectors())과 축이 다르다: 저건 KSIC 를 묶은 '계열' 이고
      여기는 사람인·잡코리아가 쓰는 말(게임·화장품·2차전지…)이다. 공공기관도 한 덩이로
@@ -448,7 +464,7 @@ window.DB = (() => {
     checkUsername, verifyStatus, verifyRequest,
     createUser, login, logout, withdraw, changePassword, completeOnboarding, confirmPayment, updateUser, requestRoleChange, upsertSpec, getProfile, updateProfile,
     classifyCompany, suggestCompanies, suggestCerts, suggestMajors, suggestUniversities, classifyMajor, jobCatalog,
-    analyzeCas, casFit, specFingerprint, coachJd, draftJd, motiveJd, guideJd, companyAnalysis, companyBusiness, companyIndustryTree,
+    analyzeCas, casFit, specFingerprint, coachJd, draftJd, motiveJd, guideJd, companyAnalysis, companyBusiness, companyIndustryTree, jdPosting,
     specupExams, specupActivities,
     insightCategories, insightFeatured, listInsights, getInsight, createInsight, updateInsight, deleteInsight,
     addInsightComment, deleteInsightComment,
