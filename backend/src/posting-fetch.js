@@ -156,6 +156,73 @@ function trimLead(text) {
   return text.slice(lineStart).trim();
 }
 
+/* ── 공고가 아닌 것을 걷어낸다 (사용자 지적 2026-08-21) ────────
+   가져오기가 되고 나서 본 진짜 문제. 사람인 공고 한 장에서 4,800자가 나오는데
+   **뒤쪽 절반이 공고가 아니다.** 그중에는 그냥 지저분한 정도가 아니라 **위험한 것**이
+   있다:
+
+     경쟁자들의 역량 키워드 — 유연한 사고 · 웹디자인 · 피그마
+     경쟁자들의 Skill      — 프로토 타이핑 · 그래픽/UI디자인 툴
+
+   이건 **다른 지원자들의 스펙**이지 이 공고(PM)가 요구하는 역량이 아니다. 그대로
+   분석에 넘기면 PM 공고에서 '피그마' 가 요구 역량으로 잡힌다. 기업리뷰의
+   "전화선이 꼬인 사람은 즉시 해고" 같은 문장이 근거 문장으로 붙을 수도 있다.
+   18-7 에서 겪은 실패 모드가 더 나쁜 얼굴로 돌아온 것이다.
+
+   ── 어떻게 자르나 ──
+   사이트별 선택자를 짜지 않는다(25-2). 취업 사이트가 공통으로 쓰는 **말**로 자른다.
+     · 꼬리: '지원자 통계'·'기업리뷰'·'관련 태그' 처럼 **공고가 끝난 뒤**에 오는 칸
+     · 덩어리: 'AI 서류 합격률' 처럼 중간에 끼어드는 광고·로그인 유도
+     · 줄: '공유하기'·'지도보기'·'닫기' 처럼 버튼 글자만 남은 줄
+
+   ── 본문을 자르지 않도록 못 박은 것 ──
+   꼬리 표시가 **본문보다 앞에** 나오는 일이 있다(이 페이지도 'AI 서류 합격률' 이
+   상세요강보다 위에 있다). 그래서 꼬리는 **마지막 공고 낱말 뒤에 나오는 것만** 자른다.
+   덩어리 제거도 최대 줄 수를 정해 둔다 — 표시를 잘못 잡아도 본문을 통째로 먹지 않는다. */
+const TAIL_MARKERS = /^(지원자 통계|경쟁력 분석|경쟁자들의|기업리뷰|면접후기|관련 태그|이어보는|이 기업의 다른 공고|구직자 개인정보 보호|로그인 이 필요한|마지막으로 필요한|이력서에 활용하기)/;
+const NOISE_BLOCK = /^(AI 서류 합격률|AI 이력서 코칭|구직자 개인정보 보호|코칭 받을 이력서|최저임금계산에 대한 알림)/;
+/* 덩어리를 끊는 줄 — 여기부터는 다시 본문이다. */
+const BLOCK_END = /^(상세요강|모집요강|복리후생|근무조건|근무지위치|접수기간|담당업무|주요업무|자격요건|우대사항|채용절차|기업정보|급여|근무지역)/;
+const BLOCK_MAX_LINES = 40;
+/* 버튼·아이콘 글자만 남은 줄. **정확히 그 낱말일 때만** 지운다 — 부분일치로 지우면
+   "지도 보기 편한 자료를 만들었습니다" 같은 본문이 날아간다. */
+const NOISE_LINE = /^(닫기|TOP|공유하기|페이스북|트위터|URL복사|SMS발송|신고하기|인쇄하기|지도|지도보기|지도 보기|스카이뷰|지도초기화|크게보기|길찾기|이전공고|다음공고|도움말|내용 전체보기|기업정보 전체보기|태그 더보기|나 님|경쟁자|더보기|목록)$/;
+const NOISE_PREFIX = /^(조회수 |닫기 - |로그인하고 |로그인 하시고 |어떻게 .*분석됐나요|이 공고의 경쟁자|비교할 경쟁자|스토어 바로가기|막막한 취업준비)/;
+const NOISE_SUFFIX = /상세보기$/;
+
+function denoise(text) {
+  let lines = String(text || '').split('\n');
+
+  /* ① 꼬리 — 마지막 공고 낱말 뒤에 나오는 표시부터 통째로 버린다. */
+  let lastWord = -1;
+  lines.forEach((l, i) => { if (postingHits(l)) lastWord = i; });
+  /* 공고 낱말이 하나도 없으면 본문이 어디까지인지 알 수 없다. 그때는 자르지 않는다 —
+     잘못 자르면 남는 게 없고, 어차피 weak 로 "공고 같지 않다" 고 알려 준다. */
+  if (lastWord >= 0) {
+    const tail = lines.findIndex((l, i) => i > lastWord && TAIL_MARKERS.test(l));
+    if (tail > 0) lines = lines.slice(0, tail);
+  }
+
+  /* ② 중간에 끼어드는 덩어리 — 다시 본문이 시작될 때까지, 최대 BLOCK_MAX_LINES 줄. */
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (NOISE_BLOCK.test(lines[i])) {
+      let j = i + 1;
+      while (j < lines.length && j - i < BLOCK_MAX_LINES && !BLOCK_END.test(lines[j])) j++;
+      i = j - 1;
+      continue;
+    }
+    out.push(lines[i]);
+  }
+
+  /* ③ 버튼 글자만 남은 줄. */
+  return out
+    .filter(l => !(NOISE_LINE.test(l) || NOISE_PREFIX.test(l) || NOISE_SUFFIX.test(l)))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 /* ── 진짜 공고 주소를 한 번 따라간다 (실측 2026-08-21) ──────────
    사용자가 준 사람인 주소(`jobs/relay/view?...`)는 열리기는 하는데 내용이 메뉴뿐이다
    — 본문이 iframe 안에 있다. 그런데 그 페이지가 스스로 진짜 주소를 알려 준다:
@@ -245,7 +312,7 @@ async function fetchPosting(raw, canonTried = false) {
     }
 
     const html = (await res.text()).slice(0, MAX_BYTES);
-    const text = trimLead(extractText(html));
+    const text = denoise(trimLead(extractText(html)));
     const weak = postingHits(text) < 2;
 
     /* 얇거나 공고 같지 않으면 canonical 을 한 번 따라가 본다. 따라간 쪽이 더 나을
@@ -272,6 +339,6 @@ async function fetchPosting(raw, canonTried = false) {
 }
 
 module.exports = {
-  fetchPosting, extractText, titleOf, urlProblem, normalizeUrl, canonicalOf,
+  fetchPosting, extractText, titleOf, urlProblem, normalizeUrl, canonicalOf, denoise,
   postingHits, trimLead, _MIN_CHARS: MIN_CHARS,
 };
