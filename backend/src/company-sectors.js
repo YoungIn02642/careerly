@@ -22,6 +22,7 @@ const fs = require('fs');
 const path = require('path');
 const DART = require('./dart');
 const CLASSIFY = require('./company-classify');
+const JOB = require('./job-industry');
 
 const DATA = path.join(__dirname, '..', 'data');
 
@@ -380,7 +381,10 @@ function build() {
        것이라, 직업 단위 보정처럼 **정확히 그 업종만** 보여줘야 할 때 되짚을 것이
        없으면 안 된다 — 실측: '교장' 이 교육(85)으로 좁혀졌는데도 계열 버킷을 통째로
        보여주는 바람에 강원랜드(카지노 91)가 같이 떴다. */
-    buckets.get(sector).push({ name: c.name, stock: c.stock || null, ksic, size: sizeOf(c.name) });
+    /* code(원본 5자리)를 같이 남긴다. 취업 업종 분류(job-industry.js)가 5자리 규칙을
+       쓴다 — 204(기타 화학제품) 안에서 2042(세제·화장품)만 '화장품' 으로 빠지는 식이라,
+       2자리로 줄여 둔 ksic 만으로는 못 가른다. */
+    buckets.get(sector).push({ name: c.name, stock: c.stock || null, ksic, code: String(c.industry), size: sizeOf(c.name) });
   }
 
   /* 가나다순으로 둔다. 매출 순이 더 좋겠지만 785곳의 재무를 받아오려면 DART 를
@@ -487,8 +491,104 @@ function sectorOfCode(industryCode) {
   return SECTOR_OF.get(div) || null;
 }
 
+/* ══ 취업 업종 트리 ═══════════════════════════════════════════
+   회사 찾기 화면이 실제로 쓰는 목록. 위 계열(SECTORS)은 KSIC 중분류를 묶은 것이라
+   '반도체·디스플레이' 처럼 통계 분류 냄새가 남는데, 학생이 찾는 말은 '게임'·'화장품'
+   ·'2차전지' 다. job-industry.js 가 업종코드를 열쇠로 그 말로 다시 묶는다.
+
+   ── 깊이가 갈래마다 다르다 ──
+   민간은 대분류 → 중분류 → 회사. 공공은 대분류 → 기관 유형 → 소관·지역 → 기관이다.
+   공공기관 1,667곳을 유형 5개로만 나누면 지방출자출연기관 한 칸에 890곳이 들어간다.
+   화면은 단계를 세지 않고 **배열을 만나면 회사** 로 읽는다. */
+let _tree = null;
+
+function industryTree() {
+  if (_tree) return _tree;
+
+  const base = sectors();
+  if (!base.sectors.length) return { order: [], tree: {}, total: 0, sizes: {}, reason: base.reason };
+
+  const tree = {};
+  /* 중분류마다 그 안에 있는 KSIC 2자리를 모아 둔다. 로드맵이 넘겨준 직무를
+     "이 직무를 주로 뽑는 업종" 으로 옮길 때 쓴다(industryFocus). */
+  const codesOf = {};
+  const all = [];
+
+  for (const s of base.sectors) {
+    for (const c of s.companies) {
+      if (!c.size || c.size === 'public') continue;
+      const hit = JOB.classify(c.name, c.code);
+      /* 분류표가 못 받는 회사는 조용히 버리지 않는다 — 목록에서 사라진 회사는
+         아무도 못 찾고, 왜 없는지도 알 수 없다. 실측 778곳 전부 분류된다. */
+      if (!hit) throw new Error(`취업 업종 분류 실패: ${c.name} (업종코드 ${c.code})`);
+      ((tree[hit.major] ||= {})[hit.minor] ||= []).push({ n: c.name, s: c.size });
+      /* 이름으로 옮긴 회사는 업종 추천의 근거에서 뺀다 — 그 회사의 업종코드는
+         지금 사업과 어긋나서 옮긴 것이라, 대표로 세우면 엉뚱한 추천이 붙는다. */
+      if (hit.by !== 'name') (codesOf[hit.minor] ||= new Set()).add(c.ksic);
+      all.push(c);
+    }
+  }
+
+  for (const lane of publicOrgs().lanes) {
+    const hit = JOB.classifyPublic(lane.name);
+    if (!hit) continue;
+    const B = (tree[hit.major] ||= {})[hit.minor] ||= {};
+    for (const o of lane.companies) {
+      /* note 는 중앙이 "공기업(시장형) · 산업통상부", 지방이 "경기도 · 상수도" 꼴이다.
+         중앙은 소관부처가, 지방은 시·도가 지원자가 실제로 쓰는 축이다. */
+      const part = String(o.note || '').split('·').map(x => x.trim());
+      const key = (lane.name.startsWith('지방') ? part[0] : part[1]) || '기타';
+      (B[key] ||= []).push({ n: o.name, s: 'public' });
+      all.push(o);
+    }
+  }
+
+  (function sortLeaves(node) {
+    for (const k of Object.keys(node)) {
+      if (Array.isArray(node[k])) node[k].sort((a, b) => a.n.localeCompare(b.n, 'ko'));
+      else sortLeaves(node[k]);
+    }
+  })(tree);
+
+  /* 화면 순서는 분류표 순서다(지원자가 많은 쪽이 앞). 0곳인 칸은 애초에 안 생긴다. */
+  const order = JOB.TAXONOMY
+    .map(([major, minors]) => [major, minors.filter(m => tree[major] && tree[major][m])])
+    .filter(([, minors]) => minors.length);
+
+  _tree = {
+    order, tree,
+    total: all.length,
+    sizes: countSizes(all),
+    codesOf: Object.fromEntries(Object.entries(codesOf).map(([k, v]) => [k, [...v]])),
+    reason: null,
+  };
+  return _tree;
+}
+
+/* 계열 이름 → 그 계열이 담고 있는 KSIC 2자리들. sectorFocus 가 by:'middle' 일 때
+   계열 이름만 주기 때문에, 업종으로 옮기려면 코드로 한 번 되돌려야 한다. */
+const CODES_OF_SECTOR = new Map(SECTORS.map(([name, codes]) => [name, codes]));
+
+/* 직무 → 그 직무를 주로 뽑는 **취업 업종 중분류**.
+   sectorFocus 가 계열/KSIC 대분류로 답하던 것을 화면이 쓰는 말로 옮긴다.
+   회사 데이터로 직접 센다 — 표를 하나 더 손으로 만들면 계열 표와 어긋난다. */
+function industryFocus(middleCode, jobCode) {
+  const f = sectorFocus(middleCode, jobCode);
+  if (!f.matched || f.universal) return { ...f, minors: [] };
+
+  const codes = new Set(f.by === 'job'
+    ? (f.sections || []).flatMap(x => x.codes || [])
+    : (f.sectors || []).flatMap(n => CODES_OF_SECTOR.get(n) || []));
+  if (!codes.size) return { ...f, minors: [] };
+
+  const { codesOf } = industryTree();
+  const minors = Object.keys(codesOf).filter(m => codesOf[m].some(c => codes.has(c)));
+  return { ...f, minors };
+}
+
 module.exports = {
   sectors, publicOrgs, sectorOfCode, sectorFocus, sectorsOfSections,
+  industryTree, industryFocus,
   SECTORS, SECTORS_BY_MIDDLE, UNIVERSAL_MIDDLES,
   KSIC_SECTIONS, SECTIONS_BY_JOB,
   _build: build, _buildPublic: buildPublic,

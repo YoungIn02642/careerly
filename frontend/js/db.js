@@ -272,6 +272,17 @@ window.DB = (() => {
     return api('GET', '/api/company/sectors' + qs);
   }
 
+  /* 취업 업종 트리 — 회사 찾기 첫 화면이 쓰는 목록.
+     계열 목록(companySectors)과 축이 다르다: 저기는 KSIC 를 묶은 '계열' 이고 여기는
+     사람인·잡코리아가 쓰는 말(게임·화장품·2차전지…)이다. 민간·공공이 한 덩이로 온다.
+     middle(KECO 2차 분류 코드)을 주면 "이 직무를 주로 뽑는 업종"이 focus.minors 로 온다. */
+  async function companyIndustryTree(middle, job) {
+    if (!middle) return api('GET', '/api/company/industry-tree');
+    const qs = `?middle=${encodeURIComponent(middle)}`
+      + (job ? `&job=${encodeURIComponent(job)}` : '');
+    return api('GET', '/api/company/industry-tree' + qs);
+  }
+
   /* 공공기관 목록 — 1단계에서 '공공기관' 을 고른 학생이 쓴다.
      계열(업종)과 축이 달라 따로 온다. 공공기관은 대부분 비상장이라 업종코드가 없고,
      계열 목록에는 4곳밖에 못 들어간다(company-sectors.js publicOrgs 주석).
@@ -454,7 +465,7 @@ window.DB = (() => {
     checkUsername, verifyStatus, verifyRequest,
     createUser, login, logout, withdraw, changePassword, completeOnboarding, confirmPayment, updateUser, requestRoleChange, upsertSpec, getProfile, updateProfile,
     classifyCompany, suggestCompanies, suggestCerts, suggestMajors, suggestUniversities, classifyMajor, jobCatalog,
-    analyzeCas, casFit, specFingerprint, coachJd, draftJd, motiveJd, guideJd, companyAnalysis, companyBusiness, companySectors,
+    analyzeCas, casFit, specFingerprint, coachJd, draftJd, motiveJd, guideJd, companyAnalysis, companyBusiness, companySectors, companyIndustryTree,
     companyPublicOrgs,
     specupExams, specupActivities,
     insightCategories, insightFeatured, listInsights, getInsight, createInsight, updateInsight, deleteInsight,

@@ -857,6 +857,28 @@ app.get('/api/company/sectors', (req, res) => {
   res.json(middle ? { ...base, focus: sectors.sectorFocus(middle, job) } : base);
 });
 
+/* ── 취업 업종 트리 — 회사 찾기 첫 화면이 실제로 쓰는 목록 ──────
+   계열 목록(/api/company/sectors)과 무엇이 다른가: 저기는 KSIC 중분류를 묶은
+   '계열' 이고 여기는 **사람인·잡코리아가 쓰는 말**이다(게임·화장품·2차전지…).
+   업종코드는 그대로 열쇠로 쓰되 화면에 나가는 이름만 바꾼 것이라, 근거는 그대로
+   회사가 신고한 값이다(company-sectors.js industryTree · job-industry.js).
+
+   민간·공공을 **한 번에** 준다. 계열 목록은 공공기관을 따로 뒀는데(업종코드가 없어
+   계열에 4곳밖에 못 들어간다), 여기서는 '기관·공공' 이 대분류 하나로 들어가고 그
+   아래를 기관 유형·소관부처로 나눠서 축이 어긋나지 않는다. 2,442곳 · 100KB 남짓이라
+   한 번 받아 두면 단계를 오갈 때 서버를 다시 부를 일이 없다.
+
+   ?middle=<KECO 2차 코드>[&job=<직업코드>] 를 주면 focus.minors 가 붙는다 —
+   "이 직무를 주로 뽑는 업종" 에 추천 표시를 다는 데 쓴다. 목록을 잘라 보내지는
+   않는다(좁힌 업종 밖에도 지원할 회사가 있다 — /api/company/sectors 와 같은 판단). */
+app.get('/api/company/industry-tree', (req, res) => {
+  res.set('Cache-Control', 'no-cache');   // 내용이 하루에 바뀌지 않는다 — ETag 재검증에 맡긴다
+  const middle = String(req.query.middle || '').trim();
+  const job = String(req.query.job || '').trim();
+  const base = sectors.industryTree();
+  res.json(middle ? { ...base, focus: sectors.industryFocus(middle, job) } : base);
+});
+
 /* 공공기관 목록 — 1단계에서 '공공기관' 을 고른 학생이 쓴다.
 
    ── 왜 계열 목록과 같은 라우트에 얹지 않는가 ──
