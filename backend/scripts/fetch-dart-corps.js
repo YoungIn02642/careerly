@@ -131,13 +131,32 @@ async function main() {
     process.exit(1);
   }
 
-  console.log('DART 고유번호 목록을 받는 중…');
-  const res = await fetch(`https://opendart.fss.or.kr/api/corpCode.xml?crtfc_key=${encodeURIComponent(API_KEY)}`, {
-    signal: AbortSignal.timeout(60000),
-  });
-  if (!res.ok) throw new Error(`요청 실패 ${res.status}`);
+  /* ── 한 번 실패했다고 포기하지 않는다 (실측 2026-08-21) ──
+     배포 빌드가 `The operation was aborted due to timeout` 으로 60초에 끊겨 색인 없이
+     배포됐다. 같은 날 로컬에서 받으면 2.6~4.3초다 — 느린 것은 이 요청이 아니라 그때의
+     경로다. 한 번 더 물어보면 될 일로 배포 한 판을 날린 셈이라 재시도를 넣는다.
+     시간·횟수는 env 로 뺀다 — 빌더가 느린 날 코드를 고쳐 배포할 수는 없다. */
+  const TIMEOUT_MS = Number(process.env.DART_FETCH_TIMEOUT_MS || 120000);
+  const ATTEMPTS = Math.max(1, Number(process.env.DART_FETCH_ATTEMPTS || 3));
+  const URL = `https://opendart.fss.or.kr/api/corpCode.xml?crtfc_key=${encodeURIComponent(API_KEY)}`;
 
-  const buf = Buffer.from(await res.arrayBuffer());
+  let buf = null, lastErr = null;
+  for (let i = 1; i <= ATTEMPTS; i++) {
+    try {
+      console.log(`DART 고유번호 목록을 받는 중… (${i}/${ATTEMPTS}, 제한 ${TIMEOUT_MS / 1000}초)`);
+      const res = await fetch(URL, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+      if (!res.ok) throw new Error(`요청 실패 ${res.status}`);
+      buf = Buffer.from(await res.arrayBuffer());
+      break;
+    } catch (e) {
+      /* 여기서 걸리는 것은 네트워크·시간 초과라 다시 물어볼 값이 있다. 키가 틀린
+         경우는 200 에 XML 본문이 와서 아래 PK 검사가 잡는다 — 그건 재시도해도 같다. */
+      lastErr = e;
+      console.warn(`  실패(${i}/${ATTEMPTS}): ${e.message}`);
+      if (i < ATTEMPTS) await new Promise(r => setTimeout(r, i * 5000));
+    }
+  }
+  if (!buf) throw lastErr;
   /* 키가 틀리면 ZIP 이 아니라 XML 에러 본문이 온다 — 그때는 사유를 그대로 보여준다. */
   if (buf.subarray(0, 2).toString() !== 'PK') {
     const text = buf.toString('utf8').slice(0, 300);
