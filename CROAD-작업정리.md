@@ -2606,11 +2606,25 @@ Docker 엔진이 꺼져 있어 컨테이너가 `Exited 255` 였다. **`docker st
 
 ### 24-10. 남은 것
 
-- **죽은 라우트** — `/api/company/sectors` · `/api/company/public-orgs` 와 `db.js` 의
-  래퍼를 이제 어느 화면도 안 쓴다(뒤의 모듈 함수 `sectors()` · `publicOrgs()` 는 새 트리가
-  계속 쓴다). 지울지 남길지 미정.
+- ~~죽은 라우트~~ — **지웠다**(아래).
 - **후보 담기** — 마지막 단 복수 선택. `roadmap.js` 가 목록을 들어야 한다.
 - `nodemon` 포트 충돌 → 24-11 에서 처리했다.
+
+### 24-12. 죽은 라우트를 지웠다 (같은 날)
+
+새 트리가 대신하면서 `/api/company/sectors` · `/api/company/public-orgs` 를 아무도 안
+부르게 됐다. 저장소 전체를 뒤져 호출부가 없는 것을 확인하고(프론트·백엔드·테스트)
+라우트와 `db.js` 의 래퍼(`companySectors` · `companyPublicOrgs`)를 지웠다.
+
+**`company-sectors.js` 의 모듈 함수 `sectors()` · `publicOrgs()` 는 그대로 둔다** —
+`industryTree()` 가 그 둘을 재료로 트리를 만든다. 지운 것은 **바깥으로 난 문**이지
+계산이 아니다.
+
+지운 라우트를 가리키던 주석 세 곳도 같이 고쳤다(트리 라우트 주석이 "계열 목록
+(/api/company/sectors)과 무엇이 다른가" 로 없는 것을 가리키고 있었다). 죽은 코드보다
+**없는 것을 가리키는 주석**이 더 오래 헷갈리게 한다.
+
+확인: 서버 기동 · `industry-tree` 200(108KB) · 지운 두 라우트 **404** · 테스트 874개 통과.
 
 ### 24-11. `npm run dev` 가 저 혼자 죽던 것 (같은 날)
 

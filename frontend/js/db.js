@@ -262,33 +262,16 @@ window.DB = (() => {
     });
   }
 
-  /* 계열별 기업 목록 — 회사 찾기 첫 화면. 서버가 캐시 파일만 읽어 빠르다.
-     middle(KECO 2차 분류 코드)을 주면 "이 직무를 주로 뽑는 계열"이 focus 로 함께 온다.
-     목록 자체는 그대로다 — 좁힌 계열 밖에도 지원할 회사가 있다. */
-  async function companySectors(middle, job) {
-    if (!middle) return api('GET', '/api/company/sectors');
-    const qs = `?middle=${encodeURIComponent(middle)}`
-      + (job ? `&job=${encodeURIComponent(job)}` : '');
-    return api('GET', '/api/company/sectors' + qs);
-  }
-
   /* 취업 업종 트리 — 회사 찾기 첫 화면이 쓰는 목록.
-     계열 목록(companySectors)과 축이 다르다: 저기는 KSIC 를 묶은 '계열' 이고 여기는
-     사람인·잡코리아가 쓰는 말(게임·화장품·2차전지…)이다. 민간·공공이 한 덩이로 온다.
+     계열(company-sectors.js sectors())과 축이 다르다: 저건 KSIC 를 묶은 '계열' 이고
+     여기는 사람인·잡코리아가 쓰는 말(게임·화장품·2차전지…)이다. 공공기관도 한 덩이로
+     온다 — 예전에는 규모 필터를 공공으로 돌릴 때만 따로 받아왔다.
      middle(KECO 2차 분류 코드)을 주면 "이 직무를 주로 뽑는 업종"이 focus.minors 로 온다. */
   async function companyIndustryTree(middle, job) {
     if (!middle) return api('GET', '/api/company/industry-tree');
     const qs = `?middle=${encodeURIComponent(middle)}`
       + (job ? `&job=${encodeURIComponent(job)}` : '');
     return api('GET', '/api/company/industry-tree' + qs);
-  }
-
-  /* 공공기관 목록 — 1단계에서 '공공기관' 을 고른 학생이 쓴다.
-     계열(업종)과 축이 달라 따로 온다. 공공기관은 대부분 비상장이라 업종코드가 없고,
-     계열 목록에는 4곳밖에 못 들어간다(company-sectors.js publicOrgs 주석).
-     1,667곳이라 규모 필터를 공공기관으로 돌릴 때만 받아온다. */
-  async function companyPublicOrgs() {
-    return api('GET', '/api/company/public-orgs');
   }
 
   /* 기업분석 5단계 — 개요·재무·경쟁사(DART) + 최근이슈(뉴스).
@@ -465,8 +448,7 @@ window.DB = (() => {
     checkUsername, verifyStatus, verifyRequest,
     createUser, login, logout, withdraw, changePassword, completeOnboarding, confirmPayment, updateUser, requestRoleChange, upsertSpec, getProfile, updateProfile,
     classifyCompany, suggestCompanies, suggestCerts, suggestMajors, suggestUniversities, classifyMajor, jobCatalog,
-    analyzeCas, casFit, specFingerprint, coachJd, draftJd, motiveJd, guideJd, companyAnalysis, companyBusiness, companySectors, companyIndustryTree,
-    companyPublicOrgs,
+    analyzeCas, casFit, specFingerprint, coachJd, draftJd, motiveJd, guideJd, companyAnalysis, companyBusiness, companyIndustryTree,
     specupExams, specupActivities,
     insightCategories, insightFeatured, listInsights, getInsight, createInsight, updateInsight, deleteInsight,
     addInsightComment, deleteInsightComment,

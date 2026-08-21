@@ -839,38 +839,23 @@ app.get('/api/company/suggest', ah(async (req, res) => {
 // 분류 캐시 상태 — 배치를 돌렸는지 확인용
 app.get('/api/company/stats', ah(async (req, res) => res.json(await catalog.companyStats())));
 
-/* 계열별 기업 목록 — 회사 찾기 첫 화면. 캐시 파일만 읽으므로 빠르다.
-   내용이 하루에 바뀌는 자료가 아니라 ETag 재검증에 맡긴다(/api/jobs 와 같은 규약).
-
-   ?middle=<KECO 2차 코드>[&job=<KECO 직업코드>] 를 주면 **목록은 그대로 두고** focus 만
-   덧붙인다. job 을 같이 주는 이유: 2차 분류 하나에 성격이 다른 직업이 섞여 있어서
-   ('관리직' 에 기업 임원과 학교 교장이 같이 있다) 분류만으로는 업종을 못 좁힌다
-   (company-sectors.js SECTIONS_BY_JOB 주석).
-   커리어 로드맵 4단계에서 "이 직무를 주로 뽑는 계열"을 앞으로 끌어올리는 데 쓴다.
-   목록 자체를 잘라 보내지 않는 이유는, 좁힌 계열 밖에도 지원할 회사가 있기 때문이다 —
-   무엇을 왜 앞에 뒀는지는 화면이 밝히고, 나머지를 볼 자유는 남긴다. */
-app.get('/api/company/sectors', (req, res) => {
-  res.set('Cache-Control', 'no-cache');
-  const middle = String(req.query.middle || '').trim();
-  const job = String(req.query.job || '').trim();
-  const base = sectors.sectors();
-  res.json(middle ? { ...base, focus: sectors.sectorFocus(middle, job) } : base);
-});
 
 /* ── 취업 업종 트리 — 회사 찾기 첫 화면이 실제로 쓰는 목록 ──────
-   계열 목록(/api/company/sectors)과 무엇이 다른가: 저기는 KSIC 중분류를 묶은
+   계열(company-sectors.js `sectors()`)과 무엇이 다른가: 저건 KSIC 중분류를 묶은
    '계열' 이고 여기는 **사람인·잡코리아가 쓰는 말**이다(게임·화장품·2차전지…).
+   계열을 그대로 내보내던 라우트는 이 트리가 대신하면서 지웠다(작업정리 24-10).
    업종코드는 그대로 열쇠로 쓰되 화면에 나가는 이름만 바꾼 것이라, 근거는 그대로
    회사가 신고한 값이다(company-sectors.js industryTree · job-industry.js).
 
-   민간·공공을 **한 번에** 준다. 계열 목록은 공공기관을 따로 뒀는데(업종코드가 없어
-   계열에 4곳밖에 못 들어간다), 여기서는 '기관·공공' 이 대분류 하나로 들어가고 그
+   민간·공공을 **한 번에** 준다. 옛 계열 목록은 공공기관을 따로 실어 날랐는데(업종코드가
+   없어 계열에 4곳밖에 못 들어간다), 여기서는 '기관·공공' 이 대분류 하나로 들어가고 그
    아래를 기관 유형·소관부처로 나눠서 축이 어긋나지 않는다. 2,442곳 · 100KB 남짓이라
    한 번 받아 두면 단계를 오갈 때 서버를 다시 부를 일이 없다.
 
    ?middle=<KECO 2차 코드>[&job=<직업코드>] 를 주면 focus.minors 가 붙는다 —
    "이 직무를 주로 뽑는 업종" 에 추천 표시를 다는 데 쓴다. 목록을 잘라 보내지는
-   않는다(좁힌 업종 밖에도 지원할 회사가 있다 — /api/company/sectors 와 같은 판단). */
+   않는다 — 좁힌 업종 밖에도 지원할 회사가 있다. 무엇을 왜 앞에 뒀는지는 화면이 밝히고,
+   나머지를 볼 자유는 남긴다. */
 app.get('/api/company/industry-tree', (req, res) => {
   res.set('Cache-Control', 'no-cache');   // 내용이 하루에 바뀌지 않는다 — ETag 재검증에 맡긴다
   const middle = String(req.query.middle || '').trim();
@@ -879,18 +864,6 @@ app.get('/api/company/industry-tree', (req, res) => {
   res.json(middle ? { ...base, focus: sectors.industryFocus(middle, job) } : base);
 });
 
-/* 공공기관 목록 — 1단계에서 '공공기관' 을 고른 학생이 쓴다.
-
-   ── 왜 계열 목록과 같은 라우트에 얹지 않는가 ──
-   둘은 묶는 축이 다르다. 계열은 업종(KSIC)이고 이건 기관 유형(공기업·준정부기관…)
-   이다. 공공기관은 대부분 비상장이라 업종코드가 없어서 계열 목록에는 4곳밖에 못
-   들어간다(company-sectors.js publicOrgs 주석).
-   1,667곳이라 항상 실어 보내면 계열 목록을 여는 사람까지 그 무게를 진다 —
-   규모 필터를 공공기관으로 돌릴 때만 받아간다. */
-app.get('/api/company/public-orgs', (req, res) => {
-  res.set('Cache-Control', 'no-cache');
-  res.json(sectors.publicOrgs());
-});
 
 /* ── 자격증 카탈로그 ────────────────────────────────────────────
    스펙 입력 화면의 자격증 선택 목록. 국가자격(큐넷 API 캐시) + 민간자격(수기).
