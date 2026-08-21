@@ -224,6 +224,25 @@ function ok(name, cond, extra = '') {
   ok('진짜 다르면 따라간다',
      P.canonicalOf('<link rel="canonical" href="https://a.com/real?p=1">', 'https://a.com/x?p=1') === 'https://a.com/real?p=1');
 
+
+  console.log('\n── 11. 막힌 사이트는 다시 기다리지 않는다 ──');
+  /* 실측: 잡코리아는 우리 서버 IP 를 네트워크 단에서 막아 UND_ERR_CONNECT_TIMEOUT 이
+     뜨는데, 그 판정에 10초가 걸린다. 공고를 여러 개 확인하면 그 10초를 매번 다시
+     기다린다. 그래서 잠깐 기억했다가 즉시 안내로 넘긴다. */
+  const H = 'blocked.example.com';
+  ok('처음에는 막힌 곳이 아니다', P.recentlyUnreachable(H) === false);
+  P.markUnreachable(H);
+  ok('연결 실패를 기억한다', P.recentlyUnreachable(H) === true);
+  ok('다른 호스트는 영향이 없다', P.recentlyUnreachable('other.example.com') === false);
+  /* 성공하면 잊는다 — 차단 목록은 갱신된다. 영원히 막아 두면 풀린 뒤에도 못 쓴다. */
+  P.clearUnreachable(H);
+  ok('성공하면 잊는다', P.recentlyUnreachable(H) === false);
+  /* 시간이 지나면 스스로 풀린다. 일시적인 장애를 영구 차단으로 오해하면 안 된다. */
+  P.markUnreachable(H, 0);
+  ok('시간이 지나면 스스로 풀린다', P.recentlyUnreachable(H, 60 * 60 * 1000) === false);
+  ok('빈 호스트는 기억하지 않는다',
+     (P.markUnreachable(''), P.recentlyUnreachable('') === false));
+
   console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
   process.exit(fail ? 1 : 0);
 })();
