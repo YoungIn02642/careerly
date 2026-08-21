@@ -1163,20 +1163,61 @@
   }
 
   /* STAR — 초안을 쓰는 내내 보고 있어야 하는 뼈대라 작업 화면 **위**에 둔다.
-     아래에 두면 문단을 쓰다가 골격을 확인하려고 매번 스크롤을 내려야 했다. */
+     아래에 두면 문단을 쓰다가 골격을 확인하려고 매번 스크롤을 내려야 했다.
+
+     ── 칸을 누르면 그 칸을 쓰러 간다 (사용자 지시 2026-08-21) ──
+     예전에는 설명만 있는 읽기 전용 띠였다. 그런데 화면에서 가장 먼저 눈에 들어오는
+     것이 이 띠라, **여기를 누르면 쓸 수 있을 것으로 읽힌다.** 실제로는 아래 입력
+     아코디언까지 내려가야 했다.
+
+     입력칸을 여기에 하나 더 만들지는 않는다 — 같은 값을 두 곳에서 고치면 저장이
+     어긋난다. 누르면 **아래 입력의 그 칸을 열고 그리로 데려간다.** 저장은 여전히
+     한 곳(bindStarInput)에서만 일어난다.
+
+     겸사겸사 이 띠가 **내가 지금 뭘 적어 뒀는지**도 보여준다. 설명만 네 칸 떠 있는
+     것보다, 적은 것이 보이면 무엇이 비었는지 한눈에 안다. */
   function starHtml(r) {
     if (!r.star?.length) return '';
+    const tab = (_lastTabs || [])[_tab];
+    const saved = tab ? getStar(tab.key) : {};
     return `<div class="jd-star-band">
       <div class="co-sec-h"><h2>모든 문항의 뼈대 — STAR</h2>
-        <span class="co-src">아래 역량별 순서는 이 뼈대를 그 역량에 맞게 편 것입니다</span></div>
+        <span class="co-src">칸을 누르면 아래에서 그 칸을 씁니다 · 아래 역량별 순서는 이 뼈대를 그 역량에 맞게 편 것입니다</span></div>
       <div class="jd-star-grid">
-        ${r.star.map(s => `<div class="jd-star-cell">
-          <div class="jd-star-key">${esc(s.key)}<span>${esc(s.label)}</span></div>
+        ${r.star.map(s => {
+          const val = (saved[s.key] || '').trim();
+          return `<button type="button" class="jd-star-cell ${val ? 'is-filled' : ''}" data-star-go="${esc(s.key)}">
+          <div class="jd-star-key">${esc(s.key)}<span>${esc(s.label)}</span>
+            <span class="jd-star-mark">${val ? `${val.length}자` : '미작성'}</span>
+          </div>
           <div class="jd-star-what">${esc(s.what)}</div>
           <div class="jd-star-check">${esc(s.check)}</div>
-        </div>`).join('')}
+          <div class="jd-star-mine">${val
+            ? esc(val.length > 90 ? `${val.slice(0, 90)}…` : val)
+            : '<span>누르면 여기에 적습니다</span>'}</div>
+        </button>`;
+        }).join('')}
       </div>
     </div>`;
+  }
+
+  /* 띠는 저장된 값을 보여주므로 입력이 바뀌면 같이 다시 그린다. 입력 아코디언과
+     따로 그리는 이유는 위아래로 떨어져 있어 한쪽만 갱신되는 일이 잦기 때문이다. */
+  function repaintStarBand(box) {
+    const host = box.querySelector('.jd-star-band');
+    if (!host || !_last) return;
+    host.replaceWith(document.createRange().createContextualFragment(starHtml(_last)));
+    bindStarBand(box);
+  }
+
+  function bindStarBand(box) {
+    box.querySelectorAll('[data-star-go]').forEach(el => {
+      el.addEventListener('click', () => {
+        _starOpen = el.dataset.starGo;
+        repaintStarInput(box);
+        box.querySelector('.jd-starin')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
   }
 
   /* ── STAR 입력 아코디언 ──────────────────────────────────────
@@ -1301,6 +1342,9 @@
             head.textContent = n ? `${n}자` : '미작성';
             head.classList.toggle('is-done', Boolean(n));
           }
+          /* 위 띠도 같은 값을 보여준다. 한쪽만 고치면 같은 화면에 '미작성' 과
+             '120자' 가 동시에 떠서 어느 쪽이 맞는지 알 수 없다. */
+          repaintStarBand(box);
         }, 600);
       });
     });
@@ -1449,6 +1493,7 @@
     });
 
     bindStarInput(box);
+    bindStarBand(box);
     bindDraft(box);
   }
 
@@ -1481,21 +1526,18 @@
     const tabs = _lastTabs || [];
     const tab = tabs[_tab];
 
-    /* 위 STAR 칸에 적은 것이 초안의 재료다. 한 칸도 안 적혀 있으면 모델이 아는 것이
-       활동 이름·기간·역할뿐이라 문단이 뻔해진다 — 그럴 땐 만들기 전에 알려준다. */
+    /* 위 STAR 칸에 적은 것이 초안의 **재료**다. 비어 있으면 모델이 아는 것이 활동
+       이름·기간·역할뿐이라 문단이 뻔해진다.
+
+       ── 예전에는 여기서 confirm 으로 막았다 (사용자 지시로 걷어냄) ──
+       "취소하면 STAR 부터 채웁니다" 라고 물었고 확인을 누르면 그대로 만들어졌으니
+       기능상으로는 처음부터 됐다. 그런데 **팝업이 뜨는 것 자체가 막힌 것으로 읽힌다** —
+       STAR 를 다 채우기 전에는 초안을 못 본다고 여기게 된다. 순서가 거꾸로다:
+       초안을 한 번 보고 나서야 무엇을 적어야 할지 알게 되는 사람이 더 많다.
+
+       그래서 **바로 만들고, 재료가 빠졌다는 말은 결과 옆에 남긴다.** 막지 않되
+       모르게 하지도 않는다 — 21-5 에서 '공고 없이도 시작' 을 열어 둔 것과 같은 판단이다. */
     const star = currentStar();
-    if (!star) {
-      const go = confirm(
-        '위 STAR 칸이 비어 있어요.\n\n'
-        + '거기에 적은 내용이 초안의 재료라, 비어 있으면 활동 이름·기간·역할만 가지고 '
-        + '뻔한 문단이 나옵니다.\n\n확인을 누르면 그대로 만들고, 취소하면 STAR 부터 채웁니다.');
-      if (!go) {
-        _starOpen = 'S';
-        repaintStarInput(document.getElementById('jd-result'));
-        document.querySelector('.jd-starin')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        return;
-      }
-    }
 
     btn.disabled = true;
     if (stateEl) stateEl.textContent = '초안을 쓰는 중… (1분 이상 걸릴 수 있어요)';
@@ -1522,9 +1564,20 @@
       ta.dispatchEvent(new Event('input'));
 
       if (stateEl) {
-        stateEl.innerHTML = out.blankCount
+        const blanks = out.blankCount
           ? `<b>빈칸 ${out.blankCount}개</b>를 본인 사실로 채우세요`
           : '넣었어요';
+        /* STAR 없이 만든 문단이 뻔하다는 것을 **결과를 보여준 뒤에** 말한다.
+           만들기 전에 말하면 경고이고, 만든 뒤에 말하면 다음에 할 일이 된다. */
+        stateEl.innerHTML = star ? blanks
+          : `${blanks} · 위 <b>STAR</b> 를 채우면 더 구체적으로 나와요 `
+            + '<button type="button" class="jd-inline-link" data-open-star>채우러 가기</button>';
+        const goStar = stateEl.querySelector('[data-open-star]');
+        if (goStar) goStar.addEventListener('click', () => {
+          _starOpen = 'S';
+          repaintStarInput(document.getElementById('jd-result'));
+          document.querySelector('.jd-starin')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
       }
       paintAiNotes(i, out);
     } catch (e) {
