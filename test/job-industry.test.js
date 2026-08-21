@@ -110,5 +110,32 @@ if (!r.total) {
   ok('모르는 직무는 matched=false', S.industryFocus('없는코드').matched === false);
 }
 
+console.log('\n── 7. DART 색인이 없을 때 (배포 서버 상황) ──');
+/* 색인은 깃에 없고 배포 빌드에서 받는다. 그 단계가 건너뛰어지면 서버는 뜨지만 회사
+   목록이 빈다. 그때 industryFocus 가 **터졌다** — 운영 로그:
+     [error] GET /api/company/industry-tree - Cannot convert undefined or null to object
+   빈 트리를 돌려주면서 codesOf 를 빠뜨려 Object.keys(undefined) 가 된 것이다.
+   로컬은 색인이 있어 이 가지를 한 번도 안 밟는다 — 그래서 자식 프로세스에서
+   allCorps() 를 비워 재현한다. **빈 값과 없는 값은 다르다.** */
+{
+  const { execFileSync } = require('child_process');
+  const src = `
+    const DART = require(${JSON.stringify(require.resolve('../backend/src/dart.js'))});
+    DART.allCorps = () => [];
+    const S = require(${JSON.stringify(require.resolve('../backend/src/company-sectors.js'))});
+    const t = S.industryTree();
+    const f = S.industryFocus(Object.keys(S.SECTORS_BY_MIDDLE)[0], '');
+    console.log(JSON.stringify({ total: t.total, codesOf: typeof t.codesOf, minors: f.minors }));
+  `;
+  let out = null, err = null;
+  try { out = JSON.parse(execFileSync(process.execPath, ['-e', src], { encoding: 'utf8' }).trim()); }
+  catch (e) { err = String(e.stderr || e.message).split('\n').find(l => l.includes('Error')) || '실패'; }
+
+  ok('색인이 없어도 industryFocus 가 터지지 않는다', !!out && !err, err || '');
+  ok('빈 트리도 모양이 같다 (codesOf 가 있다)', !!out && out.codesOf === 'object');
+  ok('빈 트리의 추천은 빈 배열이다', !!out && Array.isArray(out.minors) && out.minors.length === 0);
+  ok('빈 트리는 0곳이다', !!out && out.total === 0);
+}
+
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
 process.exit(fail ? 1 : 0);

@@ -24,8 +24,14 @@
 const PROVIDER = 'groq';
 
 /* Groq 는 모델을 예고 후 폐기(decommission)한다. 폐기되면 400/404 가 오는데,
-   그때 코드를 고쳐 배포하지 않아도 되도록 env 로 뺀다. */
-const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+   그때 코드를 고쳐 배포하지 않아도 되도록 env 로 뺀다.
+
+   ── 기본값도 살아 있는 모델이어야 한다 (실측) ──
+   기본값이 llama-3.3-70b-versatile 이었는데 그 모델이 폐기됐다. 로컬은 .env 로
+   갈아끼워 놨으니 멀쩡했고, GROQ_MODEL 을 안 넣은 **배포 서버만** 죽은 모델로
+   떨어져 AI 기능이 전부 503 이었다. env 로 뺀 것은 갈아끼우기 위해서지 기본값이
+   틀려도 된다는 뜻이 아니다 — 안 넣으면 이 값이 그대로 쓰인다. */
+const GROQ_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
 
 /* 프론트가 무한 대기하지 않게 상한을 둔다. Groq 는 보통 1초 안에 끝나지만,
    긴 출력(자소서 초안)에서는 몇 초씩 걸린다. */
