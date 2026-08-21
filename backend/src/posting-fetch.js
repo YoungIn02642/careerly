@@ -184,11 +184,13 @@ const NOISE_BLOCK = /^(AI 서류 합격률|AI 이력서 코칭|구직자 개인�
 /* 덩어리를 끊는 줄 — 여기부터는 다시 본문이다. */
 const BLOCK_END = /^(상세요강|모집요강|복리후생|근무조건|근무지위치|접수기간|담당업무|주요업무|자격요건|우대사항|채용절차|기업정보|급여|근무지역)/;
 const BLOCK_MAX_LINES = 40;
+/* 담당업무를 말하는 낱말. 이게 없으면 요약표만 온 것이다 — 본문이 딴 주소에 있다. */
+const BODY_WORDS = /담당업무|주요업무|수행업무|직무내용|업무내용/;
 /* 버튼·아이콘 글자만 남은 줄. **정확히 그 낱말일 때만** 지운다 — 부분일치로 지우면
    "지도 보기 편한 자료를 만들었습니다" 같은 본문이 날아간다. */
-const NOISE_LINE = /^(닫기|TOP|공유하기|페이스북|트위터|URL복사|SMS발송|신고하기|인쇄하기|지도|지도보기|지도 보기|스카이뷰|지도초기화|크게보기|길찾기|이전공고|다음공고|도움말|내용 전체보기|기업정보 전체보기|태그 더보기|나 님|경쟁자|더보기|목록)$/;
-const NOISE_PREFIX = /^(조회수 |닫기 - |로그인하고 |로그인 하시고 |어떻게 .*분석됐나요|이 공고의 경쟁자|비교할 경쟁자|스토어 바로가기|막막한 취업준비)/;
-const NOISE_SUFFIX = /상세보기$/;
+const NOISE_LINE = /^(닫기|TOP|공유하기|페이스북|트위터|URL복사|SMS발송|신고하기|인쇄하기|지도|지도보기|지도 보기|스카이뷰|지도초기화|크게보기|길찾기|이전공고|다음공고|도움말|내용 전체보기|기업정보 전체보기|기업정보 더보기|태그 더보기|나 님|경쟁자|더보기|목록|인근지하철|궁금해요|홈페이지 바로가기|남은기간|남은 기간)$/;
+const NOISE_PREFIX = /^(조회수 |닫기 - |로그인\s*하(고|시고) |어떻게 .*분석됐나요|이 공고의 경쟁자|비교할 경쟁자|스토어 바로가기|막막한 취업준비|채용정보에 잘못된|마감일은 기업의 사정)/;
+const NOISE_SUFFIX = /(상세보기|찾아오시는길)$/;
 
 function denoise(text) {
   let lines = String(text || '').split('\n');
@@ -215,8 +217,10 @@ function denoise(text) {
     out.push(lines[i]);
   }
 
-  /* ③ 버튼 글자만 남은 줄. */
+  /* ③ 버튼 글자만 남은 줄 · 줄 끝에 붙은 버튼 글자.
+     주소 끝의 '지도보기' 처럼 문장에 달라붙어 오는 것은 줄째로 지우면 주소까지 잃는다. */
   return out
+    .map(l => l.replace(/\s*(지도\s?보기|길찾기|더보기)$/, ''))
     .filter(l => !(NOISE_LINE.test(l) || NOISE_PREFIX.test(l) || NOISE_SUFFIX.test(l)))
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
@@ -236,6 +240,11 @@ function denoise(text) {
    따라간 쪽이 **더 나을 때만** 쓴다. 한 번만 따라간다(canonical 이 서로를 가리키면
    끝나지 않는다). 따라간 주소도 fetchPosting 이 처음부터 다시 검사하므로 SSRF 안전은
    그대로다. */
+/* JS·HTML 안에 박힌 주소는 escape 돼 있다. 안 풀면 쿼리가 깨지거나 같은 주소를
+   다른 주소로 보게 된다. canonicalOf 와 embedUrls 가 같은 규칙을 쓴다. */
+const unescapeUrl = raw => String(raw)
+  .replace(/\\u0026/gi, '&').replace(/&amp;/gi, '&').replace(/\\\//g, '/').trim();
+
 function canonicalOf(html, base) {
   const s = String(html || '');
   const tag = s.match(/<link[^>]+rel=["']?canonical["']?[^>]*>/i)
@@ -243,15 +252,55 @@ function canonicalOf(html, base) {
   if (!tag) return null;
   const attr = tag[0].match(/(?:href|content)=["']([^"']+)["']/i);
   if (!attr) return null;
+  /* HTML 속성이라 &amp; 로 escape 돼 있다. 안 풀면 같은 주소를 다른 주소로 보고
+     같은 페이지를 한 번 더 받는다 — 실측으로 잡코리아가 여기서 멈췄다. */
   let u;
-  try { u = new URL(attr[1], base); } catch { return null; }
+  try { u = new URL(unescapeUrl(attr[1]), base); } catch { return null; }
   const norm = x => String(x).replace(/#.*$/, '').replace(/\/$/, '');
   return norm(u) === norm(base) ? null : u.toString();
 }
 
+/* ── 본문이 딴 주소에 있을 때 (실측 2026-08-21) ────────────────
+   잡코리아 공고를 열면 요약표(모집분야·경력·학력·마감일)만 온다. 정작 **담당업무와
+   자격요건 상세는 `상세요강` 탭 안**에 있고, 그건 페이지가 따로 불러온다.
+
+     GI_Read_Comt_Ifrm?...&Gno=49798770   ← 이 안에 [담당업무]·[자격요건] 이 있다
+
+   canonical(위)과는 성격이 다르다. canonical 은 "이 페이지가 곧 저 페이지" 라 통째로
+   **바꾸는** 것이고, 이건 "이 페이지의 일부" 라 **이어 붙이는** 것이다. 요약표도
+   지원 가능 여부를 판단하는 데 쓰이므로 버릴 이유가 없다.
+
+   ── 사이트별 파서가 아니다 ──
+   선택자를 짜는 대신 **같은 사이트 안의 주소** 중 끼워 넣는 내용처럼 보이는 것
+   (ifrm·iframe·embed·detail·content)을 후보로 본다. 표준 <iframe src> 가 있으면
+   그것부터 본다. 낱말 목록으로 판단하는 것은 POSTING_WORDS 와 같은 결이다.
+
+   ── 함부로 붙이지 않는다 ──
+   후보를 최대 셋만 보고, **공고 낱말이 더 많이 든 것만** 채택한다. 길이로 재지
+   않는다 — 잡코리아는 요약표(693자)보다 본문(516자)이 짧은데도 담당업무가 거기 있다.
+   후보 주소도 fetchPosting 이 처음부터 다시 검사하므로 SSRF 안전은 그대로다. */
+function embedUrls(html, base) {
+  let host;
+  try { host = new URL(base).host; } catch { return []; }
+  const found = new Set();
+  const push = raw => {
+    if (!raw || found.size >= 3) return;
+    /* JS 안에 박힌 주소는 \u0026 · &amp; 로 escape 돼 있다. 그대로 두면 쿼리가 깨진다. */
+    const s = unescapeUrl(raw);
+    try {
+      const u = new URL(s, base);
+      if (u.host === host && u.toString() !== base) found.add(u.toString());
+    } catch { /* 주소가 아니면 버린다 */ }
+  };
+
+  for (const m of String(html).matchAll(/<iframe[^>]+src=["']([^"']+)["']/gi)) push(m[1]);
+  for (const m of String(html).matchAll(/["']([^"']*(?:ifrm|iframe|embed|detail|content)[^"']*\?[^"']{1,200})["']/gi)) push(m[1]);
+  return [...found];
+}
+
 /* ── 가져오기 ────────────────────────────────────────────
    실패를 kind 로 가른다. 같은 '안 됨' 이라도 사용자가 할 일이 다르다. */
-async function fetchPosting(raw, canonTried = false) {
+async function fetchPosting(raw, deepTried = false) {
   const bad = await urlProblem(raw);
   if (bad) return { ok: false, kind: 'bad-url', message: bad };
 
@@ -315,13 +364,27 @@ async function fetchPosting(raw, canonTried = false) {
     const text = denoise(trimLead(extractText(html)));
     const weak = postingHits(text) < 2;
 
-    /* 얇거나 공고 같지 않으면 canonical 을 한 번 따라가 본다. 따라간 쪽이 더 나을
-       때만 바꾼다 — 아니면 원래 것을 그대로 준다(빈손으로 돌려보내지 않는다). */
-    if (!canonTried && (text.length < MIN_CHARS || weak)) {
+    /* 담당업무가 어디에도 없으면 본문이 딴 데 있다는 신호다. 요약표만 온 것이다. */
+    const hasBody = BODY_WORDS.test(text);
+
+    if (!deepTried && (text.length < MIN_CHARS || weak || !hasBody)) {
+      /* ① canonical — "이 페이지가 곧 저 페이지" 라 통째로 바꾼다. */
       const canon = canonicalOf(html, url);
       if (canon) {
         const better = await fetchPosting(canon, true);
         if (better.ok && !better.weak) return better;
+      }
+      /* ② 끼워 넣는 내용 — "이 페이지의 일부" 라 이어 붙인다. 요약표(경력·학력·마감일)도
+         지원 가능 여부를 판단하는 데 쓰이므로 버리지 않는다.
+         길이로 재지 않는다 — 잡코리아는 요약표보다 본문이 짧은데 담당업무는 거기 있다. */
+      if (!hasBody) {
+        for (const cand of embedUrls(html, url)) {
+          const part = await fetchPosting(cand, true);
+          if (part.ok && BODY_WORDS.test(part.text) && postingHits(part.text) >= 2) {
+            const merged = `${text}\n\n${part.text}`;
+            return { ok: true, text: merged, title: titleOf(html), url, weak: false };
+          }
+        }
       }
     }
 
@@ -339,6 +402,6 @@ async function fetchPosting(raw, canonTried = false) {
 }
 
 module.exports = {
-  fetchPosting, extractText, titleOf, urlProblem, normalizeUrl, canonicalOf, denoise,
+  fetchPosting, extractText, titleOf, urlProblem, normalizeUrl, canonicalOf, denoise, embedUrls,
   postingHits, trimLead, _MIN_CHARS: MIN_CHARS,
 };
