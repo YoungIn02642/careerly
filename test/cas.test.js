@@ -156,5 +156,28 @@ ok('정량 우세 → 5:5', quantStrong.quantWeight === 0.5 && quantStrong.qualW
 // 비중이 바뀌어도 총점은 항상 1000점 척도 안 (동률 만점이면 1000)
 ok('동적 비율에서도 상한 1000 유지', CAS.computeTotal({ quant:{ total:400, max:400 }, qual:{ total:600, max:600 } }).total === 1000);
 
+
+console.log('\n── 스펙을 입력했는가 (dept 로 판단하지 않는다) ──');
+/* 실측 2026-08-21 (사용자 지적): 학점·JLPT·정보처리산업기사·정성스펙 2개를 넣었는데도
+   "아직 스펙을 입력하지 않았어요" 가 떴다. 화면들이 spec.dept 로 판단했기 때문이다.
+   dept 는 **학과명에서 우리가 자동으로 정하는 집계 분류**이고 계열이 8개뿐이라,
+   간호·기계·어문 같은 학과는 애초에 비어 있다(spec-form 은 그래서 저장을 막지 않는다).
+   저장은 됐는데 없다고 말하면 사용자는 자기가 뭘 잘못했는지 찾게 된다. */
+ok('아무것도 없으면 false', CAS.hasAnySpec(null) === false && CAS.hasAnySpec({}) === false);
+ok('dept 만 있는 것은 입력이 아니다', CAS.hasAnySpec({ dept: 'cs' }) === false);
+ok('학과를 적었으면 입력이다', CAS.hasAnySpec({ major: '일어일문학과' }) === true);
+ok('자격증만 있어도 입력이다', CAS.hasAnySpec({ certs: [{ id: 'x' }] }) === true);
+ok('어학만 있어도 입력이다', CAS.hasAnySpec({ scores: { jlpt: 'N1' } }) === true);
+ok('활동만 있어도 입력이다', CAS.hasAnySpec({ activities: [{ name: '동아리' }] }) === true);
+/* 학점 0.0 은 '안 넣은 것' 이 아니다 — null 과 0 을 구분해야 한다. */
+ok('학점 0.0 도 입력이다', CAS.hasAnySpec({ gpa: 0 }) === true);
+ok('빈 배열·빈 객체는 입력이 아니다',
+   CAS.hasAnySpec({ certs: [], scores: {}, activities: [] }) === false);
+/* 사용자가 실제로 넣은 조합 — dept 가 없어도 입력으로 봐야 한다. */
+ok('학과 계열이 없는 사람의 실제 스펙도 입력이다',
+   CAS.hasAnySpec({ dept: null, major: '일어일문학과', gpa: 3.8,
+     scores: { jlpt: 'N1' }, certs: [{ id: 'info-industrial' }],
+     activities: [{ name: '교내 공모전' }, { name: '학회' }] }) === true);
+
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
 process.exit(fail ? 1 : 0);

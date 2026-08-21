@@ -114,7 +114,9 @@ window.CASRadar = (() => {
         '희망 직무가 요구하는 역량과 내가 채운 정도를 한눈에 볼 수 있어요.', 'login', '로그인하기');
       return;
     }
-    if (!spec || !spec.dept) {
+    /* dept 로 판단하지 않는다 — 그건 학과명에서 자동으로 정하는 집계 분류라
+       계열 통계가 없는 학과(간호·어문…)는 비어 있다(cas.js hasAnySpec). */
+    if (!CAS.hasAnySpec(spec)) {
       card.innerHTML = head + emptyState('아직 스펙을 입력하지 않았어요',
         '학점·어학·자격증과 경험을 입력하면 직무역량 레이더가 그려집니다.', 'mypage', '스펙 입력하기');
       return;
@@ -123,6 +125,13 @@ window.CASRadar = (() => {
     // 저장된 스펙의 직무(dept/field/job)로 같은 직무 합격자 벤치마크를 낸다.
     // 좁게 시작해 데이터가 없으면 넓힌다.
     let agg = window.CASDashboardContext?.agg;
+    /* 위 CAS 카드가 목표 직무로 모집단을 정했으면 그걸 그대로 쓴다(dept 가 없어도 된다).
+       그것도 없고 계열 통계도 없으면 그릴 기준이 없다 — '스펙이 없다' 와는 다른 말이다. */
+    if (!agg && !spec.dept) {
+      card.innerHTML = head + emptyState('이 학과는 아직 계열 통계가 없어요',
+        '커리어 로드맵에서 목표 직무를 고르면 그 직무 기준으로 레이더가 그려집니다.', 'career', '목표 직무 고르기');
+      return;
+    }
     if (!agg) agg = Aggregator.compute({ dept: spec.dept, field: spec.field, job: spec.job });
     if (agg.empty) agg = Aggregator.compute({ dept: spec.dept, field: spec.field });
     if (agg.empty) agg = Aggregator.compute({ dept: spec.dept });

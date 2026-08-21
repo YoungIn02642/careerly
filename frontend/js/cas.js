@@ -449,9 +449,32 @@
     return middleMajors.some(m => m.includes(mine) || mine.includes(m));
   }
 
+  /* ── 스펙을 '입력했다' 고 볼 수 있는가 ──────────────────────
+     예전에는 화면들이 `spec.dept` 하나로 판단했다. 그런데 dept 는 **학과명에서
+     자동으로 정하는 집계 분류**이고, 우리 통계는 8개 계열뿐이라 **간호·기계·어문
+     같은 학과는 애초에 비어 있다**(spec-form.js 는 그래서 저장을 막지 않는다).
+
+     그 결과 학점·어학·자격증·활동을 다 채운 사람에게 화면이 **"아직 스펙을 입력하지
+     않았어요"** 라고 말했다(실측 2026-08-21, 사용자 지적 — JLPT·정보처리산업기사·
+     정성스펙 2개를 넣었는데도 그렇게 떴다). 저장은 됐는데 없다고 하는 것이라,
+     사용자는 자기가 뭘 잘못했는지 찾게 된다.
+
+     '입력했다' 는 **본인이 채운 값이 하나라도 있는가**로 본다. dept 는 우리가 정하는
+     값이지 사용자가 넣는 값이 아니다. */
+  function hasAnySpec(s) {
+    if (!s) return false;
+    return Boolean(
+      s.major
+      || s.gpa != null
+      || (s.certs && s.certs.length)
+      || (s.scores && Object.keys(s.scores).length)
+      || (s.activities && s.activities.length),
+    );
+  }
+
   const api = {
     computeQuant, resolveWeights, langIndex, relativeScore, certScore,
-    isMajorRelevant, DEPT_MAJOR,
+    isMajorRelevant, hasAnySpec, DEPT_MAJOR,
     TARGETS, TOTAL_QUANT, MIN_N_FOR_RATE,
     LANG_TESTS, FOREIGN_TESTS,
     // 정성
