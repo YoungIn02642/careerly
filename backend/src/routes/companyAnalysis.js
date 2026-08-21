@@ -24,6 +24,8 @@ const SARAMIN = require('../saramin-jobs');
 const WORKNET = require('../worknet-jobs');
 const ALIO = require('../alio-jobs');
 const SECTORS = require('../company-sectors');
+const JOB = require('../job-industry');
+const KSIC = require('../ksic');
 
 const router = express.Router();
 
@@ -256,6 +258,15 @@ router.get('/analysis', async (req, res) => {
       profile: dart.profile && {
         ...dart.profile,
         sector: SECTORS.sectorOfCode(dart.profile.industryCode),
+        /* 화면에 내보낼 업종 이름. 예전에는 '업종코드 212' 를 그대로 띄웠는데,
+           그건 우리가 읽으라고 준 값이 아니라 신고 서식의 숫자다.
+           ① 취업 업종(사람인·잡코리아가 쓰는 말)이 있으면 그것을 쓰고,
+           ② 없으면 KSIC 공식 명칭으로 물러난다(회사 색인은 11만 곳이라 우리 목록
+              밖의 회사도 리포트는 열린다),
+           ③ 둘 다 없으면 null 이다 — 지어내지 않는다. 화면이 '—' 로 적는다. */
+        industryLabel: (JOB.classify(name || dart.profile.name, dart.profile.industryCode) || {}).minor
+          || (KSIC.deepest(dart.profile.industryCode) || {}).name
+          || null,
       },
       financials: summarizeFinancials(dart.financials),
       employees: dart.employees,      // segments(사업부문)까지 들어 있다
