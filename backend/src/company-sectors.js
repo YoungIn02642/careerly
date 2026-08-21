@@ -506,7 +506,12 @@ function industryTree() {
   if (_tree) return _tree;
 
   const base = sectors();
-  if (!base.sectors.length) return { order: [], tree: {}, total: 0, sizes: {}, reason: base.reason };
+  /* 색인이 없을 때도 **모양은 같게** 돌려준다. codesOf 를 빠뜨렸더니 industryFocus 가
+     Object.keys(undefined) 로 터졌다 — 배포 서버에만 색인이 없어서 여기서만 났다
+     (로컬은 색인이 있어 이 가지를 한 번도 안 밟는다). 빈 값과 없는 값은 다르다. */
+  if (!base.sectors.length) {
+    return { order: [], tree: {}, total: 0, sizes: {}, codesOf: {}, reason: base.reason };
+  }
 
   const tree = {};
   /* 중분류마다 그 안에 있는 KSIC 2자리를 모아 둔다. 로드맵이 넘겨준 직무를
@@ -581,7 +586,7 @@ function industryFocus(middleCode, jobCode) {
     : (f.sectors || []).flatMap(n => CODES_OF_SECTOR.get(n) || []));
   if (!codes.size) return { ...f, minors: [] };
 
-  const { codesOf } = industryTree();
+  const { codesOf = {} } = industryTree();
   const minors = Object.keys(codesOf).filter(m => codesOf[m].some(c => codes.has(c)));
   return { ...f, minors };
 }
