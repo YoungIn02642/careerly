@@ -12,7 +12,7 @@ const PAGES = [
 ];
 
 /* navbar 에서 밑줄로 강조할 페이지 (data-nav 값과 일치) */
-const NAV_HIGHLIGHT = ['career', 'dashboard', 'jd', 'search', 'mentoring', 'insight'];
+const NAV_HIGHLIGHT = ['career', 'dashboard', 'specup', 'jd', 'search', 'mentoring', 'insight'];
 
 /* 멘토링 계열 화면 — mentoring.js 가 렌더를 담당 */
 const MENTORING_PAGES = ['dashboard', 'search', 'profile', 'mentoring'];
@@ -31,11 +31,16 @@ function showPage(page) {
   });
   document.getElementById('global-navbar').style.display = 'flex';
   /* 멘토 프로필은 "멘토 찾기"의, 회사 검색은 "자소서 코치"의 하위 화면이므로 같은 메뉴를
-     강조한다. 스펙 채우기는 CAS(2단계)에서 갈라지는 곁가지라 CAS 를 강조한다 —
-     별도 메뉴를 만들면 "스펙을 채워야 다음으로 갈 수 있다" 로 읽힌다(roadmap.js 머리주석). */
+     강조한다.
+
+     ── 스펙UP 은 자기 메뉴를 강조한다 (사용자 지시 2026-08-21) ──
+     예전에는 CAS 를 강조했다. 스펙UP 이 CAS(2단계)에서 갈라지는 곁가지라, 별도 메뉴를
+     만들면 "스펙을 채워야 다음으로 갈 수 있다" 로 읽힌다고 봤기 때문이다.
+     지금은 상단바에 자기 자리가 생겼으므로 자기를 강조한다 — 눌러서 들어왔는데 다른
+     메뉴에 불이 들어오면 어디에 있는지 알 수 없다. 곁가지라는 사실은 화면 머리의
+     '커리어 로드맵 2단계 · 스펙UP' 이 여전히 말해 준다. */
   const navKey = page === 'profile' ? 'search'
-    : page === 'company' ? 'jd'
-    : page === 'specup' ? 'dashboard' : page;
+    : page === 'company' ? 'jd' : page;
   updateNavActive(NAV_HIGHLIGHT.includes(navKey) ? navKey : '');
 
   if (page === 'mypage')     initMypage();
