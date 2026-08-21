@@ -298,6 +298,43 @@ function embedUrls(html, base) {
   return [...found];
 }
 
+/* ── 막힌 사이트는 10초씩 기다리지 않는다 (실측 2026-08-21) ────
+   잡코리아는 우리 서버 IP 를 네트워크 단에서 막는다. TCP 연결이 아예 안 맺어져
+   `UND_ERR_CONNECT_TIMEOUT` 으로 떨어지는데, **그 판정에 10초가 걸린다.**
+   공고를 여러 개 확인하는 학생은 그 10초를 매번 다시 기다린다.
+
+   그래서 연결 단계에서 실패한 호스트를 잠깐 기억했다가 **즉시 안내로 넘긴다.**
+
+   ── 짧게 기억한다 ──
+   일시적인 장애를 영구 차단으로 오해하면 멀쩡해진 뒤에도 계속 막는다. 그래서 기본
+   10분이고, **성공하면 바로 지운다.** 오래 기억할수록 틀렸을 때 손해가 크다.
+
+   ── HTTP 응답이 온 실패는 기억하지 않는다 ──
+   401·403·404 는 이미 빠르다(연결은 됐다는 뜻이다). 여기서 기억하는 것은 **연결
+   자체가 안 되는 것**뿐이다. */
+const UNREACHABLE_TTL_MS = Number(process.env.POSTING_UNREACHABLE_TTL_MS || 10 * 60 * 1000);
+const unreachable = new Map();          // host → 다시 시도해도 되는 시각
+
+function markUnreachable(host, now = Date.now()) {
+  if (!host) return;
+  unreachable.set(host, now + UNREACHABLE_TTL_MS);
+  /* 만료된 것을 같이 걷어낸다 — 안 하면 호스트마다 항목이 쌓여 메모리가 샌다
+     (server.js 의 usernameCheckHits 와 같은 규약). */
+  if (unreachable.size > 200) {
+    for (const [k, until] of unreachable) if (now > until) unreachable.delete(k);
+  }
+}
+
+function recentlyUnreachable(host, now = Date.now()) {
+  const until = unreachable.get(host);
+  if (!until) return false;
+  if (now > until) { unreachable.delete(host); return false; }
+  return true;
+}
+
+/* 성공하면 잊는다. 막혔다가 풀리는 일이 실제로 있다(차단 목록은 갱신된다). */
+const clearUnreachable = host => unreachable.delete(host);
+
 /* ── 가져오기 ────────────────────────────────────────────
    실패를 kind 로 가른다. 같은 '안 됨' 이라도 사용자가 할 일이 다르다. */
 async function fetchPosting(raw, deepTried = false) {
@@ -307,6 +344,14 @@ async function fetchPosting(raw, deepTried = false) {
   /* 한글이 든 쿼리는 URL 이 알아서 퍼센트 인코딩한다 — 원문을 그대로 fetch 에
      넘기면 서버에 따라 400 이 온다. */
   let url = new URL(normalizeUrl(raw)).toString();
+  /* 최근에 연결 자체가 안 됐던 곳이면 10초를 다시 기다리지 않는다. 할 말은 같으니
+     사용자에게는 즉시 안내가 뜬다. */
+  if (recentlyUnreachable(new URL(url).host)) {
+    return {
+      ok: false, kind: 'blocked',
+      message: '이 사이트가 우리 서버에서 오는 접속을 막고 있어요 (조금 전에도 연결되지 않았습니다).',
+    };
+  }
   for (let hop = 0; hop <= MAX_HOPS; hop++) {
     let res;
     try {
@@ -333,6 +378,8 @@ async function fetchPosting(raw, deepTried = false) {
         return { ok: false, kind: 'bad-url', message: '주소를 찾을 수 없습니다. 오타가 없는지 확인해 주세요.' };
       }
       if (/^(ECONNRESET|ECONNREFUSED|EPROTO|EHOSTUNREACH|ENETUNREACH|CERT_|ERR_TLS|UND_ERR)/.test(code)) {
+        /* 연결 단계에서 끊긴 것이므로 같은 호스트는 한동안 다시 시도하지 않는다. */
+        try { markUnreachable(new URL(url).host); } catch { /* 주소가 이상하면 그냥 넘어간다 */ }
         return {
           ok: false, kind: 'blocked',
           message: `이 사이트가 우리 서버에서 오는 접속을 막고 있어요 (${code}).`,
@@ -381,6 +428,9 @@ async function fetchPosting(raw, deepTried = false) {
       return { ok: false, kind: 'error', message: '공고 페이지가 너무 큽니다.' };
     }
 
+    /* 여기까지 왔으면 연결은 됐다 — 막혔다는 기억을 지운다(차단 목록은 갱신된다). */
+    try { clearUnreachable(new URL(url).host); } catch { /* 무시 */ }
+
     const html = (await res.text()).slice(0, MAX_BYTES);
     const text = denoise(trimLead(extractText(html)));
     const weak = postingHits(text) < 2;
@@ -424,5 +474,6 @@ async function fetchPosting(raw, deepTried = false) {
 
 module.exports = {
   fetchPosting, extractText, titleOf, urlProblem, normalizeUrl, canonicalOf, denoise, embedUrls,
+  markUnreachable, recentlyUnreachable, clearUnreachable,
   postingHits, trimLead, _MIN_CHARS: MIN_CHARS,
 };
