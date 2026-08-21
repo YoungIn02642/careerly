@@ -1183,29 +1183,35 @@
     if (!r.star?.length) return '';
     const tab = (_lastTabs || [])[_tab];
     const saved = tab ? getStar(tab.key) : {};
+    const filled = STAR_KEYS.filter(k => (saved[k] || '').trim()).length;
     return `<div class="jd-star-band">
       <div class="co-sec-h"><h2>모든 문항의 뼈대 — STAR</h2>
-        <span class="co-src">칸을 누르면 아래에서 그 칸을 씁니다 · 아래 역량별 순서는 이 뼈대를 그 역량에 맞게 편 것입니다</span></div>
+        <span class="co-src">${filled}/4 칸 작성 · 칸을 누르면 바로 아래에서 씁니다 ·
+          이 브라우저에만 저장됩니다 · <b>AI 초안 넣기</b>가 이 내용을 읽습니다</span></div>
       <div class="jd-star-grid">
         ${r.star.map(s => {
           const val = (saved[s.key] || '').trim();
-          return `<button type="button" class="jd-star-cell ${val ? 'is-filled' : ''}" data-star-go="${esc(s.key)}">
+          const on = _starOpen === s.key;
+          return `<button type="button" class="jd-star-cell ${val ? 'is-filled' : ''} ${on ? 'is-open' : ''}"
+            data-star-go="${esc(s.key)}" aria-expanded="${on}">
           <div class="jd-star-key">${esc(s.key)}<span>${esc(s.label)}</span>
-            <span class="jd-star-mark">${val ? `${val.length}자` : '미작성'}</span>
+            ${_starCoach[s.key]
+              ? `<span class="jd-star-mark is-todo" title="${esc(_starCoach[s.key])}">더 적을 것</span>`
+              : `<span class="jd-star-mark">${val ? `${val.length}자` : '미작성'}</span>`}
           </div>
           <div class="jd-star-what">${esc(s.what)}</div>
           <div class="jd-star-check">${esc(s.check)}</div>
           <div class="jd-star-mine">${val
             ? esc(val.length > 90 ? `${val.slice(0, 90)}…` : val)
-            : '<span>누르면 여기에 적습니다</span>'}</div>
+            : `<span>${on ? '아래에 적으세요' : '누르면 여기에 적습니다'}</span>`}</div>
         </button>`;
         }).join('')}
       </div>
     </div>`;
   }
 
-  /* 띠는 저장된 값을 보여주므로 입력이 바뀌면 같이 다시 그린다. 입력 아코디언과
-     따로 그리는 이유는 위아래로 떨어져 있어 한쪽만 갱신되는 일이 잦기 때문이다. */
+  /* 띠는 저장된 값을 보여주므로 글자가 바뀌면 같이 다시 그린다.
+     **입력칸은 건드리지 않는다** — 타이핑 중에 다시 그리면 커서를 잃는다. */
   function repaintStarBand(box) {
     const host = box.querySelector('.jd-star-band');
     if (!host || !_last) return;
@@ -1216,90 +1222,87 @@
   function bindStarBand(box) {
     box.querySelectorAll('[data-star-go]').forEach(el => {
       el.addEventListener('click', () => {
-        _starOpen = el.dataset.starGo;
+        const k = el.dataset.starGo;
+        /* 열린 칸을 다시 누르면 접는다. 좁힌 것을 푸는 길이 같은 자리에 있어야
+           '닫기' 버튼을 따로 찾지 않는다. */
+        _starOpen = _starOpen === k ? null : k;
         repaintStarInput(box);
-        box.querySelector('.jd-starin')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       });
     });
   }
 
-  /* ── STAR 입력 아코디언 ──────────────────────────────────────
-     위 띠가 "뼈대가 무엇인가" 를 말한다면, 여기는 **그 뼈대에 내 경험을 직접 채우는
-     자리**다. AI 초안은 여기 적힌 문장을 재료로 쓴다.
-
-     ── 왜 한 번에 하나만 펼치나 ──
-     네 칸을 한꺼번에 열어 두면 화면이 길어지는 것보다 나쁜 일이 생긴다. S 를 대충 쓰고
-     A 로 건너뛰게 된다. STAR 는 앞 칸이 뒤 칸의 전제라(문제를 안 적으면 행동이 왜
-     필요했는지 쓸 수 없다) **순서대로 하나씩** 열리게 했다.
-
-     ── 칸마다 나쁜 예/고친 예를 같이 보여준다 ──
-     "구체적으로 쓰세요" 는 무엇을 고쳐야 하는지 알려주지 않는다. 틀린 문장과 고친
-     문장을 나란히 두는 편이 훨씬 빠르다. 문구는 서버(cover-guide.STAR_WRITE)가 주고,
-     **AI 프롬프트도 같은 표를 읽는다** — 따로 두면 화면이 시킨 것과 AI 가 쓴 것이 갈린다. */
+  /* 지금 열려 있는 STAR 칸. null 이면 아무 칸도 안 열린 상태다.
+     기본으로 S 를 열어 둔다 — 띠만 네 칸 떠 있으면 '어디에 적나' 를 한 번 더 찾는다. */
   let _starOpen = 'S';
   /* 마지막 AI 되짚기 — STAR 머리줄의 '더 적을 것' 배지가 읽는다.
      칸을 고치고 다시 돌리면 새 결과로 통째로 갈린다. */
   let _starCoach = {};
 
+  /* ── 고른 칸을 쓰는 자리 ────────────────────────────────────
+     예전에는 위 띠(설명)와 아래 아코디언(입력)이 따로 있었다. 같은 네 칸이 화면에
+     두 번 나오는 셈이라, 어디에 적는 것인지 한 번 더 찾아야 했다(사용자 지시).
+
+     이제 **띠가 곧 입력**이다. 칸을 누르면 바로 아래에 그 칸의 쓰는 자리가 열린다.
+     한 번에 하나만 연다 — 네 칸을 한꺼번에 열면 S 를 대충 쓰고 A 로 건너뛴다.
+     STAR 는 앞 칸이 뒤 칸의 전제라(문제를 안 적으면 행동이 왜 필요했는지 못 쓴다)
+     순서대로 하나씩 가는 편이 맞다.
+
+     ── 칸마다 나쁜 예/고친 예를 같이 보여준다 ──
+     "구체적으로 쓰세요" 는 무엇을 고쳐야 하는지 알려주지 않는다. 틀린 문장과 고친
+     문장을 나란히 두는 편이 훨씬 빠르다. 문구는 서버(cover-guide.STAR_WRITE)가 주고,
+     **AI 프롬프트도 같은 표를 읽는다** — 따로 두면 화면이 시킨 것과 AI 가 쓴 것이 갈린다.
+
+     아무 칸도 안 열렸을 때도 **빈 껍데기는 남긴다.** 다시 그릴 때 붙일 자리가 필요하다. */
   function starInputHtml(r) {
     const write = r.starWrite;
-    if (!write?.length) return '';
     const tab = (_lastTabs || [])[_tab];
-    if (!tab) return '';
+    if (!write?.length || !tab || !_starOpen) return '<div class="jd-starin"></div>';
 
-    const saved = getStar(tab.key);
-    const filled = STAR_KEYS.filter(k => (saved[k] || '').trim()).length;
+    const w = write.find(x => x.key === _starOpen);
+    if (!w) return '<div class="jd-starin"></div>';
+    const meta = (r.star || []).find(s => s.key === w.key) || {};
+    const val = getStar(tab.key)[w.key] || '';
+    const next = nextStarKey(w.key);
 
     return `<div class="jd-starin">
-      <div class="co-sec-h">
-        <h2>여기에 내 경험을 채우세요 — ${esc(tab.label)}</h2>
-        <span class="co-src">${filled}/4 칸 작성 · 이 브라우저에만 저장됩니다 ·
-          <b>AI 초안 넣기</b>가 이 내용을 읽습니다</span>
-      </div>
-      <div class="jd-starin-steps">
-        ${write.map(w => {
-          const meta = (r.star || []).find(s => s.key === w.key) || {};
-          const val = saved[w.key] || '';
-          const on = _starOpen === w.key;
-          return `
-          <div class="jd-si ${on ? 'is-open' : ''}" data-si="${esc(w.key)}">
-            <button type="button" class="jd-si-h" data-si-open="${esc(w.key)}">
-              <span class="jd-si-key">${esc(w.key)}</span>
-              <span class="jd-si-t">
-                <b>${esc(meta.label || '')}</b>
-                <span class="jd-si-ask">${esc(w.ask)}</span>
-              </span>
-              ${_starCoach[w.key]
-                ? `<span class="jd-si-state is-todo" title="${esc(_starCoach[w.key])}">더 적을 것</span>`
-                : `<span class="jd-si-state ${val.trim() ? 'is-done' : ''}">
-                     ${val.trim() ? `${val.trim().length}자` : '미작성'}
-                   </span>`}
+      <div class="jd-si is-open" data-si="${esc(w.key)}">
+        <div class="jd-si-body">
+          <div class="jd-si-open-h">
+            <span class="jd-si-key">${esc(w.key)}</span>
+            <span class="jd-si-t">
+              <b>${esc(meta.label || '')}</b>
+              <span class="jd-si-ask">${esc(w.ask)}</span>
+            </span>
+            <span class="jd-si-scope">${esc(tab.label)}</span>
+            <button type="button" class="jd-si-close" data-si-close aria-label="접기">
+              <i class="ti ti-x"></i>
             </button>
-            <div class="jd-si-body">
-              <p class="jd-si-hint">${bold(w.hint)}</p>
-              <div class="jd-si-ex">
-                <div class="jd-si-ex-row jd-si-ex--bad">
-                  <span class="jd-si-ex-tag">이렇게 쓰면 탈락</span>
-                  <p>${esc(w.bad)}</p>
-                </div>
-                <div class="jd-si-ex-row jd-si-ex--good">
-                  <span class="jd-si-ex-tag">이렇게</span>
-                  <p>${esc(w.good)}</p>
-                </div>
-              </div>
-              <textarea class="jd-si-ta" data-si-key="${esc(w.key)}" rows="5"
-                placeholder="${esc(w.ask)}">${esc(val)}</textarea>
-              <div class="jd-si-foot">
-                <span class="jd-si-saved" data-si-saved="${esc(w.key)}"></span>
-                ${nextStarKey(w.key)
-                  ? `<button type="button" class="wf-btn wf-btn--sm" data-si-next="${esc(nextStarKey(w.key))}">
-                       저장하고 ${esc(nextStarKey(w.key))} 쓰기 <i class="ti ti-arrow-down"></i>
-                     </button>`
-                  : `<span class="jd-si-done">네 칸을 다 채웠으면 아래 <b>AI 초안 넣기</b>를 누르세요</span>`}
-              </div>
+          </div>
+          ${_starCoach[w.key]
+            ? `<p class="jd-si-coach"><b>더 적을 것</b> ${esc(_starCoach[w.key])}</p>`
+            : ''}
+          <p class="jd-si-hint">${bold(w.hint)}</p>
+          <div class="jd-si-ex">
+            <div class="jd-si-ex-row jd-si-ex--bad">
+              <span class="jd-si-ex-tag">이렇게 쓰면 탈락</span>
+              <p>${esc(w.bad)}</p>
             </div>
-          </div>`;
-        }).join('')}
+            <div class="jd-si-ex-row jd-si-ex--good">
+              <span class="jd-si-ex-tag">이렇게</span>
+              <p>${esc(w.good)}</p>
+            </div>
+          </div>
+          <textarea class="jd-si-ta" data-si-key="${esc(w.key)}" rows="6"
+            placeholder="${esc(w.ask)}">${esc(val)}</textarea>
+          <div class="jd-si-foot">
+            <span class="jd-si-saved" data-si-saved="${esc(w.key)}"></span>
+            ${next
+              ? `<button type="button" class="wf-btn wf-btn--sm" data-si-next="${esc(next)}">
+                   저장하고 ${esc(next)} 쓰기 <i class="ti ti-arrow-right"></i>
+                 </button>`
+              : `<span class="jd-si-done">네 칸을 다 채웠으면 아래 <b>AI 초안 넣기</b>를 누르세요</span>`}
+          </div>
+        </div>
       </div>
     </div>`;
   }
@@ -1312,13 +1315,9 @@
     const tab = (_lastTabs || [])[_tab];
     if (!tab) return;
 
-    box.querySelectorAll('[data-si-open]').forEach(el => {
-      el.addEventListener('click', () => {
-        const k = el.dataset.siOpen;
-        _starOpen = (_starOpen === k) ? null : k;   // 열린 것을 다시 누르면 접는다
-        repaintStarInput(box);
-      });
-    });
+    /* 칸을 여닫는 것은 위 띠(bindStarBand)가 한다 — 아코디언 머리줄은 없앴다. */
+    const close = box.querySelector('[data-si-close]');
+    if (close) close.addEventListener('click', () => { _starOpen = null; repaintStarInput(box); });
 
     box.querySelectorAll('[data-si-next]').forEach(el => {
       el.addEventListener('click', () => {
@@ -1337,16 +1336,9 @@
         timer = setTimeout(() => {
           saveStar(tab.key, key, ta.value);
           if (state) state.textContent = `저장됨 · ${ta.value.trim().length}자`;
-          /* 머리줄의 '미작성/N자' 도 같이 고친다 — 접었을 때 보이는 유일한 표시라
-             안 바꾸면 다 쓰고 접었는데 '미작성' 으로 남는다. */
-          const head = box.querySelector(`[data-si-open="${key}"] .jd-si-state`);
-          if (head) {
-            const n = ta.value.trim().length;
-            head.textContent = n ? `${n}자` : '미작성';
-            head.classList.toggle('is-done', Boolean(n));
-          }
-          /* 위 띠도 같은 값을 보여준다. 한쪽만 고치면 같은 화면에 '미작성' 과
-             '120자' 가 동시에 떠서 어느 쪽이 맞는지 알 수 없다. */
+          /* 위 띠의 '미작성/N자' 와 미리보기를 같이 고친다. 한쪽만 고치면 같은 화면에
+             '미작성' 과 '120자' 가 동시에 떠서 어느 쪽이 맞는지 알 수 없다.
+             **입력칸은 다시 그리지 않는다** — 타이핑 중에 갈면 커서를 잃는다. */
           repaintStarBand(box);
         }, 600);
       });
@@ -1358,9 +1350,10 @@
   function repaintStarInput(box) {
     const host = box.querySelector('.jd-starin');
     if (!host || !_last) return;
-    const fresh = document.createRange().createContextualFragment(starInputHtml(_last));
-    host.replaceWith(fresh);
+    host.replaceWith(document.createRange().createContextualFragment(starInputHtml(_last)));
     bindStarInput(box);
+    /* 띠의 '열림' 표시도 같이 갈아야 한다 — 안 그러면 방금 접은 칸이 열린 채로 보인다. */
+    repaintStarBand(box);
     const open = box.querySelector('.jd-si.is-open .jd-si-ta');
     if (open) open.focus();
   }

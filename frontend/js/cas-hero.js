@@ -229,13 +229,18 @@ window.CASHero = (() => {
         help: '로그인 후 스펙을 입력하면 선배 데이터와 비교해 점수를 계산해 드려요.' };
     }
     const savedSpec = DB.getSpec(user.username);
-    if (!savedSpec || !savedSpec.dept) {
+    /* dept 로 판단하지 않는다 — 그건 우리가 학과명에서 자동으로 정하는 집계 분류라
+       간호·어문처럼 계열 통계가 없는 학과는 애초에 비어 있다(cas.js hasAnySpec). */
+    if (!CAS.hasAnySpec(savedSpec)) {
       return { ok: false, reason: 'spec', msg: '아직 스펙을 입력하지 않았어요.',
         help: '마이페이지에서 학점·어학·경험을 입력하면 점수가 계산됩니다.' };
     }
 
     const rm = Roadmap.get();
 
+    /* 목표 직무가 있으면 **dept 없이도 채점된다** — roadmapBenchmark 는 로드맵이 정한
+       모집단만 쓴다. 그래서 dept 검사는 이 뒤에 둔다. 앞에 두었더니 계열 통계가 없는
+       학과 사람이 목표 직무를 골라 놓고도 "스펙을 입력하지 않았어요" 를 봤다. */
     if (rm && KECO.ready()) {
       const b = roadmapBenchmark();
       if (!b || !b.agg) {
@@ -250,6 +255,14 @@ window.CASHero = (() => {
         catalogIds: (Aggregator.CERT_CATALOG[b.certKey] || []).map(c => c.id),
         roadmap: rm, source: 'roadmap',
       } };
+    }
+
+    /* 여기부터는 **저장된 학과 기준**이다. 계열 통계가 없으면 낼 수 없는데, 그건
+       스펙이 없는 것과 다른 상황이라 다르게 말한다 — 저장은 됐다고 분명히 알린다. */
+    if (!savedSpec.dept) {
+      return { ok: false, reason: 'no-dept', msg: '이 학과는 아직 계열 통계가 없어요.',
+        help: '스펙은 저장돼 있어요. 위 ‘비교 직무’ 에서 목표 직무군을 고르면 '
+            + '그 직무 선배들과 비교해 점수를 내 드립니다.' };
     }
 
     /* 벤치마크는 좁은 조건부터(직무 → 분야 → 학과) 넓혀 간다.

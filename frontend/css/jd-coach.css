@@ -1268,6 +1268,49 @@ a.wf-btn { text-decoration: none; }
 
 /* 접힌 칸은 머리줄만 남는다 — STAR 는 앞 칸이 뒤 칸의 전제라 한 번에 하나만 연다 */
 .jd-si-body { display: none; padding: 0 16px 16px; }
+/* ── 띠에서 바로 쓰기 (사용자 지시 2026-08-21) ────────────────
+   설명 띠와 입력 아코디언이 따로 있던 것을 하나로 합쳤다. 칸을 누르면 그 아래에
+   쓰는 자리가 열린다 — 같은 네 칸이 화면에 두 번 나오지 않는다. */
+.jd-star-cell.is-open {
+  background: var(--wf-canvas);
+  box-shadow: inset 0 -3px 0 var(--star-accent, var(--wf-ink));
+}
+.jd-star-mark.is-todo { color: var(--wf-error); font-weight: 600; }
+
+/* 띠 바로 아래에 붙는 입력 상자. 띠와 한 덩어리로 읽혀야 하므로 위쪽 여백을 없애고
+   테두리로 묶는다. */
+.jd-starin { margin-top: -1px; margin-bottom: 16px; }
+.jd-starin:empty { display: none; }
+.jd-starin .jd-si {
+  border: 1px solid var(--wf-hairline); border-top: 0;
+  border-radius: 0 0 var(--wf-r-md) var(--wf-r-md);
+  background: var(--wf-canvas);
+}
+.jd-starin .jd-si-body { padding: 16px; }
+
+/* 어느 칸을 쓰고 있는지 — 띠에서 눌러 왔더라도 여기서 한 번 더 밝힌다.
+   스크롤로 띠가 화면 밖으로 나가면 무엇을 쓰는 중인지 알 수 없다. */
+.jd-si-open-h {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding-bottom: 12px; margin-bottom: 12px;
+  border-bottom: 1px solid var(--wf-hairline);
+}
+.jd-si-scope { margin-left: auto; font-size: 12px; color: var(--wf-mute); }
+.jd-si-close {
+  flex: none; width: 26px; height: 26px; padding: 0;
+  display: grid; place-items: center; cursor: pointer;
+  border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-sm);
+  background: none; color: var(--wf-mute);
+}
+.jd-si-close:hover { color: var(--wf-ink); border-color: var(--wf-ink); }
+/* AI 되짚기가 "더 적을 것" 을 짚어 준 칸 — 쓰기 전에 읽어야 하므로 예시보다 위에 둔다 */
+.jd-si-coach {
+  margin-bottom: 10px; padding: 9px 11px;
+  border: 1px solid var(--wf-error); border-radius: var(--wf-r-sm);
+  font-size: 12.8px; line-height: 1.65; color: var(--wf-body-mid);
+}
+.jd-si-coach b { margin-right: 6px; color: var(--wf-error); }
+
 .jd-si.is-open .jd-si-body { display: block; }
 
 .jd-si-hint { font-size: 12.8px; line-height: 1.7; color: var(--wf-body-mid); margin-bottom: 10px; }
