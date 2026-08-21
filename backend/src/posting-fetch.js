@@ -56,10 +56,28 @@ function isPrivateIp(ip, family) {
     || /^fe[89ab]/.test(s);        // 링크로컬
 }
 
+/* ── https:// 가 빠진 주소를 받아 준다 (사용자 지적 2026-08-21) ──
+   브라우저 주소창에서 복사하면 스킴이 빠지는 일이 흔하다(크롬은 https:// 를 숨겨서
+   보여준다). 실제로 `saramin.co.kr/zf_user/...` 를 붙여넣었더니 '주소 형식이
+   아닙니다' 가 떴다 — 사용자 입장에서는 멀쩡한 주소를 거절당한 것이다.
+
+   점이 있는 호스트꼴일 때만 https 를 붙인다. 아무 글자에나 붙이면 '안녕' 이
+   `https://안녕` 이 되어 '주소를 찾을 수 없습니다' 로 엉뚱하게 흘러간다 —
+   그건 형식 오류로 잡히는 편이 맞다.
+
+   스킴이 이미 있으면 손대지 않는다. `file:` 은 아래 프로토콜 검사가 잡는다. */
+function normalizeUrl(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return '';
+  if (/^[a-z][a-z0-9+.-]*:/i.test(s)) return s;
+  if (!/^[^\s/?#]+\.[^\s/?#]/.test(s)) return s;
+  return `https://${s}`;
+}
+
 /* 주소가 열어도 되는 것인지. 통과하면 null, 아니면 사유 문자열. */
 async function urlProblem(raw) {
   let u;
-  try { u = new URL(raw); } catch { return '주소 형식이 아닙니다.'; }
+  try { u = new URL(normalizeUrl(raw)); } catch { return '주소 형식이 아닙니다.'; }
   if (u.protocol !== 'https:' && u.protocol !== 'http:') return 'http · https 주소만 열 수 있습니다.';
   if (!u.hostname) return '주소에 호스트가 없습니다.';
 
@@ -138,13 +156,41 @@ function trimLead(text) {
   return text.slice(lineStart).trim();
 }
 
+/* ── 진짜 공고 주소를 한 번 따라간다 (실측 2026-08-21) ──────────
+   사용자가 준 사람인 주소(`jobs/relay/view?...`)는 열리기는 하는데 내용이 메뉴뿐이다
+   — 본문이 iframe 안에 있다. 그런데 그 페이지가 스스로 진짜 주소를 알려 준다:
+
+     <link rel="canonical" href="https://www.saramin.co.kr/zf_user/jobs/view?rec_idx=…">
+
+   canonical·og:url 은 **웹 표준**이라 사이트별 파서를 만드는 것과 다르다(25-2 에서
+   안 하기로 한 것은 사이트마다 선택자를 손으로 짜는 쪽이다). 검색엔진이 중복 페이지를
+   가릴 때 쓰는 그 값을 그대로 읽는다.
+
+   따라간 쪽이 **더 나을 때만** 쓴다. 한 번만 따라간다(canonical 이 서로를 가리키면
+   끝나지 않는다). 따라간 주소도 fetchPosting 이 처음부터 다시 검사하므로 SSRF 안전은
+   그대로다. */
+function canonicalOf(html, base) {
+  const s = String(html || '');
+  const tag = s.match(/<link[^>]+rel=["']?canonical["']?[^>]*>/i)
+    || s.match(/<meta[^>]+property=["']og:url["'][^>]*>/i);
+  if (!tag) return null;
+  const attr = tag[0].match(/(?:href|content)=["']([^"']+)["']/i);
+  if (!attr) return null;
+  let u;
+  try { u = new URL(attr[1], base); } catch { return null; }
+  const norm = x => String(x).replace(/#.*$/, '').replace(/\/$/, '');
+  return norm(u) === norm(base) ? null : u.toString();
+}
+
 /* ── 가져오기 ────────────────────────────────────────────
    실패를 kind 로 가른다. 같은 '안 됨' 이라도 사용자가 할 일이 다르다. */
-async function fetchPosting(raw) {
+async function fetchPosting(raw, canonTried = false) {
   const bad = await urlProblem(raw);
   if (bad) return { ok: false, kind: 'bad-url', message: bad };
 
-  let url = raw;
+  /* 한글이 든 쿼리는 URL 이 알아서 퍼센트 인코딩한다 — 원문을 그대로 fetch 에
+     넘기면 서버에 따라 400 이 온다. */
+  let url = new URL(normalizeUrl(raw)).toString();
   for (let hop = 0; hop <= MAX_HOPS; hop++) {
     let res;
     try {
@@ -200,6 +246,18 @@ async function fetchPosting(raw) {
 
     const html = (await res.text()).slice(0, MAX_BYTES);
     const text = trimLead(extractText(html));
+    const weak = postingHits(text) < 2;
+
+    /* 얇거나 공고 같지 않으면 canonical 을 한 번 따라가 본다. 따라간 쪽이 더 나을
+       때만 바꾼다 — 아니면 원래 것을 그대로 준다(빈손으로 돌려보내지 않는다). */
+    if (!canonTried && (text.length < MIN_CHARS || weak)) {
+      const canon = canonicalOf(html, url);
+      if (canon) {
+        const better = await fetchPosting(canon, true);
+        if (better.ok && !better.weak) return better;
+      }
+    }
+
     if (text.length < MIN_CHARS) {
       return {
         ok: false, kind: 'empty',
@@ -207,14 +265,13 @@ async function fetchPosting(raw) {
         message: '페이지는 열렸는데 본문 글을 찾지 못했어요 — 공고가 이미지이거나, 화면에서 그려지는 방식일 수 있어요.',
       };
     }
-    /* weak = 가져오긴 했는데 공고 같지 않다. 화면이 다른 색으로 경고한다. */
-    return { ok: true, text, title: titleOf(html), url, weak: postingHits(text) < 2 };
+    return { ok: true, text, title: titleOf(html), url, weak };
   }
 
   return { ok: false, kind: 'error', message: '주소가 계속 다른 곳으로 넘겨서 멈췄어요.' };
 }
 
 module.exports = {
-  fetchPosting, extractText, titleOf, urlProblem,
+  fetchPosting, extractText, titleOf, urlProblem, normalizeUrl, canonicalOf,
   postingHits, trimLead, _MIN_CHARS: MIN_CHARS,
 };
