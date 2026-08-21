@@ -13,6 +13,7 @@ const { CORP_TYPE_ID } = require('./company-classify');
    company-classify·wage-jobs)은 수집·이관 전용으로 남는다 — catalog-db.js 머리주석 참고. */
 const catalog = require('./catalog-db');
 const sectors = require('./company-sectors');
+const POSTING = require('./posting-fetch');
 const OAuth = require('./oauth');
 const NiceAuth = require('./nice-auth');
 const recommendationsRouter = require("./routes/recommendations");
@@ -77,6 +78,7 @@ app.use("/api/cas", casAnalyzeRouter);
 /* 직무 적합도 — 업무특성 기준 채점. AI 는 매칭만 하고 점수는 cas-fit.js 가 낸다. */
 app.use("/api/cas", casFitRouter);
 app.use("/api/jd", jdCoachRouter);
+
 /* 기업분석(뉴스+DART)은 /api/company/analysis 하나다. 같은 접두사의 classify·suggest 는
    아래쪽에 app.get 으로 따로 있는데, 경로가 겹치지 않아 순서 문제가 생기지 않는다. */
 app.use("/api/company", companyAnalysisRouter);
@@ -388,6 +390,53 @@ function checkRateLimited(ip) {
   hit.count += 1;
   return hit.count > CHECK_MAX_PER_WINDOW;
 }
+
+/* ── 채용공고 주소 → 본문 ────────────────────────────────────
+   자소서 코치는 공고 원문이 있어야 역량을 뽑는데, 요즘 공고는 **복사를 막아 둔 곳이
+   많다**(사용자 지적). 그 차단은 거의 전부 클라이언트 JS 라 서버가 열면 없는 것과
+   같다 — 주소만 받으면 된다.
+
+   ── 왜 라우터가 아니라 여기 있나 ──
+   **로그인을 요구해야 하기 때문**이다. 사용자가 준 주소를 서버가 대신 여는 기능은
+   열어 두면 우리 서버가 남의 요청을 대신 보내 주는 통로가 된다(익명 프록시·스캐너).
+   requireAuth 는 이 파일에 있고 라우터로 넘기면 순환 참조가 된다.
+   라우터 등록(app.use)에서 멀리 떨어져 있는 이유는 ah 가 const 라 그 아래에서만
+   쓸 수 있기 때문이다 — 위에 두면 서버가 뜨다가 죽는다.
+   내부망 차단은 posting-fetch.js 가 따로 한다(SSRF).
+
+   횟수도 제한한다. 사람이 공고를 붙여넣는 빈도는 몇 분에 몇 번이다. */
+const postingHits = new Map();            // userId → { count, resetAt }
+const POSTING_WINDOW_MS = 5 * 60 * 1000;
+const POSTING_MAX_PER_WINDOW = 15;
+
+function postingRateLimited(key) {
+  const now = Date.now();
+  const hit = postingHits.get(key);
+  if (!hit || now > hit.resetAt) {
+    postingHits.set(key, { count: 1, resetAt: now + POSTING_WINDOW_MS });
+    if (postingHits.size > 1000) {
+      for (const [k, v] of postingHits) if (now > v.resetAt) postingHits.delete(k);
+    }
+    return false;
+  }
+  hit.count += 1;
+  return hit.count > POSTING_MAX_PER_WINDOW;
+}
+
+app.post('/api/jd/posting', requireAuth, ah(async (req, res) => {
+  const url = typeof req.body?.url === 'string' ? req.body.url.trim() : '';
+  if (!url) return res.status(400).json({ error: '공고 주소를 입력해 주세요.', kind: 'bad-url' });
+
+  if (postingRateLimited(req.user.id)) {
+    return res.status(429).json({ error: '요청이 너무 많아요. 잠시 후 다시 시도해 주세요.', kind: 'error' });
+  }
+
+  const r = await POSTING.fetchPosting(url);
+  /* 실패 사유를 그대로 올린다 — 로그인 벽·이미지 공고·본문 못 찾음은 사용자가 할 일이
+     다르다(18-4 와 같은 원칙). 화면이 사유별로 다른 안내를 붙인다. */
+  if (!r.ok) return res.status(422).json({ error: r.message, kind: r.kind, title: r.title || null });
+  res.json({ ok: true, text: r.text, title: r.title, url: r.url, weak: r.weak });
+}));
 
 app.get('/api/auth/check-username', ah(async (req, res) => {
   const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';

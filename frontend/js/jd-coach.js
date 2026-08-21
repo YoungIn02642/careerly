@@ -534,9 +534,84 @@
     return body.length ? 'full' : 'head';
   }
 
+  /* ── 공고 주소로 본문 가져오기 ──────────────────────────────
+     복사를 막아 둔 공고 때문에 있다(사용자 지적). 그 차단은 브라우저에서만 걸리므로
+     서버가 열면 원문이 그대로 온다.
+
+     ── 가져온 글을 바로 분석하지 않는다 ──
+     입력칸에 **채워 넣기만** 하고 멈춘다. 페이지에는 공고 말고도 회사 소개·푸터가
+     섞여 들어오는데, 그대로 AI 에 넘기면 엉뚱한 문장이 역량의 근거로 붙는다
+     (18-7 에서 겪은 실패 모드 — 에러가 안 나고 그럴듯해서 더 나쁘다).
+     사람이 보고 지운 뒤 누르게 한다.
+
+     이미 적어 둔 것이 있으면 덮어쓰기 전에 묻는다. */
+  function urlMsg(kind, text) {
+    const box = $('#jd-url-msg');
+    if (!box) return;
+    box.hidden = !text;
+    box.className = `jd-url-msg${kind ? ` jd-url-msg--${kind}` : ''}`;
+    box.textContent = text || '';
+  }
+
+  /* 실패 사유마다 사용자가 할 일이 다르다 — 같은 '안 됨' 으로 뭉치지 않는다(18-4). */
+  const URL_HELP = {
+    blocked: '로그인해야 보이는 공고예요. 그 페이지에서 Ctrl+A → Ctrl+C 로 복사해 붙여넣어 주세요.',
+    image:   '이미지로 된 공고는 아직 글자를 읽지 못해요. 직접 옮겨 적거나, 사이트의 텍스트 공고를 찾아 주세요.',
+    empty:   '화면에서 그려지는 공고 같아요. 그 페이지에서 Ctrl+A → Ctrl+C 로 복사해 붙여넣어 주세요.',
+    gone:    '마감돼 내려간 공고일 수 있어요. 주소를 다시 확인해 주세요.',
+  };
+
+  async function fetchPostingUrl() {
+    const input = $('#jd-url');
+    const btn = $('#jd-url-go');
+    const ta = $('#jd-text');
+    if (!input || !ta) return;
+
+    const url = input.value.trim();
+    if (!url) { urlMsg('warn', '공고 주소를 붙여넣어 주세요.'); input.focus(); return; }
+    if (ta.value.trim() && !confirm('공고 칸에 적어 둔 글이 있어요. 가져온 내용으로 바꿀까요?')) return;
+
+    if (btn) { btn.disabled = true; btn.textContent = '가져오는 중…'; }
+    urlMsg('', '');
+    try {
+      const r = await DB.jdPosting(url);
+      ta.value = r.text;
+      autoGrow(ta);
+      STEPS.forEach(paintBlock);
+      paintProgress();
+      /* 확인하고 지우라고 분명히 말한다 — 그대로 분석을 누르면 푸터까지 근거가 된다.
+         weak 는 "가져오긴 했는데 공고 같지 않다" 다. 사람인처럼 상세가 iframe 안에 있으면
+         메뉴·안내문만 1,000자 넘게 딸려 온다 — 길이만 보면 성공이라 더 위험하다. */
+      const head = r.title ? `“${r.title}” ` : '';
+      const size = r.text.length.toLocaleString();
+      if (r.weak) {
+        urlMsg('warn', `${head}페이지는 가져왔는데(${size}자) 공고 본문이 아닌 것 같아요 — `
+          + '메뉴·안내문만 담겼을 수 있습니다. 내용을 확인하시고, 아니면 그 페이지에서 '
+          + 'Ctrl+A → Ctrl+C 로 복사해 붙여넣어 주세요.');
+      } else {
+        urlMsg('ok', `${head}본문을 가져왔어요 (${size}자). `
+          + '공고와 상관없는 부분(회사 소개·메뉴)은 지우고 분석해 주세요.');
+      }
+      ta.focus();
+    } catch (e) {
+      urlMsg('warn', `${e.message}${URL_HELP[e.kind] ? ` ${URL_HELP[e.kind]}` : ''}`);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '가져오기'; }
+    }
+  }
+
   function init() {
     const runBtn = $('#jd-run');
     if (runBtn) runBtn.addEventListener('click', run);
+
+    const urlBtn = $('#jd-url-go');
+    if (urlBtn) urlBtn.addEventListener('click', fetchPostingUrl);
+    const urlInput = $('#jd-url');
+    /* 주소를 붙여넣고 Enter 를 누르는 게 자연스럽다. 폼이 아니라 submit 이 없으므로
+       직접 잡아 준다. */
+    if (urlInput) urlInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); fetchPostingUrl(); }
+    });
 
     const sampleBtn = $('#jd-sample');
     if (sampleBtn) sampleBtn.addEventListener('click', () => {
