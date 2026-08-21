@@ -196,6 +196,34 @@ function ok(name, cond, extra = '') {
   ok('공고 낱말이 없으면 꼬리를 안 자른다',
      P.denoise('그냥 글\n기업리뷰\n어쩌고').includes('기업리뷰'));
 
+
+  console.log('\n── 9. 본문이 딴 주소에 있을 때 (끼워 넣는 내용) ──');
+  /* 실측: 잡코리아 공고를 열면 요약표(모집분야·경력·학력·마감일)만 온다. 담당업무와
+     자격요건 상세는 '상세요강' 탭이 따로 불러오는 주소 안에 있다. */
+  const jkBase = 'https://www.jobkorea.co.kr/Recruit/GI_Read/49798770?Oem_Code=C1&sc=225';
+  const jkHtml = `<html><body>
+    <script>var u = "/Recruit/GI_Read_Comt_Ifrm?Oem_Code=C1\u0026sc=225\u0026Gno=49798770";</script>
+    <a href="/Recruit/Co_Read/C/161720?Oem_Code=C1">다른 회사</a>
+    </body></html>`;
+  const embeds = P.embedUrls(jkHtml, jkBase);
+  ok('끼워 넣는 주소를 찾는다', embeds.length === 1, `→ ${embeds.length}개`);
+  ok('escape 된 &를 푼다', embeds[0] && embeds[0].includes('&sc=225&Gno='),
+     `→ ${embeds[0] || '없음'}`);
+  ok('상대 주소를 절대 주소로 편다', embeds[0] && embeds[0].startsWith('https://www.jobkorea.co.kr/'));
+  /* 남의 사이트로 나가면 그건 공고가 아니라 광고다. */
+  ok('다른 사이트 주소는 안 따라간다',
+     P.embedUrls('<iframe src="https://ads.example.com/x?a=1"></iframe>', jkBase).length === 0);
+  ok('자기 자신은 후보가 아니다', !embeds.includes(jkBase));
+
+  console.log('\n── 10. escape 된 주소를 같은 주소로 본다 ──');
+  /* HTML 속성의 canonical 은 &amp; 로 escape 돼 있다. 안 풀면 같은 페이지를 다른
+     주소로 보고 한 번 더 받는다 — 실측으로 잡코리아가 여기서 멈춰, 정작 본문이 있는
+     상세요강까지 못 갔다. */
+  ok('&amp; 를 풀어 같은 주소로 본다',
+     P.canonicalOf(`<link rel="canonical" href="https://a.com/x?p=1&amp;q=2">`, 'https://a.com/x?p=1&q=2') === null);
+  ok('진짜 다르면 따라간다',
+     P.canonicalOf('<link rel="canonical" href="https://a.com/real?p=1">', 'https://a.com/x?p=1') === 'https://a.com/real?p=1');
+
   console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
   process.exit(fail ? 1 : 0);
 })();
