@@ -1,14 +1,39 @@
 {
   "note": "회사 자사 채용페이지 URL. 손으로 채우는 표다 — 추측해서 넣지 않는다(/recruit·/careers 를 찍으면 404 를 뿌린다). 넣기 전에 backend/scripts/check-career-pages.js 로 실제로 열리는지 확인한다.",
+  "groupNote": "groupPortals 는 그룹 통합 채용 사이트다. 계열사를 붙일 때도 추정하지 않았다 — 포털 페이지를 실제로 받아서 그 계열사 이름이 실려 있는 것만 넣었다(2026-08-21 확인). 롯데쇼핑·롯데정밀화학은 포털에 이름이 없어 넣지 않았고, 현대차그룹은 대기열 페이지만 내려와 확인하지 못해 현대자동차 한 곳만 두었다.",
   "checkedAt": "2026-08-21",
+  "groupPortals": [
+    "https://www.samsungcareers.com",
+    "https://recruit.lotte.co.kr"
+  ],
   "pages": {
     "삼성전자": "https://www.samsungcareers.com",
+    "삼성물산": "https://www.samsungcareers.com",
+    "삼성전기": "https://www.samsungcareers.com",
+    "삼성에스디에스": "https://www.samsungcareers.com",
+    "삼성증권": "https://www.samsungcareers.com",
+    "삼성카드": "https://www.samsungcareers.com",
+    "삼성화재해상보험": "https://www.samsungcareers.com",
+    "삼성바이오로직스": "https://www.samsungcareers.com",
+    "삼성중공업": "https://www.samsungcareers.com",
+
+    "롯데지주": "https://recruit.lotte.co.kr",
+    "롯데케미칼": "https://recruit.lotte.co.kr",
+    "롯데칠성음료": "https://recruit.lotte.co.kr",
+    "롯데웰푸드": "https://recruit.lotte.co.kr",
+    "롯데하이마트": "https://recruit.lotte.co.kr",
+    "롯데렌탈": "https://recruit.lotte.co.kr",
+    "롯데이노베이트": "https://recruit.lotte.co.kr",
+
     "현대자동차": "https://talent.hyundai.com",
+    "현대백화점": "https://recruit.ehyundai.com",
     "카카오": "https://careers.kakao.com",
+    "카카오뱅크": "https://recruit.kakaobank.com",
     "케이티": "https://recruit.kt.com",
     "신세계": "https://job.shinsegae.com",
     "대한항공": "https://recruit.koreanair.co.kr",
     "하이브": "https://careers.hybecorp.com",
-    "롯데지주": "https://recruit.lotte.co.kr"
+    "농심": "https://recruit.nongshim.com",
+    "대우건설": "https://recruit.daewooenc.com"
   }
 }

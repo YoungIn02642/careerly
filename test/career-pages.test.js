@@ -22,11 +22,18 @@ ok('표가 비어 있지 않다', entries.length > 0, `→ ${entries.length}곳`
 ok('전부 https 다', entries.every(([, u]) => /^https:\/\//.test(u)),
    `→ ${entries.filter(([, u]) => !/^https:\/\//.test(u)).map(([n]) => n).join(', ') || '전부 통과'}`);
 ok('중복된 회사가 없다', new Set(entries.map(([n]) => n)).size === entries.length);
-ok('같은 URL 을 두 회사가 쓰지 않는다',
-   new Set(entries.map(([, u]) => u)).size === entries.length,
-   /* 그룹 통합 채용이면 있을 수 있다. 그때는 이 테스트를 고치되 **왜 같은지**를
-      같이 적는다 — 복사·붙여넣기 실수와 구분이 안 되기 때문이다. */
-   '(그룹 통합이면 사유를 적고 고칠 것)');
+/* 같은 URL 을 여러 회사가 쓰는 것은 **그룹 통합 채용일 때만** 맞다. 그게 아니면
+   복사·붙여넣기 실수다 — 둘은 눈으로 구분이 안 되므로, 통합 포털은 groupPortals 에
+   적어 두게 하고 거기 없는 중복만 잡는다. */
+const portals = new Set(table.groupPortals || []);
+const dupes = Object.entries(
+  entries.reduce((m, [, u]) => (m[u] = (m[u] || 0) + 1, m), {}))
+  .filter(([u, n]) => n > 1 && !portals.has(u));
+ok('중복 URL 은 그룹 통합 포털뿐이다', dupes.length === 0,
+   dupes.length ? `→ groupPortals 에 없는 중복: ${dupes.map(([u]) => u).join(', ')}` : `→ 통합 포털 ${portals.size}곳`);
+ok('groupPortals 는 실제로 쓰이고 있다',
+   [...portals].every(u => entries.some(([, v]) => v === u)),
+   '(안 쓰는 포털이 남아 있으면 표가 썩는다)');
 
 console.log('\n── 2. 이름이 우리 회사 목록에 있는가 ──');
 const tree = S.industryTree();
