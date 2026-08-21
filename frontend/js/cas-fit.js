@@ -155,7 +155,7 @@ window.CASFit = (() => {
             </div>`).join('')}
         </div>
         <p class="fit-hint">이 직업에서 중요도가 높은데 <b>아직 근거가 없는</b> 항목이에요.
-          <a onclick="navigate('specup')">스펙 채우기</a>에서 무엇을 신청할지 고를 수 있어요.</p>
+          <a onclick="navigate('specup')">스펙UP</a>에서 무엇을 신청할지 고를 수 있어요.</p>
       </div>`;
   }
 

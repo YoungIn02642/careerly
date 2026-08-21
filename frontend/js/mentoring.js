@@ -678,7 +678,7 @@ function renderRoadmapNext(mine, pct) {
   const fillBtn = `
     <button type="button" class="rm-next-btn ${lacking ? '' : 'rm-next-btn--ghost'}"
             onclick="navigate('specup')">
-      <i class="ti ti-pencil-plus"></i> 스펙 채우기
+      <i class="ti ti-pencil-plus"></i> 스펙UP
     </button>`;
   const applyBtn = `
     <button type="button" class="rm-next-btn ${lacking ? 'rm-next-btn--ghost' : ''}"
