@@ -102,6 +102,43 @@ function ok(name, cond, extra = '') {
   ok('머리가 짧으면 그대로 둔다', P.trimLead('프론트엔드 개발자\n[주요업무]\n- 개발').startsWith('프론트엔드'));
   ok('공고 낱말이 없으면 그대로 둔다', P.trimLead(junk) === junk);
 
+
+  console.log('\n── 6. https:// 가 빠진 주소 (사용자 지적) ──');
+  /* 크롬은 주소창에서 https:// 를 숨긴다. 그대로 복사하면 스킴이 없는 주소가 되는데,
+     예전에는 '주소 형식이 아닙니다' 로 거절했다 — 사용자에게는 멀쩡한 주소다. */
+  ok('스킴이 없으면 https 를 붙인다',
+     P.normalizeUrl('saramin.co.kr/zf_user/jobs/view?rec_idx=1') === 'https://saramin.co.kr/zf_user/jobs/view?rec_idx=1');
+  ok('www 도 붙인다', P.normalizeUrl('www.jobkorea.co.kr/x') === 'https://www.jobkorea.co.kr/x');
+  ok('스킴이 있으면 손대지 않는다', P.normalizeUrl('http://a.com/x') === 'http://a.com/x');
+  /* 점이 없으면 주소가 아니다. https 를 붙이면 '주소를 찾을 수 없습니다' 로 엉뚱하게
+     흘러간다 — 형식 오류로 잡히는 편이 맞다. */
+  ok('점이 없는 글자에는 안 붙인다', P.normalizeUrl('그냥 글자') === '그냥 글자');
+  ok('빈 값은 빈 값', P.normalizeUrl('') === '' && P.normalizeUrl(null) === '');
+  ok('스킴 없는 주소도 통과한다', (await P.urlProblem('saramin.co.kr/x')) === null);
+  /* 보정이 SSRF 를 무르지 않는다 — 여기가 뚫리면 위 1번이 무의미해진다. */
+  ok('보정해도 내부망은 막힌다', typeof (await P.urlProblem('127.0.0.1/admin')) === 'string');
+  ok('file 은 스킴이 있으니 그대로 막힌다', typeof (await P.urlProblem('file:///etc/passwd')) === 'string');
+
+  console.log('\n── 7. 진짜 공고 주소를 따라간다 (canonical) ──');
+  /* 실측: 사람인 relay 주소는 메뉴만 1,280자를 준다(본문이 iframe 안). 그런데 그
+     페이지가 스스로 진짜 주소를 알려 준다 — canonical 은 웹 표준이라 사이트별
+     파서와 다르다. 따라가니 7,507자 본문이 나왔다. */
+  const relay = 'https://www.saramin.co.kr/zf_user/jobs/relay/view?rec_idx=1';
+  const realUrl = 'https://www.saramin.co.kr/zf_user/jobs/view?rec_idx=1';
+  ok('link rel=canonical 을 읽는다',
+     P.canonicalOf(`<link href="${realUrl}" rel="canonical" >`, relay) === realUrl);
+  ok('속성 순서가 반대여도 읽는다',
+     P.canonicalOf(`<link rel="canonical" href="${realUrl}">`, relay) === realUrl);
+  ok('og:url 도 읽는다',
+     P.canonicalOf(`<meta property="og:url" content="${realUrl}">`, relay) === realUrl);
+  ok('상대 주소를 절대 주소로 편다',
+     P.canonicalOf('<link rel="canonical" href="/zf_user/jobs/view?rec_idx=1">', relay) === realUrl);
+  /* 자기 자신을 가리키면 따라갈 이유가 없다 — 안 그러면 같은 페이지를 두 번 받는다. */
+  ok('자기 자신이면 null', P.canonicalOf(`<link rel="canonical" href="${relay}">`, relay) === null);
+  ok('끝의 슬래시 차이는 같은 것으로 본다',
+     P.canonicalOf('<link rel="canonical" href="https://a.com/x/">', 'https://a.com/x') === null);
+  ok('없으면 null', P.canonicalOf('<html><body>없다</body></html>', relay) === null);
+
   console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
   process.exit(fail ? 1 : 0);
 })();
