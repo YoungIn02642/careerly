@@ -1285,9 +1285,20 @@ input[readonly]:focus { border-color: var(--border); box-shadow: none; }
   outline: none; border-color: var(--brand);
   box-shadow: 0 0 0 3px rgba(109,58,255,0.10);
 }
+/* ── 저장된 자격증 줄 (2026-08-22) ────────────────────────────
+   이름·발급기관을 글자로 굳히고 [수정]을 눌러야 열린다. 칸이 하나 늘어서
+   그리드 열도 하나 더 필요하다(이름·배지·수정·삭제). */
+.sf-cert-row--locked .sf-cert-main { grid-template-columns: 1.6fr auto auto auto; }
+.sf-cert-name {
+  font-size: 13px; font-weight: 600; color: var(--text-p);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* 발급기관을 안 적은 줄. 값이 있는 것과 눈으로 구분돼야 채울 생각을 한다. */
+.sf-cert-empty { color: var(--text-t, var(--text-s)); font-style: italic; }
 @media (max-width: 720px) {
   .sf-cert-main { grid-template-columns: 1fr auto; }
   .sf-cert-main .sf-cert-badge { grid-column: 1 / -1; justify-self: start; }
+  .sf-cert-row--locked .sf-cert-main { grid-template-columns: 1fr auto auto; }
 }
 
 /* ── 직접 입력 모달 ──────────────────────────────────────── */
@@ -1325,6 +1336,21 @@ input[readonly]:focus { border-color: var(--border); box-shadow: none; }
   border: 1px solid var(--border); border-radius: 999px; background: #fff; color: var(--text-p);
 }
 .sf-cert-chip:hover { border-color: var(--cta); background: #fafafa; }
+/* 채용공고에서 실제로 요구한 건수. 근거가 있는 추천과 분류로만 걸린 추천을
+   한눈에 가른다 — 없는 칩에는 배지 자체가 안 붙는다. */
+.sf-cert-chip-n {
+  margin-left: 6px; padding: 1px 6px; border-radius: 999px;
+  font-size: 10.5px; background: #eef2ff; color: #3730a3;
+}
+/* 배지의 표본 출처. 칩 줄 끝에 한 줄로 흐르게 두어 '이 숫자가 무엇의 몇 건인지'를
+   숫자 옆에서 바로 읽게 한다. */
+.sf-cert-reco-src { flex-basis: 100%; font-size: 11px; color: var(--text-s); margin-top: 2px; }
+/* 저장된 발급기관을 다시 고치는 버튼. 자격증 줄 삭제(x)와 달리 값만 연다 */
+.sf-cert-edit-issuer {
+  padding: 2px 8px; font-size: 11.5px; font-family: var(--font); cursor: pointer;
+  border: 1px solid var(--border); border-radius: 6px; background: #fff; color: var(--text-s);
+}
+.sf-cert-edit-issuer:hover { border-color: var(--cta); color: var(--text-p); }
 @media (max-width: 720px) {
 }
 
