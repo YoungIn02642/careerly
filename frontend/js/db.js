@@ -412,6 +412,10 @@ window.DB = (() => {
     await api('POST', '/api/auth/logout');
     _me = null;
     _mySpec = null;
+    /* 스펙 캐시도 다시 받는다. /api/specs 는 **로그인한 사람에게만 닉네임을 싣는데**,
+       캐시를 그대로 두면 로그아웃한 뒤에도 화면(CAS 순위)에 닉네임이 남아 있는다.
+       서버는 이미 안 주고 있는데 화면만 옛 데이터를 계속 보여주는 상태가 된다. */
+    await refreshSpecs();
   }
 
   async function updateUser(patch) {

@@ -945,6 +945,9 @@
                지원동기 문항은 공고가 아니라 이 근거들로 쓴다. -->
           <div id="jd-evidence"></div>
         </div>
+        <!-- 분석을 돌리고 나면 이 칸에서 뽑힌 역량이 칩으로 들어온다 (jd-coach.js
+             paintStepComps). 칸이 접혀 있어도 보이도록 본문(.jd-block-body) 밖에 둔다. -->
+        <div class="jd-step-comps" data-step-comps="0"></div>
       </section>
 
       <section class="jd-block is-open" id="jd-step-posting" data-step="1">
@@ -980,6 +983,7 @@
             <span class="jd-foot-end">Ctrl+Enter 로 바로 분석</span>
           </div>
         </div>
+        <div class="jd-step-comps" data-step-comps="1"></div>
       </section>
 
       <section class="jd-block" id="jd-step-description" data-step="2">
@@ -1007,6 +1011,7 @@
             <span class="jd-foot-end">Ctrl+Enter 로 바로 분석</span>
           </div>
         </div>
+        <div class="jd-step-comps" data-step-comps="2"></div>
       </section>
 
       <section class="jd-block" id="jd-step-questions" data-step="3">
@@ -1033,6 +1038,7 @@
             <span class="jd-foot-end">문항을 넣으면 문항마다 어떤 역량·소재를 쓸지 배분해 드려요</span>
           </div>
         </div>
+        <div class="jd-step-comps" data-step-comps="3"></div>
       </section>
     </div>
 
@@ -1054,11 +1060,17 @@
 <div class="career-page" id="page-career">
   <div class="career-app">
     <aside class="sidebar">
-      <div class="user-profile-card" onclick="navigate('mypage')">
+      <!-- 카드 전체 = 내 학과 맞춤 보기, 안쪽 '스펙 입력하기' = 마이페이지.
+           버튼이 카드 안에 있으므로 stopPropagation 으로 카드 클릭을 막는다 —
+           안 막으면 버튼을 눌러도 카드 쪽이 같이 열린다. -->
+      <div class="user-profile-card" onclick="CareerPage.showMyMajor()">
         <div class="up-avatar" id="career-avatar">👤</div>
         <div class="up-info">
           <div class="up-name" id="career-username">게스트 <span class="up-level">Lv.0</span></div>
-          <div class="up-tags"><span class="up-tag">스펙 입력하기</span></div>
+          <div class="up-tags">
+            <button type="button" class="up-tag"
+                    onclick="event.stopPropagation(); navigate('mypage')">스펙 입력하기</button>
+          </div>
         </div>
         <i class="ti ti-chevron-right" style="color:var(--c-ink3)"></i>
       </div>
@@ -1101,6 +1113,8 @@
 <script src="js/account.js"></script>
 <script src="js/mentor-profile.js"></script>
 <script src="js/backoffice.js"></script>
+<!-- 직업 묶음·묶음별 예시 벤치마크. career.js 가 로드 시점에 읽으므로 앞에 와야 한다 -->
+<script src="js/job-groups.js"></script>
 <script src="js/career.js"></script>
 <script src="js/mentoring.js"></script>
 <script src="js/jd-coach.js"></script>

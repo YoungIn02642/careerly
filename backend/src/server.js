@@ -740,10 +740,21 @@ app.put('/api/profile', requireAuth, ah(async (req, res) => {
 
 // 집계용 전체 조회. 누가 입력했는지는 내보내지 않는다 —
 // 학점·자격증은 개인정보이고, 화면은 분포만 필요로 한다.
-/* 집계용 전체 목록. userId·detail 은 남의 것이므로 빼고 준다(예전과 같은 규칙). */
+/* 집계용 전체 목록. userId·detail 은 남의 것이므로 빼고 준다(예전과 같은 규칙).
+
+   ── 닉네임은 로그인한 회원에게만 ──
+   이 응답에는 학점·자격증·활동명·회사명이 그대로 들어 있다. 여기에 닉네임까지
+   붙으면 '누가 어떤 스펙을 가졌는지'가 비로그인 상태로도 통째로 읽힌다.
+   집계·백분위는 이름 없이도 되므로 기본은 예전대로 익명이고, CAS 순위처럼
+   사람을 세워야 하는 화면을 위해 **로그인했을 때만** 닉네임을 싣는다.
+   실명(users.name)은 어느 경우에도 나가지 않는다(repo.specs.listAll 주석). */
 app.get('/api/specs', ah(async (req, res) => {
   const all = await repo.specs.listAll();
-  res.json({ specs: all.map(({ userId, detail, ...rest }) => rest) });
+  const signedIn = Boolean(await getCurrentUser(req));
+  res.json({
+    specs: all.map(({ userId, detail, nick, isMentor, ...rest }) =>
+      (signedIn ? { ...rest, nick: nick || null, isMentor: !!isMentor } : rest)),
+  });
 }));
 
 // 내 스펙 조회 / 저장

@@ -21,6 +21,7 @@
     "start": "node backend/src/server.js",
     "build": "node backend/scripts/fetch-dart-corps.js --if-possible",
     "dev": "npm --workspace backend run dev",
+    "preview": "node backend/scripts/preview-frontend.js",
     "test": "for f in test/*.test.js; do node \"$f\" | tail -1; done"
   },
   "engines": {

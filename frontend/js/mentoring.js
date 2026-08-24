@@ -263,13 +263,20 @@ function saveState() { localStorage.setItem(LS_KEY, JSON.stringify(STATE)); }
 /* ── helpers ────────────────────────────────────────────── */
 const $  = (s, r=document) => r.querySelector(s);
 const $$ = (s, r=document) => [...r.querySelectorAll(s)];
-function initial(name){ return name.charAt(0); }
-/* 이름 가운데를 * 로 가린다: 황수아 → 황*아, 남궁도윤 → 남**윤, 김준 → 김* */
-function maskName(name){
-  if (!name) return '';
-  if (name.length <= 2) return name.charAt(0) + '*';
-  return name.charAt(0) + '*'.repeat(name.length-2) + name.charAt(name.length-1);
+/* ── 화면에는 실명을 쓰지 않는다 ────────────────────────────
+   멘토 목록·상세·후기·내 멘토링 모두 닉네임으로 보여준다. 시드에 nick 이 있으면
+   그것을 쓰고, 없으면 id(또는 이름)에서 **결정론적으로** 만든다 — 같은 사람이
+   목록에서와 상세에서 다른 닉네임으로 보이면 그때부터 아무것도 못 믿는다.
+   예전의 maskName(황수아 → 황*아)은 결국 성과 끝자를 노출했다. 닉네임은 그것도 남기지 않는다. */
+const NICK_HEAD = ['코드','데이터','기획','숫자','문서','실험','설계','분석','현장','기록','새벽','주말','구름','바다','노을'];
+const NICK_TAIL = ['곰','여우','수달','고래','부엉이','너구리','펭귄','두더지','하마','까치'];
+function nickOf(seedKey, nick){
+  if (nick) return nick;
+  let h = 0;
+  for (const ch of String(seedKey || '')) h = (h*31 + ch.charCodeAt(0)) % 100000;
+  return NICK_HEAD[h % NICK_HEAD.length] + NICK_TAIL[Math.floor(h / NICK_HEAD.length) % NICK_TAIL.length];
 }
+const mentorNick = m => nickOf(m.id || m.name, m.nick);
 /* 경력 타임라인의 세부내용.
    주요내용(소속·직함 + 기간)과 세부내용(거기서 무엇을 했는가)이 예전에는 같은 굵기로
    세 줄 쌓여 있어서, 훑어볼 때 어디가 회사고 어디가 한 일인지 구분되지 않았다.
@@ -740,7 +747,7 @@ function getFilteredMentors(){
     if (fMode!=='all' && !(m.modes||[]).includes(fMode)) return false;
     if (fSpec!=='all' && !(m.specialties||[]).includes(fSpec)) return false;
     if (searchQuery){
-      const hay = [m.name, m.company, m.role, m.tag, m.cat, m.topic, ...(m.specialties||[]), m.intro].join(' ').toLowerCase();
+      const hay = [mentorNick(m), m.name, m.company, m.role, m.tag, m.cat, m.topic, ...(m.specialties||[]), m.intro].join(' ').toLowerCase();
       if (!hay.includes(searchQuery)) return false;
     }
     return true;
@@ -782,12 +789,12 @@ function renderSearch(){
       <div class="mc-topic">${m.topic}</div>
       <div class="mc-body">
         <div class="mc-info">
-          <div class="mc-name">${maskName(m.name)} · ${m.cohort}</div>
+          <div class="mc-name">${mentorNick(m)} · ${m.cohort}</div>
           <div class="mc-line"><i class="ti ti-briefcase"></i>${m.role}</div>
           <div class="mc-line"><i class="ti ti-stairs-up"></i>경력 ${m.years}년차</div>
           <div class="mc-line mc-company"><i class="ti ti-building-skyscraper"></i>${m.company}</div>
         </div>
-        <div class="avatar mc-avatar" style="${avatarStyle(m.pal)}">${initial(m.name)}</div>
+        <div class="avatar mc-avatar" style="${avatarStyle(m.pal)}">${mentorNick(m).charAt(0)}</div>
       </div>
       <div class="mc-rating">
         <span class="mc-stars">${ratingStarsMini(m.rating)}</span>
@@ -921,10 +928,10 @@ function openProfile(id){
     <div class="back-bar" onclick="navigate('search')"><i class="ti ti-arrow-left"></i>멘토 찾기로 돌아가기</div>
     <div class="card profile-hero">
       <div class="ph-top">
-        <div class="avatar ph-avatar" style="${avatarStyle(m.pal)}">${initial(m.name)}</div>
+        <div class="avatar ph-avatar" style="${avatarStyle(m.pal)}">${mentorNick(m).charAt(0)}</div>
         <div class="ph-id">
           <div class="ph-name-row">
-            <span class="ph-name">${maskName(m.name)} · ${m.cohort}</span>
+            <span class="ph-name">${mentorNick(m)} · ${m.cohort}</span>
             <span class="mc-tag" style="${tagStyle(m.tag)}">${m.tag}</span>
           </div>
           <div class="ph-job">${m.company} · ${m.role} · 경력 ${m.years}년차</div>
@@ -1007,10 +1014,10 @@ function openProfile(id){
       <div class="rv-list">
         ${reviews.map(r=>`
           <div class="rv-item">
-            <div class="rv-avatar">${initial(r.name)}</div>
+            <div class="rv-avatar">${nickOf(r.name + r.cohort, r.nick).charAt(0)}</div>
             <div class="rv-body">
               <div class="rv-top">
-                <span class="rv-name">${maskName(r.name)} · ${r.cohort}</span>
+                <span class="rv-name">${nickOf(r.name + r.cohort, r.nick)} · ${r.cohort}</span>
                 <span class="rv-stars-mini">${ratingStarsMini(r.rating)}</span>
               </div>
               <div class="rv-text">${r.text}</div>
@@ -1169,13 +1176,13 @@ async function payAndApply(){
 
   try {
     const { request } = await api('POST', '/api/mentoring/requests', {
-      mentorId: m.id, mentorName: m.name, format: f.id, message: msg,
+      mentorId: m.id, mentorName: mentorNick(m), format: f.id, message: msg,
       slotDate: reqDate, slotTime: reqTime,
     });
 
     const cfg = await api('GET', '/api/payments/config');
     if (!cfg.enabled) {
-      toast(`${maskName(m.name)} 멘토에게 신청을 보냈어요 (결제 미설정)`);
+      toast(`${mentorNick(m)} 멘토에게 신청을 보냈어요 (결제 미설정)`);
       return goApplied();
     }
     if (!window.TossPayments) {
@@ -1279,9 +1286,9 @@ function renderOngoing(){
   if (!STATE.ongoing.length) return emptyState('ti-calendar','진행 중인 멘토링이 없어요','멘토를 찾아 새로운 멘토링을 신청해 보세요');
   return `<div class="session-list">${STATE.ongoing.map(o=>`
     <div class="session-item">
-      <div class="avatar si-avatar" style="${avatarStyle(o.pal)}">${initial(o.mentor)}</div>
+      <div class="avatar si-avatar" style="${avatarStyle(o.pal)}">${o.mentor.charAt(0)}</div>
       <div class="si-body">
-        <div class="si-name-row"><span class="si-name">${maskName(o.mentor)} 멘토</span><span class="si-sub">· ${o.sub}</span></div>
+        <div class="si-name-row"><span class="si-name">${o.mentor} 멘토</span><span class="si-sub">· ${o.sub}</span></div>
         <div class="si-topic">${o.topic}</div>
       </div>
       <div class="si-right">
@@ -1299,10 +1306,10 @@ function renderCompleted(){
     return `
     <div class="done-card" data-id="${c.id}">
       <div class="done-main">
-        <div class="avatar si-avatar" style="${avatarStyle(c.pal)}">${initial(c.mentor)}</div>
+        <div class="avatar si-avatar" style="${avatarStyle(c.pal)}">${c.mentor.charAt(0)}</div>
         <div class="dm-body">
           <div class="dm-head">
-            <div class="si-name-row"><span class="si-name">${maskName(c.mentor)} 멘토</span><span class="si-sub">· ${c.sub}</span></div>
+            <div class="si-name-row"><span class="si-name">${c.mentor} 멘토</span><span class="si-sub">· ${c.sub}</span></div>
             <span class="si-when">${c.date} 완료</span>
           </div>
           <div class="dm-topic">${c.topic}</div>
@@ -1340,10 +1347,10 @@ function renderApplied(){
   return STATE.applied.map((a,i)=>`
     <div class="req-card">
       <div class="done-main" style="padding:0">
-        <div class="avatar si-avatar" style="${avatarStyle(a.pal)}">${initial(a.mentor)}</div>
+        <div class="avatar si-avatar" style="${avatarStyle(a.pal)}">${a.mentor.charAt(0)}</div>
         <div class="dm-body">
           <div class="si-name-row">
-            <span class="si-name">${maskName(a.mentor)} 멘토</span><span class="si-sub">· ${a.sub}</span>
+            <span class="si-name">${a.mentor} 멘토</span><span class="si-sub">· ${a.sub}</span>
           </div>
           <div class="dm-topic">${escapeHTML(a.topic)}</div>
           <div class="si-topic" style="margin-top:6px;color:var(--color-text-tertiary)">
@@ -1377,7 +1384,7 @@ async function cancelApplied(i){
 
   STATE.applied.splice(i,1);
   saveState(); renderMentoring();
-  toast(`${maskName(a.mentor)} 멘토 신청을 취소했어요`, { icon: false });
+  toast(`${a.mentor} 멘토 신청을 취소했어요`, { icon: false });
 }
 
 function renderReceived(){
@@ -1385,9 +1392,9 @@ function renderReceived(){
   return STATE.received.map((r,i)=>`
     <div class="req-card">
       <div class="done-main" style="padding:0">
-        <div class="avatar si-avatar" style="${avatarStyle(r.pal)}">${initial(r.mentee)}</div>
+        <div class="avatar si-avatar" style="${avatarStyle(r.pal)}">${r.mentee.charAt(0)}</div>
         <div class="dm-body">
-          <div class="si-name-row"><span class="si-name">${maskName(r.mentee)} 멘티</span><span class="si-sub">· ${r.sub}</span></div>
+          <div class="si-name-row"><span class="si-name">${r.mentee} 멘티</span><span class="si-sub">· ${r.sub}</span></div>
           <div class="dm-topic">${r.topic}</div>
           <div class="si-topic" style="margin-top:6px;color:var(--color-text-tertiary)">희망 형식 ${r.want} · ${r.when}</div>
           <div class="req-actions">
@@ -1410,7 +1417,7 @@ function acceptReq(i){
     status: '일정 조율 중', badge: 'amber', when: r.when,
   });
   saveState(); renderMentoring();
-  toast(`${maskName(r.mentee)} 멘티의 요청을 수락했어요`);
+  toast(`${r.mentee} 멘티의 요청을 수락했어요`);
 }
 function rejectReq(i){
   const r = STATE.received[i];
@@ -1457,8 +1464,8 @@ function openRating(id){
   rateTargetId = id; rateValue = 0;
   const c = STATE.completed.find(x=>x.id===id);
   $('#rate-avatar').style.cssText = avatarStyle(c.pal);
-  $('#rate-avatar').textContent = initial(c.mentor);
-  $('#rate-name').textContent = `${maskName(c.mentor)} 멘토`;
+  $('#rate-avatar').textContent = c.mentor.charAt(0);
+  $('#rate-name').textContent = `${c.mentor} 멘토`;
   $('#rate-sub').textContent = `${c.sub} · ${c.topic.split(' · ')[0]}`;
   $('#rate-review').value = c.review || '';
   setStarUI(0); $('#star-caption').textContent = '별점을 선택해 주세요';

@@ -294,14 +294,20 @@ const specs = {
      N+1 을 피하려고 세 번만 질의하고 JS 에서 붙인다(1,200건 × 3회 vs 3,600회). */
   async listAll() {
     const [rows, certs, acts] = await Promise.all([
-      query('SELECT * FROM user_specs'),
+      query('SELECT s.*, u.nickname, u.role FROM user_specs s JOIN users u ON u.id = s.user_id'),
       query('SELECT user_id, cert_name FROM spec_certs'),
       query('SELECT * FROM spec_activities ORDER BY id'),
     ]);
     const certMap = new Map(), actMap = new Map();
     certs.forEach(c => (certMap.get(c.user_id) || certMap.set(c.user_id, []).get(c.user_id)).push(c.cert_name));
     acts.forEach(a => (actMap.get(a.user_id) || actMap.set(a.user_id, []).get(a.user_id)).push(toActivity(a)));
-    return rows.map(r => toSpec(r, certMap.get(r.user_id) || [], actMap.get(r.user_id) || []));
+    return rows.map(r => ({
+      ...toSpec(r, certMap.get(r.user_id) || [], actMap.get(r.user_id) || []),
+      nick: r.nickname || null,
+      /* 멘토로 등록한 선배인지. 멘토링을 신청할 수 있는 상대를 가리는 데만 쓴다 —
+         멘티에게 신청 버튼이 뜨면 받을 사람이 없는 신청이 만들어진다. */
+      isMentor: r.role === 'mentor',
+    }));
   },
 
   count: async () => Number((await queryOne('SELECT COUNT(*) AS n FROM user_specs')).n),
