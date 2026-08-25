@@ -1071,12 +1071,16 @@ async function payAndApply(){
   const btn = $('.btn-submit-req');
   if (btn) btn.disabled = true;
 
+  /* 신청은 결제 전에 서버에 pending 으로 만들어진다. 결제를 취소하거나 결제 전
+     단계에서 멈추면 이 pending 을 되돌려야 한다 — 안 그러면 결제 안 한 신청이
+     '보낸 요청'에 남는다(사용자 지적 2026-08-25). request 를 밖에 두어 catch 에서 쓴다. */
+  let request = null;
   try {
-    const { request } = await api('POST', '/api/mentoring/requests', {
+    ({ request } = await api('POST', '/api/mentoring/requests', {
       /* mentorName 은 안 보낸다 — 서버가 목록에서 찾아 채운다(routes/mentoring.js). */
       mentorId: m.id, format: f.id, message: msg,
       slotDate: reqDate, slotTime: reqTime,
-    });
+    }));
 
     const cfg = await api('GET', '/api/payments/config');
     if (!cfg.enabled) {
@@ -1084,6 +1088,8 @@ async function payAndApply(){
       return goApplied();
     }
     if (!window.TossPayments) {
+      /* 결제를 못 여는데 신청만 남기면 안 된다 — 방금 만든 pending 을 되돌린다. */
+      await cancelPendingQuietly(request);
       toast('결제 모듈을 불러오지 못했어요. 새로고침 후 다시 시도해 주세요.', { icon: false });
       return;
     }
@@ -1101,15 +1107,27 @@ async function payAndApply(){
       successUrl: location.origin + '/#mentoring',
       failUrl: location.origin + '/#mentoring',
     });
-    /* 여기까지 왔다는 건 결제창이 닫혔다는 뜻이다. 승인은 successUrl 로 돌아온 뒤
-       app.js 의 결제 복귀 처리(handlePaymentReturn)가 이어서 한다. */
+    /* 여기까지 왔다는 건 결제창이 닫혔다는 뜻이다(성공이면 successUrl 로 리다이렉트되어
+       이 줄에 오지 않는다). 승인 전이므로 pending 을 되돌린다. */
+    await cancelPendingQuietly(request);
   } catch (e) {
     /* 사용자가 결제창을 닫은 것은 오류가 아니다 — 에러 메시지를 띄우면 놀란다. */
     if (e?.code === 'USER_CANCEL') toast('결제를 취소했어요', { icon: false });
     else toast(e.message || '신청에 실패했어요', { icon: false });
+    /* 결제 전에 멈춘 것이므로 방금 만든 pending 신청을 취소한다 —
+       이게 없으면 결제를 취소해도 '보낸 요청'에 신청이 남는다. */
+    await cancelPendingQuietly(request);
   } finally {
     if (btn) btn.disabled = false;
   }
+}
+
+/* 결제 전에 멈췄을 때 방금 만든 pending 신청을 되돌린다. 되돌리기 자체가 실패해도
+   사용자에겐 이미 취소 안내를 했으므로 조용히 넘긴다(다음 신청 때 pending 을 갱신한다). */
+async function cancelPendingQuietly(request){
+  if (!request?.id) return;
+  try { await api('POST', `/api/mentoring/requests/${request.id}/cancel`); }
+  catch { /* noop — 서버에 pending 이 남아도 재시도 때 갱신되고, 목록엔 표시 규칙상 안 뜬다 */ }
 }
 
 function goApplied(){
