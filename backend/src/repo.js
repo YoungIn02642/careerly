@@ -73,6 +73,8 @@ function toSpec(r, certs = [], activities = []) {
   /* 세부직무는 여러 개다. 빈 배열도 '고른 게 없다'는 뜻이라 그대로 실어 보낸다 —
      없는 것(null)과 구분되지 않으면 화면이 이전 선택을 지운 건지 알 수 없다. */
   const jobMiddles = asJson(r.job_middles);  if (jobMiddles) s.jobMiddles = jobMiddles;
+  /* 개별 직업(직무찾기 3단계). 빈 배열도 그대로 실어 보낸다 — jobMiddles 와 같은 이유. */
+  const jobCodes = asJson(r.job_codes);      if (jobCodes) s.jobCodes = jobCodes;
   const ic = asJson(r.interest_companies);   if (ic) s.interestCompanies = ic;
   const careers = asJson(r.careers);         if (careers) s.careers = careers;
   return s;
@@ -85,8 +87,24 @@ const toActivity = r => {
                         ['companyTier', r.company_tier], ['companyName', r.company_name]]) {
     if (v != null && v !== '') a[k] = v;
   }
+  /* STAR 활동내용. 네 칸 중 하나라도 채워졌을 때만 싣는다 — 빈 객체를 실으면
+     화면이 '내용을 적었다'로 오해한다. */
+  const star = asJson(r.star);
+  if (star && (star.s || star.t || star.a || star.r)) a.star = star;
   return a;
 };
+
+/* 저장용 STAR 정규화. 네 칸(s·t·a·r) 문자열만 추리고, 전부 비었으면 NULL 을
+   돌려 저장하지 않는다 — 화면이 '내용 있음' 으로 오해하지 않게 한다. */
+function starJson(star) {
+  if (!star || typeof star !== 'object') return null;
+  const out = {};
+  for (const k of ['s', 't', 'a', 'r']) {
+    const v = typeof star[k] === 'string' ? star[k].trim() : '';
+    if (v) out[k] = v;
+  }
+  return Object.keys(out).length ? JSON.stringify(out) : null;
+}
 
 // ── 회원 ────────────────────────────────────────────────────
 const users = {
@@ -250,6 +268,8 @@ const profiles = {
       timeline: asJson(r.timeline) || [],
       modes: asJson(r.modes) || [],
       availability: asJson(r.availability) || [],
+      /* 멘토가 정한 멘토링 가능 분야(KECO 1차 코드 배열). 안 정했으면 빈 배열. */
+      mentorFields: asJson(r.mentor_fields) || [],
     };
   },
   async update(userId, patch) {
@@ -260,9 +280,9 @@ const profiles = {
       avatar: 'avatar', gender: 'gender', birthdate: 'birthdate',
       phone: 'phone', address: 'address',
       intro: 'intro', specialties: 'specialties', timeline: 'timeline', modes: 'modes',
-      availability: 'availability',
+      availability: 'availability', mentorFields: 'mentor_fields',
     };
-    const jsonKeys = new Set(['specialties', 'timeline', 'modes', 'availability']);
+    const jsonKeys = new Set(['specialties', 'timeline', 'modes', 'availability', 'mentorFields']);
     const cols = [], vals = [];
     for (const [k, col] of Object.entries(map)) {
       if (!Object.prototype.hasOwnProperty.call(patch, k)) continue;
@@ -299,7 +319,7 @@ const mentors = {
     const rows = await query(`
       SELECT u.id, u.username, u.name,
              p.nickname, p.avatar, p.current_job, p.intro,
-             p.specialties, p.timeline, p.modes, p.availability,
+             p.specialties, p.timeline, p.modes, p.availability, p.mentor_fields,
              s.company, s.corp_type, s.job_major, s.job_middles, s.careers
         FROM users u
         JOIN profiles p ON p.user_id = u.id
@@ -320,6 +340,9 @@ const mentors = {
       corpType: r.corp_type || null,
       jobMajor: r.job_major || null,
       jobMiddles: asJson(r.job_middles) || [],
+      /* 멘토가 정한 멘토링 가능 분야(KECO 1차 코드 배열). 멘토 찾기의 '분야' 필터가
+         이 값으로 거른다 — 안 정한 멘토는 '전체' 에서만 잡힌다. */
+      mentorFields: asJson(r.mentor_fields) || [],
       intro: r.intro || null,
       specialties: asJson(r.specialties) || [],
       timeline: asJson(r.timeline) || [],
@@ -400,13 +423,13 @@ const specs = {
   async upsert(userId, patch) {
     const col = {
       dept: 'dept', major: 'major', field: 'field', job: 'job',
-      jobMajor: 'job_major', jobMiddles: 'job_middles',
+      jobMajor: 'job_major', jobMiddles: 'job_middles', jobCodes: 'job_codes',
       company: 'company', corpType: 'corp_type', gpa: 'gpa', gpaMax: 'gpa_max',
       scores: 'scores', qual: 'qual', detail: 'detail', certMeta: 'cert_meta',
       interestCompanies: 'interest_companies', careers: 'careers',
     };
     const jsonKeys = new Set(['scores', 'qual', 'detail', 'certMeta',
-                              'interestCompanies', 'careers', 'jobMiddles']);
+                              'interestCompanies', 'careers', 'jobMiddles', 'jobCodes']);
 
     await transaction(async conn => {
       const cols = ['user_id'], vals = [userId];
@@ -440,11 +463,13 @@ const specs = {
         if (list.length) {
           await conn.query(
             `INSERT INTO spec_activities
-               (user_id, type, name, org, duration, role, stage, outcome, company_tier, company_name)
-             VALUES ${list.map(() => '(?,?,?,?,?,?,?,?,?,?)').join(',')}`,
+               (user_id, type, name, org, duration, role, stage, outcome, company_tier, company_name, star)
+             VALUES ${list.map(() => '(?,?,?,?,?,?,?,?,?,?,?)').join(',')}`,
             list.flatMap(a => [userId, a.type, a.name ?? null, a.org ?? null, a.duration ?? null,
                                a.role ?? null, a.stage ?? null, a.outcome ?? null,
-                               a.companyTier ?? null, a.companyName ?? null]));
+                               a.companyTier ?? null, a.companyName ?? null,
+                               /* STAR 는 네 칸 중 하나라도 있으면 저장, 아니면 NULL. */
+                               starJson(a.star)]));
         }
       }
     });

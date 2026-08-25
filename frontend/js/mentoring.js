@@ -66,6 +66,14 @@ function categoryName(code) {
   return mentorCategories().find(M => M.code === code)?.name || '';
 }
 
+/* 멘토 찾기의 '분야' 필터에 깔 분류. **멘토가 직접 정한 '멘토링 가능 분야'(mentorFields)에
+   실제로 있는 것만** 깐다(사용자 지시). 멘토가 정하고 멘티가 그 안에서 고르는 구조라,
+   아무 멘토도 안 고른 분야를 칩으로 깔면 눌러도 0명이 된다. */
+function offeredFieldCategories() {
+  const offered = new Set(MENTORS.flatMap(m => m.mentorFields || []));
+  return mentorCategories().filter(M => offered.has(M.code));
+}
+
 /* 아바타 색 — 예전에는 시드 데이터에 pal 이 박혀 있었다. 실제 회원에는 그런 칸이
    없고 만들 이유도 없어서, 아이디에서 결정론적으로 고른다(같은 사람은 늘 같은 색). */
 /* PAL_KEYS 는 아래 '내 멘토링' 쪽에서 이미 만들어 둔 것을 쓴다(같은 팔레트다).
@@ -605,12 +613,12 @@ async function enterSearch(){
 
 /* 필터 선택지는 **지금 있는 멘토에서 뽑는다.** 예전에는 가짜 멘토 102명에서
    뽑아서, 목록에 없는 회사·전문분야가 드롭다운에 가득했다(고르면 0명).
-   분야 칩만 KECO 분류 전체를 깐다 — 아직 멘토가 없는 분야도 "여긴 없구나" 가
-   보여야 하고, 칩이 멘토 수에 따라 늘었다 줄었다 하면 화면이 흔들린다. */
+   분야 칩은 **멘토가 정한 '멘토링 가능 분야'** 에 있는 것만 깐다(사용자 지시) —
+   멘토가 정하고 멘티가 그 안에서 고르는 구조다. */
 function initSearchFilters(){
   const chipBox = $('#filter-chips');
   if (chipBox){
-    const cats = mentorCategories();
+    const cats = offeredFieldCategories();
     chipBox.innerHTML = `<span class="chip on" data-cat="전체" onclick="setFilter('전체')">전체</span>` +
       cats.map(M=>`<span class="chip" data-cat="${M.code}" onclick="setFilter('${M.code}')"><span class="chip-no">${String(M.no).padStart(2,'0')}</span>${escapeHTML(M.name)}</span>`).join('');
     chipBox.addEventListener('scroll', updateChipsArrows);
@@ -638,9 +646,11 @@ function getFilteredMentors(){
   const sortBy   = $('#sort-by') ? $('#sort-by').value : 'recommend';
 
   let list = MENTORS.filter(m=>{
-    /* 분야는 멘토 스펙의 KECO 1차 코드로 거른다. 안 고른 멘토는 '전체' 에서만 보인다 —
-       임의로 아무 분야에 넣으면 그 분야를 고른 후배에게 엉뚱한 선배가 뜬다. */
-    if (searchFilter!=='전체' && m.jobMajor!==searchFilter) return false;
+    /* 분야는 멘토가 정한 '멘토링 가능 분야'(mentorFields)로 거른다(사용자 지시).
+       멘토가 정하고 멘티가 그 안에서 고르는 구조다. 분야를 안 정한 멘토는
+       '전체' 에서만 보인다 — 임의로 아무 분야에 넣으면 그 분야를 고른 후배에게
+       엉뚱한 선배가 뜬다. */
+    if (searchFilter!=='전체' && !(m.mentorFields||[]).includes(searchFilter)) return false;
     if (fCompany!=='all' && m.company!==fCompany) return false;
     /* 경력을 안 적은 멘토(years=null)는 연차 필터를 걸면 빠진다. 1년차로 치면
        '경력 없음' 과 '1년차' 가 한 칸에 섞인다. */

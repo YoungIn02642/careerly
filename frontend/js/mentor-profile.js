@@ -33,6 +33,8 @@ window.MentorProfile = (() => {
 
   let tlState = [];       // 타임라인 편집 상태 [{t, d, s}]
   let specState = [];     // 전문 분야 칩
+  let mfState = [];       // 멘토링 가능 분야 (KECO 1차 코드 배열) — 멘티가 이걸로 멘토를 고른다
+  let mfMajors = [];      // KECO 1차 분류 목록 (칩으로 그린다)
   let availState = new Map();   // 'YYYY-MM-DD' → Set(시간)
   let calCursor = null;         // 달력이 보고 있는 달 (매월 1일)
   let pickedDate = null;        // 시간대를 고르는 중인 날짜
@@ -59,6 +61,15 @@ window.MentorProfile = (() => {
     specState = Array.isArray(p.specialties) ? [...p.specialties] : [];
     const modes = Array.isArray(p.modes) ? p.modes : [];
 
+    /* 멘토링 가능 분야 — 멘티가 멘토를 고를 때 쓰는 KECO 1차 분류다(직무찾기와 같은 트리).
+       트리는 KECO.load() 가 /api/jobs 에서 받아 둔다. 못 받아도 프로필 저장 자체는
+       되어야 하므로(분야는 선택 항목) 실패하면 칩을 안 그리고 넘어간다. */
+    mfState = Array.isArray(p.mentorFields) ? [...p.mentorFields] : [];
+    mfMajors = [];
+    try {
+      if (window.KECO) { await KECO.load(); mfMajors = KECO.MAJORS() || []; }
+    } catch { mfMajors = []; }
+
     /* 지난 날짜는 화면에 올리지 않는다. 저장돼 있어도 이제 신청받을 수 없는 날이라
        그대로 두면 '왜 안 지워지지' 가 된다. 저장할 때 함께 정리된다. */
     availState = new Map();
@@ -83,6 +94,25 @@ window.MentorProfile = (() => {
           </div>
           <div class="sf-chips" id="mp-spec-list"></div>
           <span class="field-hint">멘토 카드와 상세 화면에 태그로 보여요. 최대 8개.</span>
+        </div>
+      </div>
+
+      <!-- 멘토링 가능 분야 — 멘토가 정하고, 멘티는 멘토 찾기에서 이 분야로 멘토를 고른다.
+           전문분야(자유 태그)와 다르다: 이건 직무찾기와 같은 KECO 1차 분류다. -->
+      <div class="sf-section">
+        <div class="sf-section-title"><i class="ti ti-briefcase"></i>멘토링 가능 분야</div>
+        <p class="sf-sub">후배가 '멘토 찾기'에서 분야로 멘토를 좁힐 때 쓰는 값이에요. 상담해 줄 수 있는 분야를 골라주세요.</p>
+        <div class="form-group">
+          <div class="sf-chip-pick" id="mp-fields">
+            ${mfMajors.length
+              ? mfMajors.map(M => `
+                <button type="button" class="chip${mfState.includes(M.code) ? ' on' : ''}"
+                        data-field="${esc(M.code)}" aria-pressed="${mfState.includes(M.code)}">
+                  ${esc(M.name)}
+                </button>`).join('')
+              : `<span class="sf-hint-inline">분야 목록을 불러오지 못했어요. 저장은 가능하고, 분야는 나중에 정해도 돼요.</span>`}
+          </div>
+          <span class="field-hint">고르지 않으면 후배가 분야로 좁힐 때 목록에 안 떠요. 여러 개 선택 가능.</span>
         </div>
       </div>
 
@@ -405,6 +435,19 @@ window.MentorProfile = (() => {
       chip.setAttribute('aria-pressed', String(on));
     });
 
+    /* 멘토링 가능 분야 칩 — 상태(mfState)를 직접 뒤집는다. 여러 개 고를 수 있다. */
+    const fieldsHost = document.getElementById('mp-fields');
+    if (fieldsHost) fieldsHost.addEventListener('click', e => {
+      const chip = e.target.closest('[data-field]');
+      if (!chip) return;
+      const code = chip.dataset.field;
+      if (mfState.includes(code)) mfState = mfState.filter(c => c !== code);
+      else mfState.push(code);
+      const on = mfState.includes(code);
+      chip.classList.toggle('on', on);
+      chip.setAttribute('aria-pressed', String(on));
+    });
+
     document.getElementById('mp-save').addEventListener('click', () => save(user));
     document.getElementById('mp-cancel').addEventListener('click', () => selectMypageTab('account'));
   }
@@ -462,6 +505,7 @@ window.MentorProfile = (() => {
         timeline,
         modes,
         availability,
+        mentorFields: [...mfState],
       });
       /* 멘토 찾기 목록은 이제 서버가 원본이고 한 번 받으면 캐시된다.
          방금 채운 프로필이 그 화면에 바로 보이려면 캐시를 버려야 한다 —

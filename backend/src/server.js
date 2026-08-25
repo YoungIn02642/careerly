@@ -651,13 +651,29 @@ app.put('/api/profile', requireAuth, ah(async (req, res) => {
      성공했다고 나오는데 값이 조용히 사라진다. */
   const allowed = ['nickname', 'university', 'currentJob', 'tips',
                    'avatar', 'gender', 'birthdate', 'phone', 'address',
-                   'intro', 'specialties', 'timeline', 'modes', 'availability'];
+                   'intro', 'specialties', 'timeline', 'modes', 'availability',
+                   'mentorFields'];
   const patch = {};
   allowed.forEach(k => {
     if (Object.prototype.hasOwnProperty.call(req.body, k)) {
       patch[k] = typeof req.body[k] === 'string' ? req.body[k].trim() : req.body[k];
     }
   });
+
+  /* 멘토링 가능 분야 — 멘토가 정하고 멘티가 이 값으로 멘토를 고른다. 카탈로그의
+     KECO 1차 코드만 받는다. 오타·걸러낸 분류가 들어오면 멘티 필터에서 영영 안 잡힌다. */
+  if (patch.mentorFields != null) {
+    if (!Array.isArray(patch.mentorFields)) {
+      return res.status(400).json({ error: '멘토링 가능 분야는 목록이어야 합니다.' });
+    }
+    const tree = await catalog.jobCatalog();
+    const validMajors = new Set(tree.majors.map(M => M.code));
+    const bad = patch.mentorFields.filter(c => !validMajors.has(String(c)));
+    if (bad.length) {
+      return res.status(400).json({ error: `멘토링 가능 분야 값이 올바르지 않습니다: ${bad.join(', ')}` });
+    }
+    patch.mentorFields = [...new Set(patch.mentorFields.map(String))];
+  }
 
   /* 이름·이메일은 users 에 있고 여기로 안 받는다. 두 곳에 두면 어느 쪽이 맞는지
      알 수 없어진다 — 화면은 회원가입 때 받은 값을 그대로 보여 준다. */
@@ -774,9 +790,10 @@ app.put('/api/specs/me', requireAuth, ah(async (req, res) => {
        interestCompanies — 멘티의 관심 기업 (이름 배열)
        certMeta          — 직접 입력한 자격증의 발급기관·취득일 { 이름: {issuer,date} }
        jobMajor          — KECO 1차 코드(커리어 로드맵과 같은 분류). field/job 은 옛 값이라 둘 다 남는다
-       jobMiddles        — KECO 2차 코드 배열(세부직무 다중선택) */
+       jobMiddles        — KECO 2차 코드 배열(세부직무 다중선택)
+       jobCodes          — KECO 개별 직업 코드 배열(직무찾기 3단계). 집계는 2차 단위라 표시·저장용 */
   const allowed = [
-    'dept', 'major', 'field', 'job', 'jobMajor', 'jobMiddles',
+    'dept', 'major', 'field', 'job', 'jobMajor', 'jobMiddles', 'jobCodes',
     'company', 'corpType', 'gpa', 'gpaMax',
     'certs', 'certMeta', 'scores', 'qual', 'detail', 'activities',
     'careers', 'interestCompanies',
@@ -789,10 +806,12 @@ app.put('/api/specs/me', requireAuth, ah(async (req, res) => {
   /* 직무 코드는 카탈로그에 있는 것만 받는다. 걸러낸 분류(관리직·청소직 등)나
      오타가 들어오면 로드맵 집계에서 영영 안 잡히는 스펙이 되는데, 에러가 안 나서
      화면상으로는 저장에 성공한 것으로 보인다. */
-  if (patch.jobMajor != null || patch.jobMiddles != null) {
+  if (patch.jobMajor != null || patch.jobMiddles != null || patch.jobCodes != null) {
     const tree = await catalog.jobCatalog();
     const validMajors = new Set(tree.majors.map(M => M.code));
     const validMiddles = new Set(tree.majors.flatMap(M => M.middles.map(m => m.code)));
+    const validJobs = new Set(
+      tree.majors.flatMap(M => M.middles.flatMap(m => (m.jobs || []).map(j => j.code))));
 
     if (patch.jobMajor != null && patch.jobMajor !== '' && !validMajors.has(String(patch.jobMajor))) {
       return res.status(400).json({ error: '진출분야 값이 올바르지 않습니다.' });
@@ -806,6 +825,18 @@ app.put('/api/specs/me', requireAuth, ah(async (req, res) => {
         return res.status(400).json({ error: `세부직무 값이 올바르지 않습니다: ${bad.join(', ')}` });
       }
       patch.jobMiddles = [...new Set(patch.jobMiddles.map(String))];
+    }
+    /* 개별 직업 코드도 카탈로그에 있는 것만 받는다. 걸러낸 직업이나 오타가 들어오면
+       '내 선택' 표시가 깨진다 — 저장은 성공한 것처럼 보이면서. */
+    if (patch.jobCodes != null) {
+      if (!Array.isArray(patch.jobCodes)) {
+        return res.status(400).json({ error: '세부 직업은 목록이어야 합니다.' });
+      }
+      const bad = patch.jobCodes.filter(c => !validJobs.has(String(c)));
+      if (bad.length) {
+        return res.status(400).json({ error: `세부 직업 값이 올바르지 않습니다: ${bad.join(', ')}` });
+      }
+      patch.jobCodes = [...new Set(patch.jobCodes.map(String))];
     }
   }
 

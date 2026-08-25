@@ -77,6 +77,10 @@ CREATE TABLE IF NOT EXISTS profiles (
   specialties    JSON         NULL,   -- 전문 분야 ["백엔드", "이직"]
   timeline       JSON         NULL,   -- 경력 타임라인 [{t 제목, d 기간, s 세부}]
   modes          JSON         NULL,   -- 멘토링 가능 형식 ["화상", "채팅"]
+  -- 멘토가 직접 정한 '멘토링 가능 분야'. 멘티가 멘토를 고를 때 이 목록에서 고른다.
+  -- KECO 1차 코드 배열이다(예: ["0","1"]) — 멘토 자신의 진출분야(user_specs.job_major)와
+  -- 별개다. 안 정한 멘토는 목록에서 '전체' 로만 잡힌다.
+  mentor_fields  JSON         NULL,   -- 멘토가 정한 멘토링 가능 분야 (KECO 1차 코드 배열)
   -- 멘토가 직접 고른 예약 가능 일정.
   --   [{ "date": "2026-08-10", "times": ["10:00", "14:00"] }, ...]
   -- 요일 반복이 아니라 **날짜를 콕 집는 방식**이다. 멘토는 매주 같은 시간이 비지 않고
@@ -114,6 +118,9 @@ CREATE TABLE IF NOT EXISTS user_specs (
   -- 1차는 하나, 2차(세부직무)는 여러 개 고를 수 있다.
   job_major   VARCHAR(8)   NULL,   -- KECO 1차 코드 (예: '0')
   job_middles JSON         NULL,   -- KECO 2차 코드 배열 (예: ["02","03"])
+  -- 직무찾기 3단계(개별 직업)까지 고른 값. 집계는 2차 분류 단위라 여기 값은
+  -- '내 선택' 저장·표시용이다(예: ["0212001","0212002"]).
+  job_codes   JSON         NULL,   -- KECO 개별 직업 코드 배열
   company     VARCHAR(190) NULL,
   corp_type   VARCHAR(16)  NULL,
   gpa         DECIMAL(4,2) NULL,
@@ -159,6 +166,8 @@ CREATE TABLE IF NOT EXISTS spec_activities (
   outcome      VARCHAR(64)  NULL,
   company_tier VARCHAR(16)  NULL,         -- 인턴십 기업규모 배수용
   company_name VARCHAR(190) NULL,
+  -- 활동 내용을 STAR(상황·과제·행동·결과)로 적은 것. { s, t, a, r } 문자열 4개.
+  star         JSON         NULL,
   CONSTRAINT fk_spec_acts_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   KEY idx_spec_acts_user (user_id),
   KEY idx_spec_acts_type (type)

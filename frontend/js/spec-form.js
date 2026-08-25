@@ -191,6 +191,13 @@ window.SpecForm = (() => {
           <label>${isMentor ? '현재' : '희망'} 세부직무 <span class="sf-optional">여러 개 선택 가능</span></label>
           <div class="sf-chip-pick" id="sf-job-middles"></div>
         </div>
+        <!-- 3단계: 개별 직업. 직무찾기(#career)와 같은 깊이까지 고르게 한다(사용자 지시).
+             세부직무를 고르면 그 안의 직업들이 나온다. 집계는 2차 분류 단위라 여기 값은
+             '내 선택' 저장·표시용이다. -->
+        <div class="form-group" id="sf-job-group" hidden>
+          <label>${isMentor ? '현재' : '희망'} 직업 <span class="sf-optional">여러 개 선택 가능 · 세부직무 안에서</span></label>
+          <div class="sf-chip-pick" id="sf-job-jobs"></div>
+        </div>
 
         ${isMentor ? `
         <div class="sf-row-2">
@@ -1445,7 +1452,13 @@ window.SpecForm = (() => {
   let actState = [];   // 현재 편집 중인 활동 배열
 
   function renderActivities(initial) {
-    actState = (initial || []).map(a => ({ ...a }));
+    /* 저장된 activity.star({s,t,a,r}) 를 편집기용 평평한 칸(starS…)으로 펼친다.
+       입력 바인딩이 flat(actState[i][field]=value)이라 중첩 객체를 직접 못 다룬다. */
+    actState = (initial || []).map(a => ({
+      ...a,
+      starS: a.star?.s || '', starT: a.star?.t || '',
+      starA: a.star?.a || '', starR: a.star?.r || '',
+    }));
     if (!actState.length) actState.push({});
     paintActivities();
   }
@@ -1513,6 +1526,32 @@ window.SpecForm = (() => {
         </div>
         ${companyTierRow(a, i)}
         ${t ? `<div class="sf-act-help">${escapeHtml(t.help)}</div>` : ''}
+        ${starBlock(a, i)}
+      </div>`;
+  }
+
+  /* 활동 내용은 **무조건 STAR** 로 적게 한다(사용자 지시). 한 칸에 줄글로 적으면
+     "무엇을 했다" 만 남고 상황·역할·성과가 빠지는데, 자소서·면접에서 실제로 쓰이는 건
+     그 네 조각이다. 네 칸으로 나눠 받으면 무엇을 적어야 하는지가 칸 자체로 안내된다.
+     저장 형식은 activity.star = { s, t, a, r } 다(collectActivities 에서 합친다). */
+  const STAR_FIELDS = [
+    { k: 'starS', lab: 'S · 상황', hint: '어떤 상황·배경이었나요? (예: 3인 팀 캡스톤, 결제 지연 문제)' },
+    { k: 'starT', lab: 'T · 과제', hint: '맡은 목표·과제는 무엇이었나요? (예: 응답속도 절반으로 줄이기)' },
+    { k: 'starA', lab: 'A · 행동', hint: '직접 무엇을 했나요? (예: 캐시 도입, 쿼리 인덱스 재설계)' },
+    { k: 'starR', lab: 'R · 결과', hint: '결과는 어땠나요? 수치로. (예: 평균 응답 820ms→300ms)' },
+  ];
+  function starBlock(a, i) {
+    return `
+      <div class="sf-act-star">
+        <div class="sf-act-star-head">활동 내용 <b>STAR</b> 로 적기 <span>상황·과제·행동·결과</span></div>
+        <div class="sf-act-star-grid">
+          ${STAR_FIELDS.map(f => `
+            <label class="sf-act-star-cell">
+              <span class="sf-act-star-tag">${f.lab}</span>
+              <textarea data-i="${i}" data-field="${f.k}" rows="2"
+                placeholder="${escapeHtml(f.hint)}">${escapeHtml(a[f.k] || '')}</textarea>
+            </label>`).join('')}
+        </div>
       </div>`;
   }
 
@@ -1646,6 +1685,14 @@ window.SpecForm = (() => {
           o.companyTier = a.companyTier;
           if (a.companyName) o.companyName = a.companyName;
         }
+        /* STAR 4칸을 다시 { s, t, a, r } 로 합친다. 채워진 칸만 넣는다 —
+           빈 칸까지 넣으면 서버·화면이 '내용 있음' 으로 오해한다. */
+        const star = {};
+        for (const [key, field] of [['s', 'starS'], ['t', 'starT'], ['a', 'starA'], ['r', 'starR']]) {
+          const v = (a[field] || '').trim();
+          if (v) star[key] = v;
+        }
+        if (Object.keys(star).length) o.star = star;
         return o;
       });
   }
@@ -1657,14 +1704,17 @@ window.SpecForm = (() => {
      거르는 규칙을 여기에도 두면 두 곳이 반드시 어긋난다. */
   let midState = [];        // 고른 2차 코드 배열
   let jobMajorState = null; // 고른 1차 코드
+  let jobCodesState = [];   // 고른 개별 직업 코드 배열 (직무찾기 3단계)
 
   async function initJobPicker(spec) {
     const majorHost = document.getElementById('sf-job-major');
     const midHost   = document.getElementById('sf-job-middles');
+    const jobHost   = document.getElementById('sf-job-jobs');
     if (!majorHost || !midHost) return;
 
     midState = Array.isArray(spec.jobMiddles) ? [...spec.jobMiddles] : [];
     jobMajorState = spec.jobMajor || null;
+    jobCodesState = Array.isArray(spec.jobCodes) ? [...spec.jobCodes] : [];
 
     /* 200KB 트리라 로드맵을 안 여는 사람에게는 안 받는다(keco.js 머리주석).
        스펙 폼에서는 필요하므로 여기서 받는다. */
@@ -1678,6 +1728,7 @@ window.SpecForm = (() => {
 
     paintJobMajors();
     paintMiddles();
+    paintJobs();
 
     /* 칩은 누를 때마다 다시 그려지므로 개별 버튼이 아니라 상자에 위임한다. */
     majorHost.addEventListener('click', e => {
@@ -1686,12 +1737,13 @@ window.SpecForm = (() => {
       const code = chip.dataset.major;
       /* 같은 칩을 다시 누르면 해제 — 잘못 골랐을 때 되돌릴 방법이 있어야 한다. */
       const next = jobMajorState === code ? null : code;
-      /* 1차가 바뀌면 그 아래 2차 선택은 뜻이 없어진다. 남겨 두면 화면에는
+      /* 1차가 바뀌면 그 아래 2차·3차 선택은 뜻이 없어진다. 남겨 두면 화면에는
          안 보이는데 저장은 되는 값이 생긴다(조용히 틀리는 쪽). */
-      if (next !== jobMajorState) midState = [];
+      if (next !== jobMajorState) { midState = []; jobCodesState = []; }
       jobMajorState = next;
       paintJobMajors();
       paintMiddles();
+      paintJobs();
       /* 추천 자격증은 직무를 따라간다. 직무를 바꿨는데 추천이 그대로면 앞 직무의
          자격을 이 직무의 것으로 읽는다. */
       paintCertReco();
@@ -1703,9 +1755,42 @@ window.SpecForm = (() => {
       const code = chip.dataset.mid;
       if (midState.includes(code)) midState = midState.filter(c => c !== code);
       else midState.push(code);
+      /* 세부직무를 빼면 그 안에서 고른 직업도 뜻이 없어진다 — 남은 세부직무에
+         속한 직업만 남긴다. */
+      pruneJobCodes();
       paintMiddles();
+      paintJobs();
       paintCertReco();
     });
+
+    if (jobHost) {
+      jobHost.addEventListener('click', e => {
+        const chip = e.target.closest('[data-job]');
+        if (!chip) return;
+        const code = chip.dataset.job;
+        if (jobCodesState.includes(code)) jobCodesState = jobCodesState.filter(c => c !== code);
+        else jobCodesState.push(code);
+        paintJobs();
+      });
+    }
+  }
+
+  /* 지금 고른 세부직무들에 속한 직업 코드만 남긴다. 세부직무를 해제했을 때
+     그 아래 직업이 유령처럼 저장되는 것을 막는다. */
+  function pruneJobCodes() {
+    const valid = new Set(jobsForSelectedMiddles().map(j => j.code));
+    jobCodesState = jobCodesState.filter(c => valid.has(c));
+  }
+
+  /* 고른 세부직무(midState) 안의 직업들을 세부직무 순서대로 모은다. */
+  function jobsForSelectedMiddles() {
+    const mids = KECO.byId(jobMajorState)?.middles || [];
+    const out = [];
+    for (const m of mids) {
+      if (!midState.includes(m.code)) continue;
+      for (const j of (m.jobs || [])) out.push({ ...j, midCode: m.code, midName: m.name });
+    }
+    return out;
   }
 
   /* 멘토 찾기의 분야 칩과 같은 모양(번호 + 이름). 다른 점은 줄바꿈이라는 것 —
@@ -1741,6 +1826,35 @@ window.SpecForm = (() => {
       <button type="button" class="chip${midState.includes(m.code) ? ' on' : ''}" data-mid="${escapeHtml(m.code)}">
         ${escapeHtml(m.name)}
       </button>`).join('');
+  }
+
+  /* 3단계 — 개별 직업. 세부직무를 하나라도 골라야 나온다. 고른 세부직무별로
+     소제목을 달아 그 아래 직업 칩을 깐다(직무찾기와 같은 깊이). 세부직무가 여러 개면
+     어느 직업이 어느 세부직무 것인지 소제목 없이는 안 읽힌다. */
+  function paintJobs() {
+    const group = document.getElementById('sf-job-group');
+    const host  = document.getElementById('sf-job-jobs');
+    if (!group || !host) return;
+
+    if (!midState.length) { group.hidden = true; host.innerHTML = ''; return; }
+
+    const mids = (KECO.byId(jobMajorState)?.middles || []).filter(m => midState.includes(m.code));
+    const withJobs = mids.filter(m => (m.jobs || []).length);
+    group.hidden = false;
+    if (!withJobs.length) {
+      host.innerHTML = '<span class="sf-hint-inline">고른 세부직무에는 개별 직업 목록이 없어요.</span>';
+      return;
+    }
+    /* 세부직무가 하나뿐이면 소제목 없이 칩만 — 소제목이 오히려 군더더기다. */
+    const single = withJobs.length === 1;
+    host.innerHTML = withJobs.map(m => `
+      ${single ? '' : `<div class="sf-job-sub">${escapeHtml(m.name)}</div>`}
+      <div class="sf-job-chips">
+        ${m.jobs.map(j => `
+          <button type="button" class="chip${jobCodesState.includes(j.code) ? ' on' : ''}" data-job="${escapeHtml(j.code)}">
+            ${escapeHtml(j.name)}
+          </button>`).join('')}
+      </div>`).join('');
   }
 
   /* ── 검증 실패를 '보이게' 알린다 ────────────────────────────
@@ -1779,6 +1893,7 @@ window.SpecForm = (() => {
     const major  = document.getElementById('sf-major')?.value.trim() || null;
     const jobMajor = jobMajorState;
     const jobMiddles = [...midState];
+    const jobCodes = [...jobCodesState];
     /* 회사·기업유형 칸은 멘토 화면에만 있고, 관심기업 칸은 멘티 화면에만 있다.
        없는 칸을 읽으려 하면 여기서 죽으므로 역할에 맞는 것만 읽는다. */
     const corpType = isMentor ? (document.getElementById('sf-corpType')?.value || null) : null;
@@ -1819,7 +1934,7 @@ window.SpecForm = (() => {
       const university = document.getElementById('sf-university')?.value.trim() ?? null;
       if (university !== null) await DB.updateProfile({ university });
       await DB.upsertSpec({
-        dept, major, jobMajor, jobMiddles,
+        dept, major, jobMajor, jobMiddles, jobCodes,
         company, corpType, gpa, gpaMax, certs, scores, activities,
         certMeta: certMetaToSave,
         /* 역할별로만 있는 값. 반대 역할의 키는 아예 보내지 않아서
