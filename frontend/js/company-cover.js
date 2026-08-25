@@ -1178,20 +1178,39 @@ window.CompanyCover = (() => {
        다만 검색 링크를 없애지는 않는다. 표(career-pages.json)는 손으로 채우는 것이라
        대부분의 회사는 아직 비어 있고, 링크가 통째로 사라지면 학생은 공고를 찾을 길을
        잃는다. 자사 링크가 있으면 그것을 크게, 검색은 작게 뒤로 물린다. */
+    /* ── 자사 링크: 검증된 채용페이지 → 공식 홈페이지 순 (사용자 지시) ──
+       career-pages.json 은 손으로 검증한 **정확한 채용 URL** 만 담아 대부분 비어 있다.
+       그래서 그 표에 없을 때는 DART 개황의 **공식 홈페이지**로 보낸다 — 이건 추측한
+       /recruit 경로가 아니라 전자공시에 등록된 회사 실제 주소라, 어느 회사든
+       "그 회사 사이트" 로 정확히 들어간다(팀이 금지한 것은 경로 추측이지 홈페이지가
+       아니다). 홈페이지 첫 화면의 '채용·인재영입' 메뉴에 공고가 있다. */
     const own = analysis.careerPage;
+    const homepage = analysis.dart?.profile?.homepage ? httpUrl(analysis.dart.profile.homepage) : '';
+    const ownBlock = own
+      ? `<div class="co-own">
+          <a class="wf-btn wf-btn--primary" href="${esc(own)}" target="_blank" rel="noopener noreferrer">
+            <i class="ti ti-external-link"></i> ${esc(selected.name)} 채용 사이트
+          </a>
+          <small>공채는 여기에만 올라오는 일이 많아요</small>
+        </div>`
+      : homepage
+        ? `<div class="co-own">
+            <a class="wf-btn wf-btn--primary" href="${esc(homepage)}" target="_blank" rel="noopener noreferrer">
+              <i class="ti ti-external-link"></i> ${esc(selected.name)} 공식 홈페이지
+            </a>
+            <small>전자공시(DART)에 등록된 회사 주소예요 — 첫 화면의 <b>채용·인재영입</b> 메뉴에서
+              공고를 확인하세요. 공채는 자사 사이트에만 올라오는 일이 많습니다.</small>
+          </div>`
+        : '';
+    const hasOwn = own || homepage;
     return `
       ${list}
       ${nudge}
-      ${own ? `<div class="co-own">
-        <a class="wf-btn wf-btn--primary" href="${esc(own)}" target="_blank" rel="noopener noreferrer">
-          <i class="ti ti-external-link"></i> ${esc(selected.name)} 채용 사이트
-        </a>
-        <small>공채는 여기에만 올라오는 일이 많아요</small>
-      </div>` : ''}
-      <div class="co-kw" style="margin-top:${own ? '10' : '16'}px">
-        ${own ? '<span class="co-more-label">그 외에서 찾기</span>' : ''}
+      ${ownBlock}
+      <div class="co-kw" style="margin-top:${hasOwn ? '10' : '16'}px">
+        ${hasOwn ? '<span class="co-more-label">그 외에서 찾기</span>' : ''}
         ${sites.map(([label, url]) =>
-          `<a class="wf-btn wf-btn--sm" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)}${own ? '' : '에서 더 찾기'}</a>`).join('')}
+          `<a class="wf-btn wf-btn--sm" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)}${hasOwn ? '' : '에서 더 찾기'}</a>`).join('')}
       </div>
       <p class="jd-hint">회사 인재상 문구는 자소서에 쓰지 마세요 —
         어느 회사에나 있는 말이라 읽는 사람에게 아무 정보가 되지 않습니다.</p>`;
