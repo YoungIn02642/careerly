@@ -374,6 +374,18 @@ a.wf-btn { text-decoration: none; }
 .co-news-t a { font-size: 15px; line-height: 1.5; font-weight: 500; color: var(--wf-ink); text-decoration: none; }
 .co-news-t a:hover { text-decoration: underline; }
 .co-news-meta { margin-top: 3px; font-size: 12.8px; color: var(--wf-mute); }
+/* 시기 배지(약 N주 전) · 화제성(언론사 N곳). 3개월 대표 기사라 언제 일인지 먼저 읽힌다. */
+.co-news-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 5px; }
+.co-news-when {
+  display: inline-block; padding: 2px 8px; border-radius: 999px;
+  background: var(--wf-accent-soft, rgba(37,99,235,0.10)); color: var(--wf-accent, #2563eb);
+  font-size: 11.5px; font-weight: 700;
+}
+.co-news-buzz {
+  display: inline-block; padding: 2px 8px; border-radius: 999px;
+  background: var(--wf-hairline, #eee); color: var(--wf-mute);
+  font-size: 11.5px; font-weight: 600;
+}
 .co-news-item .wf-btn { flex: none; }
 
 .co-kw { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
@@ -1397,6 +1409,14 @@ a.wf-btn { text-decoration: none; }
 .co-biz-block p b { font-weight: 600; color: var(--wf-ink); }
 .co-biz-block.is-wait p, .co-biz-block.is-none p { color: var(--wf-mute); font-size: 13px; }
 .co-biz-block.is-none p span { display: block; margin-top: 4px; font-size: 12.5px; }
+
+/* 개요 재무 스냅샷 — 매출·영업이익 한 줄씩 + 담기. 상세 표는 재무 칸에 있다. */
+.co-fin-snap { display: flex; flex-direction: column; gap: 8px; }
+.co-fin-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.co-fin-t { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.co-fin-label { font-size: 13px; color: var(--wf-mute); }
+.co-fin-val { font-size: 15px; font-weight: 700; color: var(--wf-ink); }
+.co-fin-row .co-take { flex: none; }
 
 /* 어느 보고서 어느 절에서 왔는지. 본문과 확실히 갈라 놔야 원문과 우리 말이 안 섞인다. */
 .co-biz-from {

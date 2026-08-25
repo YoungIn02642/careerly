@@ -54,6 +54,46 @@ window.CompanyCover = (() => {
       </div>`;
   }
 
+  /* 개요의 재무 스냅샷 — 매출·영업이익의 최근값 + 전년비 방향을 담기와 함께 보여준다
+     (사용자 지시: 개요에 담을 만한 정보를 더). 상세 표는 '재무·실적' 칸에 그대로 있고,
+     여기서는 지원동기에 가장 자주 쓰이는 두 줄만 개요 첫 화면에 올린다.
+     **값이 아니라 방향이 재료다** — 그래서 담는 문장에 전년비를 같이 넣는다. */
+  function financeSnapshotHtml() {
+    const fin = analysis?.dart?.financials;
+    if (!fin || !fin.accounts) return '';
+    const keys = ['revenue', 'operating'].filter(k => fin.accounts[k]);
+    if (!keys.length) return '';
+
+    const rows = keys.map(key => {
+      const acc = fin.accounts[key];
+      const label = analysis.dart.labels?.[key] || key;
+      const now = acc.series?.[0];
+      const t = acc.trend;
+      const text = t
+        ? `${label} ${now?.readable || ''} · 전년비 ${t.direction === 'up' ? '+' : t.direction === 'down' ? '−' : ''}${Math.abs(t.pct)}%`
+        : `${label} ${now?.readable || ''}`;
+      return `<div class="co-fin-row">
+        <div class="co-fin-t">
+          <span class="co-fin-label">${esc(label)}</span>
+          <span class="co-fin-val">${esc(now?.readable || '—')}</span>
+          ${t ? `<span class="co-trend--${t.direction}">${arrowOf(t.direction)} ${Math.abs(t.pct)}%</span>` : ''}
+        </div>
+        ${pickBtn({
+          id: `ov-fin-${key}`, kind: 'fact', text,
+          source: `${fin.baseYear}년 사업보고서 · ${fin.fsDiv === 'CFS' ? '연결' : '개별'} 기준`,
+        })}
+      </div>`;
+    }).join('');
+
+    return `
+      <div class="co-biz-block">
+        <h4>최근 실적 한눈에</h4>
+        <div class="co-fin-snap">${rows}</div>
+        <div class="co-biz-from">${fin.baseYear}년 사업보고서 · ${fin.fsDiv === 'CFS' ? '연결' : '개별'} 기준 ·
+          자세한 3년 추이는 <b>재무·실적</b> 칸에</div>
+      </div>`;
+  }
+
   /* 보고서 원문 줄글. 아직 안 왔으면 '가져오는 중' 을 보여준다 — 나중에 채워지는
      칸이라 아무것도 안 그리면 학생이 이 회사만 정보가 없는 줄 안다. */
   /* 이름 앞에 biz 를 붙인 이유: 이 파일에는 이미 화면 전체를 그리는 reportHtml()
@@ -131,11 +171,25 @@ window.CompanyCover = (() => {
         회사가 사람을 어디에 몰아 뒀는지가 곧 지금의 주력 사업이에요.`;
     }
 
+    /* 담기용 줄글(태그 없는 사실). 사업 구조는 지원동기에 실제로 인용된다
+       ("인력의 절반을 X 부문에 둔 회사에서 …"). 그래서 담기를 붙인다(사용자 지시). */
+    let pickText;
+    if (segs.length === 1 && NO_SPLIT.test(segs[0].name.trim())) {
+      pickText = `직원 ${total.toLocaleString()}명을 부문으로 나누지 않고 '${segs[0].name}' 한 줄로 신고 (${emp.year}년 기준)`;
+    } else if (segs.length === 1) {
+      pickText = `직원 ${total.toLocaleString()}명이 모두 ${segs[0].name} 부문에 있음 (${emp.year}년 기준)`;
+    } else {
+      pickText = `직원 ${total.toLocaleString()}명 중 ${top.map(g => `${g.name} ${g.count.toLocaleString()}명(${g.pct}%)`).join(', ')}`
+        + `${rest > 0 ? ` 외 ${rest}개 부문` : ''} (${emp.year}년 기준)`;
+    }
+    const segSource = `${emp.year}년 사업보고서 「직원 현황」`;
+
     return `
       <div class="co-biz-block">
         <h4>사람을 어디에 두고 있나</h4>
         <p>${body}</p>
         <div class="co-biz-from">${emp.year}년 사업보고서 「직원 현황」 · 매출이 아니라 <b>인력</b> 기준</div>
+        ${pickBtn({ id: `biz-seg-${emp.year}`, kind: 'biz', text: pickText, source: segSource, url: '' })}
       </div>`;
   }
 
@@ -144,6 +198,10 @@ window.CompanyCover = (() => {
     const top = affs.slice(0, 5);
     const rest = affs.length - top.length;
     const names = top.map(a => `<b>${esc(a.name)}</b>${a.stake != null ? `(${a.stake}%)` : ''}`).join(', ');
+    /* 담기용 줄글(태그 없는 사실). 계열 구조도 지원동기 소재가 된다. */
+    const pickText = `경영에 참여하는 관계사 ${affs.length}곳 — `
+      + top.map(a => `${a.name}${a.stake != null ? `(${a.stake}%)` : ''}`).join(', ')
+      + `${rest > 0 ? ` 외 ${rest}곳` : ''}`;
 
     return `
       <div class="co-biz-block">
@@ -152,6 +210,7 @@ window.CompanyCover = (() => {
           본체가 하는 일 말고 어디까지 손을 뻗어 뒀는지가 여기서 드러나요(해외 생산법인·소재 계열 등).</p>
         <div class="co-biz-from">사업보고서 「타법인 출자현황」 중 투자목적이 <b>경영 참여</b>인 곳 ·
           시세차익 목적 단순 투자는 뺐어요</div>
+        ${pickBtn({ id: 'biz-aff', kind: 'biz', text: pickText, source: '사업보고서 「타법인 출자현황」', url: '' })}
       </div>`;
   }
 
@@ -993,6 +1052,7 @@ window.CompanyCover = (() => {
         ${p.irUrl ? `<div class="co-fact"><div class="co-fact-l">IR 자료</div>
           <div class="co-fact-v"><a href="${esc(p.irUrl)}" target="_blank" rel="noopener noreferrer">사업부문별 매출 보기</a></div></div>` : ''}
       </div>
+      ${financeSnapshotHtml()}
       ${businessHtml()}
       <p class="jd-hint"><b>사업부별 매출 비중은 API 로 받을 수 없습니다</b> — 전자공시(DART)와
         공공데이터포털 어느 쪽도 그 값을 열어두지 않았고, 사업보고서 본문에만 글로 적혀 있어요.
@@ -1214,7 +1274,11 @@ window.CompanyCover = (() => {
   const newsItems = () => analysis?.news?.items || [];
 
   function issueDetail(s) {
-    const items = newsItems();
+    /* 최근 이슈는 **3개월을 2~3주 간격으로 끊어 뽑은 대표 기사**(서버 news.weekly)를
+       보여준다(사용자 지시). 이래야 같은 시기 기사 5건이 몰리지 않고 흐름이 보인다.
+       발행일이 없는 웹 폴백은 weekly 가 비므로, 그때만 기존 목록(items)으로 내려간다. */
+    const weekly = analysis?.news?.weekly || [];
+    const items = weekly.length ? weekly : newsItems();
     if (!items.length) {
       return `<div class="co-note"><i class="ti ti-info-circle"></i>
         ${esc(analysis.newsError || s.note)}</div>`;
@@ -1223,14 +1287,20 @@ window.CompanyCover = (() => {
     const naver = `https://search.naver.com/search.naver?where=news&query=${encodeURIComponent(selected.name)}`;
 
     return `
+      ${analysis.news.weeklyNote ? `<p class="jd-hint" style="margin:0 0 12px">${esc(analysis.news.weeklyNote)}</p>` : ''}
       <div class="co-news">
         ${items.map(it => {
           /* 제목과 링크만 담는다. 기사 본문을 요약해 담으면 지어낸 사실이 자소서로
              흘러간다 — 이 화면이 AI 에게 기사를 요약시키지 않는 것과 같은 이유
              (news.js 머리주석). 학생은 원문을 읽고 자기 말로 쓴다. */
           const id = `news-${(it.url || it.title).slice(-40)}`;
+          /* 시기 배지(weekLabel) 와 화제성(outlets = 같은 사건을 다룬 언론사 수)은
+             weekly 에만 있다. 없으면(폴백) 안 붙인다. */
+          const when = it.weekLabel ? `<span class="co-news-when">${esc(it.weekLabel)}</span>` : '';
+          const buzz = it.outlets > 1 ? `<span class="co-news-buzz">언론사 ${it.outlets}곳</span>` : '';
           return `<div class="co-news-item">
             <div class="co-news-t">
+              <div class="co-news-badges">${when}${buzz}</div>
               <a href="${esc(it.url || '#')}" target="_blank" rel="noopener noreferrer">${esc(it.title)}</a>
               <div class="co-news-meta">${[it.date, hostOf(it.url)].filter(Boolean).map(esc).join(' · ')}</div>
             </div>
