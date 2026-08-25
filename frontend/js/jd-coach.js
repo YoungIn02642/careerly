@@ -582,6 +582,7 @@
       autoGrow(ta);
       STEPS.forEach(paintBlock);
       paintProgress();
+      paintStepComps();      // 칸마다 '여기서 뽑힌 역량' 을 붙인다
       /* 확인하고 지우라고 분명히 말한다 — 그대로 분석을 누르면 푸터까지 근거가 된다.
          weak 는 "가져오긴 했는데 공고 같지 않다" 다. 사람인처럼 상세가 iframe 안에 있으면
          메뉴·안내문만 1,000자 넘게 딸려 온다 — 길이만 보면 성공이라 더 위험하다. */
@@ -649,6 +650,9 @@
         autoGrow(el);
         paintBlock(step);
         paintProgress();
+        /* 칸을 고치면 그 칸에서 뽑힌 역량도 달라진다(문항을 지우면 그 문항 줄이
+           사라져야 한다). 이미 돌린 결과 안에서 다시 맞추는 것뿐이라 서버를 부르지 않는다. */
+        paintStepComps();
       });
       /* 입력칸 안에서 Ctrl+Enter 로 바로 분석. 칸 아래에 그렇게 적어 뒀으므로
          실제로 되게 해 둔다 — 안 되는 안내를 띄우면 그 화면 전체를 못 믿게 된다. */
@@ -698,6 +702,10 @@
     Roadmap.mount('rm-bar-jd', 'cover');
     const result = $('#jd-result');
     if (result) { result.hidden = true; result.innerHTML = ''; }
+    /* 결과 화면만 비우고 _last 를 남겨 두면 입력 칸 아래 역량 칩(paintStepComps)이
+       지난 회사의 결과를 계속 보여준다 — 지우는 김에 같이 지운다. */
+    _last = null;
+    _stepOpen.clear();
     const status = $('#jd-status');
     if (status) status.textContent = '';
     closeFull();
@@ -719,6 +727,7 @@
     document.querySelectorAll('#jd-doc [data-grow]').forEach(autoGrow);
     paintEvidence();
     paintProgress();
+    paintStepComps();
     paintLibrary();
 
     /* 어디까지 채워졌는지에 따라 다르게 알린다.
@@ -794,6 +803,7 @@
       STEPS.forEach(s => blockOf(s)?.classList.remove('is-open'));
       STEPS.forEach(paintBlock);
       paintProgress();
+      paintStepComps();      // 칸마다 '여기서 뽑힌 역량' 을 붙인다
       resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (e) {
       statusEl.textContent = '';
@@ -838,6 +848,7 @@
       STEPS.forEach(s => blockOf(s)?.classList.remove('is-open'));
       STEPS.forEach(paintBlock);
       paintProgress();
+      paintStepComps();      // 칸마다 '여기서 뽑힌 역량' 을 붙인다
       resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (e) {
       statusEl.textContent = '';
@@ -955,9 +966,24 @@
             ${it.market ? `<span class="jd-key-n">${it.market.pct}%</span>` : ''}
           </button>`).join('')}
       </div>
-      <p class="jd-hint">점이 <b>초록</b>이면 내 활동에 쓸 소재가 있고, <b>빨강</b>이면 아직 없습니다.
-        옆 숫자는 같은 직군 공고 중 이 역량을 요구한 비율이에요.</p>
     </div>`;
+  }
+
+  /* 칩 설명은 **고정 머리 바깥**에 둔다. 안에 두면 두 줄짜리 안내가 화면에 계속
+     붙어 있어(머리 183px) 정작 역량 카드가 보일 자리를 먹었다. 목록 맨 위에 두면
+     처음 한 번은 읽히고, 카드를 읽기 시작하면 같이 밀려 올라간다. */
+  const keysLegendHtml = () => `<p class="jd-hint jd-keys-legend">점이 <b>초록</b>이면 내 활동에
+    쓸 소재가 있고, <b>빨강</b>이면 아직 없습니다. 옆 숫자는 같은 직군 공고 중
+    이 역량을 요구한 비율이에요.</p>`;
+
+  function frameHtml(frame) {
+    const raw = String(frame || '').trim();
+    if (!raw) return '';
+    const steps = raw.split('→').map(s => s.trim()).filter(Boolean);
+    if (steps.length < 2) return `<div class="jd-frame">${esc(raw)}</div>`;
+    /* 원문의 ①②③ 은 뗀다 — 번호는 CSS 가 다시 매기므로 두면 '① 1' 이 된다. */
+    return `<ol class="jd-steps">${steps
+      .map(s => `<li>${esc(s.replace(/^[①②③④⑤⑥⑦⑧⑨⑩]\s*/, ''))}</li>`).join('')}</ol>`;
   }
 
   function mineHtml(item) {
@@ -995,7 +1021,9 @@
               ? `<span class="wf-badge wf-badge--ok">내 소재 ${item.mine.length}건</span>`
               : `<span class="wf-badge wf-badge--error">소재 없음</span>`}
             ${badges.map(n => `<span class="wf-badge wf-badge--mute">문항 ${n}</span>`).join('')}
-            <span class="wf-badge wf-badge--mute">${item.source === 'ai' ? 'AI 추출' : '공고 키워드'}</span>
+            <!-- 어디서 뽑았는지는 카드를 **읽을 때** 필요한 정보다. 접힌 줄에서는
+                 CSS 로 숨긴다 — 훑을 때 배지가 넷이면 정작 '소재 없음'이 안 보인다. -->
+            <span class="wf-badge wf-badge--mute jd-comp-src">${item.source === 'ai' ? 'AI 추출' : '공고 키워드'}</span>
           </span>
         </span>
       </button>
@@ -1017,9 +1045,9 @@
           ${item.quotes.map(q => `<div class="jd-quote">${esc(q)}</div>`).join('')}
         </div>` : ''}
 
-        <div class="jd-comp-sec">
+        <div class="jd-comp-sec jd-comp-sec--do">
           <span class="wf-eyebrow">이 순서로 쓰세요</span>
-          <div class="jd-frame">${esc(item.frame)}</div>
+          ${frameHtml(item.frame)}
           <p class="jd-hint">${bold(item.lead)}</p>
           <div class="jd-ai-row">
             <button type="button" class="wf-btn wf-btn--sm wf-btn--primary" data-ai="${i}">
@@ -1073,6 +1101,134 @@
         <div data-ai-notes="${i}"></div>
       </div>
     </div>`;
+  }
+
+  /* ══ 입력 칸 아래의 역량 미리보기 ═══════════════════════════
+     분석 결과는 화면 **아래** 작업창에 있다. 그런데 공고를 고치거나 문항을 더
+     넣으려고 입력 칸을 다시 열면 결과가 화면 밖으로 나가서, "내가 지금 고치는
+     이 글에서 무엇이 뽑혔더라"를 확인하려면 오르내려야 했다.
+     칸마다 그 칸에서 나온 역량을 칩으로 붙이고, 누르면 그 자리에서 펼친다.
+
+     ── 어느 칸에 어느 역량을 붙이는가 (지어내지 않는다) ──
+       1 지원 회사   — 붙지 않는다. 역량은 공고에서 나오지 회사명에서 나오지 않는다.
+                       대신 지원동기의 근거가 어디서 오는지만 한 줄로 말한다.
+       2 채용공고    — 역량의 **공고 근거 문장이 이 칸 원문에 있는** 것들
+       3 직무기술서  — 같은 규칙. 두 칸에 다 있으면 양쪽에 다 뜬다(실제로 둘 다에 있다)
+       4 자소서 문항 — 문항마다 배정된 역량. 배정 규칙은 결과부 탭(tabsOf)과 같은
+                       것을 쓴다. 두 곳이 다른 답을 내면 어느 쪽을 믿을지 알 수 없다. */
+
+  let _stepOpen = new Map();          // 입력 칸 index → 펼쳐 둔 역량 index
+
+  /* 근거 문장이 그 칸에서 나왔는지 — 공백을 지우고 견준다. 서버가 문장을 다듬어
+     주기 때문에(줄바꿈·들여쓰기 정리) 원문과 글자 그대로는 잘 안 맞는다. */
+  const squash = s => String(s || '').replace(/\s+/g, '');
+
+  function compsFromText(r, text) {
+    const hay = squash(text);
+    if (!hay) return [];
+    return r.items
+      .map((it, i) => ({ it, i }))
+      .filter(({ it }) => (it.quotes || []).some(q => q && hay.includes(squash(q))));
+  }
+
+  /* 칩 하나. 결과부 왼쪽 목록의 칩(.jd-key)과 같은 부품이다 — 같은 것을 가리키니
+     같은 모양이어야 한다. 점 색(초록/빨강)의 뜻도 그대로다. */
+  const stepKeyHtml = (it, i, step, on) => `
+    <button type="button" class="jd-key ${on ? 'is-on' : ''}"
+      data-step-key="${step}" data-step-key-i="${i}" aria-expanded="${on}">
+      <span class="jd-key-dot ${hasMine(it) ? 'jd-key-dot--ok' : 'jd-key-dot--gap'}"></span>
+      ${esc(it.label)}
+    </button>`;
+
+  function stepBriefHtml(item, i) {
+    return `<div class="jd-step-brief" data-accent="${i % 5}">
+      <div class="jd-comp-sec">
+        <span class="wf-eyebrow">기업이 보는 것</span>
+        <p class="jd-comp-p">${esc(item.reads)}</p>
+      </div>
+      ${item.quotes?.length ? `<div class="jd-comp-sec">
+        <span class="wf-eyebrow">공고 근거</span>
+        ${item.quotes.map(q => `<div class="jd-quote">${esc(q)}</div>`).join('')}
+      </div>` : ''}
+      <div class="jd-comp-sec">
+        <span class="wf-eyebrow">이 순서로 쓰세요</span>
+        ${frameHtml(item.frame)}
+      </div>
+      <button type="button" class="jd-step-more" data-step-more="${i}">
+        이 역량 전체 가이드 보기 <i class="ti ti-arrow-narrow-right"></i>
+      </button>
+    </div>`;
+  }
+
+  function stepCompsHtml(step, r) {
+    const open = _stepOpen.get(step);        // 펼쳐 둔 역량 index. 없으면 undefined
+    const brief = () => (open == null ? '' : stepBriefHtml(r.items[open], open));
+
+    /* 1 지원 회사 */
+    if (step === 0) {
+      const n = evidenceFor(valueOf('#jd-company')).length;
+      return `<p class="jd-step-comps-note">지원동기 문항은 공고가 아니라 <b>회사 근거</b>로 씁니다 —
+        지금 담아 둔 근거 ${n}건.</p>`;
+    }
+
+    /* 4 자소서 문항 — 문항마다 한 줄 */
+    if (step === 3) {
+      const tabs = tabsOf(r).filter(t => t.kind === 'question');
+      if (!tabs.length) return '';
+      return `<div class="jd-step-comps-in">
+        <span class="wf-eyebrow">문항마다 이 역량으로 씁니다</span>
+        ${tabs.map(t => `<div class="jd-step-q">
+          <span class="jd-step-q-n">${esc(t.label)}</span>
+          <span class="jd-step-q-keys">
+            ${t.type?.pick === 'news'
+              ? `<span class="wf-badge wf-badge--soft">회사 근거로 씁니다</span>`
+              : t.comps.map(c => {
+                  const i = r.items.indexOf(c);
+                  return i < 0 ? '' : stepKeyHtml(c, i, step, i === open);
+                }).join('')}
+          </span>
+        </div>`).join('')}
+        ${brief()}
+      </div>`;
+    }
+
+    /* 2 채용공고 · 3 직무기술서 */
+    const found = compsFromText(r, valueOf(STEPS[step].input));
+    if (!found.length) {
+      return valueOf(STEPS[step].input)
+        ? `<p class="jd-step-comps-note">이 칸의 문장에서는 역량 근거를 찾지 못했어요.
+             ${step === 2 ? '공고 칸에서 뽑힌 역량은 위 2번 칸 아래에 있습니다.' : ''}</p>`
+        : '';
+    }
+    return `<div class="jd-step-comps-in">
+      <span class="wf-eyebrow">이 칸에서 뽑힌 역량 ${found.length}가지</span>
+      <div class="jd-keys">${found.map(({ it, i }) => stepKeyHtml(it, i, step, i === open)).join('')}</div>
+      ${brief()}
+    </div>`;
+  }
+
+  function paintStepComps() {
+    document.querySelectorAll('[data-step-comps]').forEach(host => {
+      const step = Number(host.dataset.stepComps);
+      if (!_last?.items?.length) { host.innerHTML = ''; return; }
+      host.innerHTML = stepCompsHtml(step, _last);
+
+      host.querySelectorAll('[data-step-key]').forEach(el =>
+        el.addEventListener('click', () => {
+          const i = Number(el.dataset.stepKeyI);
+          /* 같은 칩을 다시 누르면 접는다. 칸마다 하나씩만 펼친다 — 넷을 다 펼치면
+             입력 칸을 못 찾는다(이 화면의 주인공은 입력 칸이다). */
+          if (_stepOpen.get(step) === i) _stepOpen.delete(step);
+          else _stepOpen.set(step, i);
+          paintStepComps();
+        }));
+
+      host.querySelectorAll('[data-step-more]').forEach(el =>
+        el.addEventListener('click', () => {
+          focusItem(Number(el.dataset.stepMore));
+          $('#jd-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }));
+    });
   }
 
   /* 오른쪽 초안 칸. 지금 고른 탭 하나만 그린다. */
@@ -1429,6 +1585,7 @@
           <div class="jd-comp-pane">
             ${r.items.length ? keysHtml(r) : ''}
             <div class="jd-comp-list">
+              ${r.items.length ? keysLegendHtml() : ''}
               ${r.items.length
                 ? r.items.map((it, i) => compHtml(it, i, qMap)).join('')
                 : `<div class="jd-empty jd-empty--soft">

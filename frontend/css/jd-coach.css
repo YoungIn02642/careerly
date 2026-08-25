@@ -1411,3 +1411,159 @@ a.wf-btn { text-decoration: none; }
 .co-biz-more:hover { text-decoration: underline; }
 .co-biz-more .ti { font-size: 13px; }
 .co-biz-block.is-none .co-biz-more { margin-left: 0; margin-top: 8px; }
+
+/* ══════════════════════════════════════════════════════════
+   역량 카드 가독성 · 입력 칸 아래 역량 칩  (careerly 작업에서 옮겨 옴)
+
+   앞쪽 규칙을 고치지 않고 여기서 덮는다 — 원래 규칙이 어땠는지가 위에 남아 있어야
+   왜 바꿨는지를 나중에 읽을 수 있다. CSS 는 뒤에 오는 쪽이 이긴다.
+   ══════════════════════════════════════════════════════════ */
+
+/* 한 카드 안에서 구획을 여덟 번 나눠야 할 때 쓰는 더 옅은 선. #d8d8d8 로 여덟 줄을
+   그으면 선이 내용보다 세다 — 구획은 나누되 눈에 띄면 안 되는 자리용이다. */
+#page-company, #page-jd { --wf-hairline-soft: #ececec; }
+
+/* 왼쪽 400px 은 본문이 320px 밖에 안 남아 한 줄에 24자였다. 역량 카드가 읽는 글이
+   된 만큼(가이드·공고 원문) 40px 을 더 준다 — 오른쪽 작성칸은 1fr 이라 넉넉하다. */
+.jd-split { grid-template-columns: minmax(0, 440px) minmax(0, 1fr); }
+
+/* 칩 설명 — 목록 맨 위에 있지만 카드가 아니다. 좌우 여백은 카드 머리줄과 맞춘다. */
+.jd-keys-legend { margin: 0 0 4px; padding: 2px 16px 10px; }
+/* 칩 설명을 목록으로 내린 만큼 고정 머리가 줄었다(183 → 134px). 그만큼 더 보여준다. */
+.jd-comp-list { max-height: calc(100vh - 140px); }
+
+
+/* 접힌 줄에서는 출처 배지를 뺀다 — 훑을 때 배지가 넷이면 정작 봐야 할
+   '소재 없음'·'문항 1' 이 묻힌다. 펼치면 다시 보인다. */
+.jd-comp:not(.is-open) .jd-comp-src { display: none; }
+
+.jd-comp-body { padding: 0 16px 18px 48px; }
+.jd-comp:not(.is-open) .jd-comp-body { display: none; }
+
+/* ── 펼친 카드 안의 구획 ────────────────────────────────────
+   구획이 여덟 개인데 예전에는 간격(16px)만으로 나뉘어 있었다. 글자 크기·색이
+   다 비슷해서 어디서 끊기는지 보이지 않았고, 카드 하나가 회색 벽으로 읽혔다.
+   옅은 선으로 끊고, 머리(eyebrow)에 그 역량의 색 눈금을 달아 훑는 눈이
+   걸릴 자리를 만든다. */
+.jd-comp-sec { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--wf-hairline-soft); }
+.jd-comp-sec:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.jd-comp-sec > .wf-eyebrow {
+  display: flex; align-items: center; gap: 7px; margin-bottom: 8px;
+  color: var(--wf-body-mid);            /* mute(#898989) 는 머리로 쓰기엔 약하다 */
+}
+/* 눈금 색은 카드마다 다르다(--comp-accent 는 .jd-comp 가 정하고 여기로 상속된다).
+   순번 배지와 같은 색이라, 지금 어느 역량을 읽고 있는지가 구획마다 남는다. */
+.jd-comp-sec > .wf-eyebrow::before {
+  content: ''; flex: none; width: 3px; height: 11px; border-radius: 1px;
+  background: var(--comp-accent, var(--wf-hairline));
+}
+.jd-comp-p { font-size: 13.5px; line-height: 1.75; color: var(--wf-body); }
+.jd-comp-p b { font-weight: 500; color: var(--wf-ink); }
+
+/* 공고에서 그대로 옮겨 온 문장. 근거라서 **읽히라고** 두는 것인데 옅은 면 위에
+   옅은 글자라 가장 안 읽혔다 — 본문 색으로 올리고 따옴표를 세로선으로 세운다. */
+.jd-quote {
+  padding: 10px 13px; margin-top: 6px;
+  border-left: 2px solid var(--wf-mute-soft); background: var(--wf-fill);
+  border-radius: 0 var(--wf-r-sm) var(--wf-r-sm) 0;
+  font-size: 13.5px; line-height: 1.7; color: var(--wf-body);
+}
+.jd-frame {
+  padding: 12px 14px; border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-md);
+  font-size: 13.5px; line-height: 1.85; color: var(--wf-body);
+}
+
+/* 작성 순서 — 한 줄짜리 문단이던 것을 단계마다 한 줄로 끊는다(jd-coach.js frameHtml).
+   카드에서 유일하게 '지금 손을 움직이는' 내용이라 여기만 칸을 나눠 세운다. */
+.jd-steps { counter-reset: step; list-style: none; margin: 0; padding: 0;
+  border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-md); overflow: hidden; }
+.jd-steps li {
+  counter-increment: step; position: relative; padding: 9px 13px 9px 36px;
+  font-size: 13.5px; line-height: 1.7; color: var(--wf-body);
+}
+.jd-steps li + li { border-top: 1px solid var(--wf-hairline-soft); }
+.jd-steps li::before {
+  content: counter(step); position: absolute; left: 12px; top: 11px;
+  width: 16px; height: 16px; border-radius: var(--wf-r-full);
+  display: grid; place-items: center;
+  background: var(--comp-accent, var(--wf-mute)); color: #fff;
+  font-family: var(--font-code); font-size: 10px; line-height: 1;
+}
+
+.jd-list { margin: 0; padding-left: 17px; }
+.jd-list li { font-size: 13.5px; line-height: 1.75; color: var(--wf-body); }
+.jd-list li + li { margin-top: 3px; }
+/* 감점 목록 — 예전에는 줄 전체가 빨강(#ee1d36)이었다. 흰 배경에 13px 빨강은
+   길게 읽기 어렵고, 다 빨가면 무엇이 더 나쁜지도 구분되지 않는다.
+   **표시만 빨강**으로 두고 글자는 본문 색으로 읽게 한다. */
+.jd-list--avoid { list-style: none; padding-left: 0; }
+.jd-list--avoid li { position: relative; padding-left: 19px; color: var(--wf-body); }
+.jd-list--avoid li::before {
+  content: '✕'; position: absolute; left: 2px; top: 1px;
+  font-size: 11px; line-height: 1.9; color: var(--wf-error);
+}
+
+/* 카드 하나에 주석이 세 개다(작성 팁·AI 설명·대괄호 설명). 본문과 같은 문단 모양이라
+   지시문과 주석이 같은 무게로 읽혔다 — 왼쪽에 선을 세워 **건너뛸 수 있는 글**로 만든다. */
+.jd-comp-body .jd-hint {
+  padding-left: 10px; border-left: 2px solid var(--wf-hairline-soft);
+}
+
+/* 카드에서 가장 실행에 가까운 구획. 옅은 면으로 한 덩어리로 묶어 둔다 —
+   작성 순서·AI 초안 버튼·설명이 흩어져 있으면 버튼이 어디에 딸린 것인지 흐려진다. */
+.jd-comp-sec--do {
+  margin-top: 14px; padding: 13px 14px; border-radius: var(--wf-r-md);
+  border: 1px solid var(--wf-hairline-soft); background: var(--wf-fill);
+}
+.jd-comp-sec--do .jd-steps, .jd-comp-sec--do .jd-frame { background: var(--wf-canvas); }
+.jd-comp-sec--do .jd-hint { border-left-color: var(--wf-hairline); }
+
+/* ── 입력 칸 아래: 이 칸에서 뽑힌 역량 ──────────────────────
+   칸이 접혀 있어도 보여야 해서 .jd-block-body 밖에 있다. 분석 전에는 비어 있고
+   (:empty), 결과가 생기면 JS 가 채운다(jd-coach.js paintStepComps).
+   머리 눈금은 그 칸의 색(--step-accent)을 따른다 — 2번 칸 아래면 파랑, 4번 칸이면
+   분홍이라 어느 칸에 딸린 것인지 눈으로 바로 이어진다. */
+.jd-step-comps:not(:empty) {
+  padding: 12px 16px 14px;
+  border-top: 1px dashed var(--wf-hairline);
+  background: var(--wf-canvas);
+}
+.jd-step-comps-in > .wf-eyebrow { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; }
+.jd-step-comps-in > .wf-eyebrow::before {
+  content: ''; flex: none; width: 3px; height: 11px; border-radius: 1px;
+  background: var(--step-accent, var(--wf-hairline));
+}
+.jd-step-comps-note { font-size: 12.8px; line-height: 1.6; color: var(--wf-mute); }
+.jd-step-comps-note b { font-weight: 500; color: var(--wf-body); }
+
+/* 문항 줄 — '문항 1  [역량][역량]' 한 줄씩. 문항 번호 폭을 고정해 칩의 시작점을
+   세로로 맞춘다(줄마다 어긋나면 훑기 어렵다). */
+.jd-step-q { display: flex; align-items: flex-start; gap: 10px; }
+.jd-step-q + .jd-step-q { margin-top: 7px; }
+.jd-step-q-n {
+  flex: none; width: 46px; padding-top: 5px;
+  font-size: 12.8px; font-weight: 500; color: var(--wf-body-mid);
+}
+.jd-step-q-keys { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+
+/* 칩을 누르면 그 자리에서 펼쳐지는 설명. 결과 화면의 구획(.jd-comp-sec)을 그대로
+   재사용하되 읽는 셋(기업이 보는 것·공고 근거·이 순서로)만 온다. */
+.jd-step-brief {
+  margin-top: 10px; padding: 13px 15px;
+  border: 1px solid var(--wf-hairline-soft);
+  border-left: 3px solid var(--comp-accent, var(--wf-hairline));
+  border-radius: var(--wf-r-md); background: var(--wf-fill);
+}
+.jd-step-brief[data-accent="0"] { --comp-accent: var(--wf-purple); }
+.jd-step-brief[data-accent="1"] { --comp-accent: var(--wf-blue); }
+.jd-step-brief[data-accent="2"] { --comp-accent: var(--wf-orange); }
+.jd-step-brief[data-accent="3"] { --comp-accent: var(--wf-pink); }
+.jd-step-brief[data-accent="4"] { --comp-accent: var(--wf-ok); }
+.jd-step-brief .jd-quote, .jd-step-brief .jd-steps { background: var(--wf-canvas); }
+.jd-step-more {
+  display: inline-flex; align-items: center; gap: 5px; margin-top: 12px;
+  padding: 5px 10px; border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-sm);
+  background: var(--wf-canvas); font: inherit; font-size: 12.8px; color: var(--wf-body);
+  cursor: pointer;
+}
+.jd-step-more:hover { border-color: var(--wf-ink); color: var(--wf-ink); }

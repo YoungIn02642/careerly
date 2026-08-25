@@ -98,17 +98,26 @@ function makeRandomEntry(seq) {
   const activities = makeRandomActivities();
 
   const name = pick(SURNAMES) + pick(GIVEN);
+  const corpType = pick(a.corps);
   return {
     u: {
       username: `rand_${Date.now().toString(36)}_${seq}`,
       password: 'demo1234!',
       name,
+      /* 화면에는 실명이 아니라 이 닉네임이 나간다(CAS 순위·멘토 목록).
+         시드에 닉네임이 없으면 순위가 '익명 선배' 로만 채워져 화면 확인이 안 된다.
+         뒤에 번호를 붙이는 건 조합이 150개뿐이라 50명만 넣어도 겹치기 때문이다 —
+         순위표에 같은 닉네임이 두 번 나오면 화면이 고장난 것으로 읽힌다. */
+      nickname: pick(NICK_HEAD) + pick(NICK_TAIL) + rint(1, 99),
       email: `rand_${Date.now().toString(36)}_${seq}@careerly.demo`,
       role: chance(0.8) ? 'mentor' : 'mentee',
     },
     s: {
       dept: a.dept, field: a.field, job: pick(a.jobs),
-      corpType: pick(a.corps),
+      corpType,
+      /* 중소기업은 회사명을 비워 둔다 — 실제로도 적지 않는 회원이 많고,
+         있지도 않은 중소기업 이름을 지어내는 것보다 빈 값이 정직하다. */
+      company: corpType === 'small' ? null : pick(COMPANY_POOL[corpType] || []),
       gpa, gpaMax: 4.5,
       certs: sampleN(a.certs, rint(0, Math.min(3, a.certs.length))),
       scores,
@@ -116,6 +125,18 @@ function makeRandomEntry(seq) {
     },
   };
 }
+
+/* 닉네임 조각 — 실명 대신 화면에 나가는 이름이다. 조합해서 쓴다(코드곰37 …). */
+const NICK_HEAD = ['코드', '데이터', '기획', '숫자', '문서', '실험', '설계', '분석', '현장', '기록', '새벽', '주말', '구름', '바다', '노을'];
+const NICK_TAIL = ['곰', '여우', '수달', '고래', '부엉이', '너구리', '펭귄', '두더지', '하마', '까치'];
+
+/* 회사명 — 기업 유형별로 실제 존재하는 이름에서 고른다. '선배들이 간 회사' 집계가
+   무엇을 세는지 눈으로 확인하려면 이름이 있어야 한다. */
+const COMPANY_POOL = {
+  large:  ['삼성전자', 'SK하이닉스', '현대자동차', 'LG전자', '네이버', '카카오', 'CJ제일제당', '포스코'],
+  mid:    ['오뚜기', '한샘', '동원F&B', '코웨이', '휠라코리아', '한국콜마'],
+  public: ['한국전력공사', '한국철도공사', '국민건강보험공단', '한국수자원공사', '한국공항공사'],
+};
 
 /* 대표 활동 1~4개를 그럴듯하게 생성 — CAS 정성 채점(유형·기간·역할·성과)의 입력.
    유형별 등장 확률은 CAS 가중치 우선순위(인턴십·공모전·대외활동)를 반영한다. */
@@ -158,9 +179,52 @@ function generateRandom(count) {
   return out;
 }
 
+/* ── 데모 멘토의 예약 가능 일정 ────────────────────────────────
+   날짜를 시드 파일에 박아 두면 며칠 뒤부터 **전부 지난 날짜**가 되어 달력이 빈다.
+   그래서 '오늘로부터 며칠 뒤' 로 적고, 넣는 순간에 날짜로 바꾼다.
+   일요일은 건너뛴다 — 멘토 페이지의 기본 감각과 맞춘다. */
+function availabilityIn(dayOffsets, times) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const out = [];
+  for (const off of dayOffsets) {
+    const d = new Date(today); d.setDate(d.getDate() + off);
+    if (d.getDay() === 0) d.setDate(d.getDate() + 1);
+    out.push({
+      date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+      times: [...times],
+    });
+  }
+  /* 일요일을 밀다 보면 같은 날짜가 겹칠 수 있다. 겹치면 뒤엣것이 이긴다 —
+     profiles.availability 의 규칙(server.js PUT /api/profile)과 같게 맞춘다. */
+  return [...new Map(out.map(s => [s.date, s])).values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/* ── 데모 멘토 프로필 (2026-08-22 추가) ────────────────────────
+   '멘토 찾기'가 프론트에 박힌 가짜 멘토 102명을 쓰던 것을 걷어내면서 넣었다.
+   이제 목록은 **프로필을 채운 실제 회원**만 보여주므로(repo.mentors.list),
+   데모 계정도 멘토 페이지를 채워야 화면에 나온다.
+
+   가짜 멘토와 다른 점은 **관리자가 명시적으로 넣는 데이터**라는 것이다 —
+   /api/admin/seed 는 운영에서 권한으로 막혀 있고, 앱 코드에는 남지 않는다.
+
+   nickname 은 화면 표시용이다 — 멘토 목록·상세·CAS 순위 모두 실명 대신 이것을
+   쓴다(frontend/js/mentoring.js nickOf). 프로필의 실명·경력은 내부 데이터로 남고
+   화면에는 나가지 않는다. */
 const DEMO_SEED = [
-  { u: { username: 'demo_kim', password: 'demo1234!', name: '김민준', email: 'kim@careerly.demo', role: 'mentor' },
+  { u: { username: 'demo_kim', password: 'demo1234!', name: '김민준', nickname: '코드곰', email: 'kim@careerly.demo', role: 'mentor' },
+    p: { currentJob: '백엔드 엔지니어',
+         intro: '비전공에서 시작해 카카오 백엔드로 왔어요. 신입 포트폴리오와 기술면접 준비를 같이 봐드립니다.',
+         specialties: ['백엔드', '기술면접', '포트폴리오', '비전공 취업'],
+         modes: ['video30', 'text'],
+         timeline: [
+           { t: '카카오 백엔드 엔지니어', d: '2024.03 ~ 현재', s: '커머스 결제 서버 개발' },
+           { t: '카카오 백엔드 인턴', d: '2023.07 ~ 2023.08', s: '사내 API 게이트웨이 개선' },
+           { t: '교내 알고리즘 학회 운영진', d: '2021.03 ~ 2022.12', s: '스터디 운영 · 교내 대회 기획' },
+         ],
+         availability: availabilityIn([2, 4, 6, 9, 11], ['10:00', '14:00', '20:00']) },
     s: { dept: 'cs', field: 'service', job: 'backend',
+         company: '카카오', jobMajor: '1', jobMiddles: ['13'],
+         careers: [{ company: '카카오', start: '2024-03', current: true, position: '백엔드 엔지니어' }],
          corpType: 'large',
          gpa: 3.85, gpaMax: 4.5,
          certs: ['정보처리기사', 'SQLD', 'AWS SAA'],
@@ -171,8 +235,19 @@ const DEMO_SEED = [
                    internshipText: '카카오 백엔드 인턴 (2개월)',
                    activitiesText: '교내 알고리즘 학회 운영진 2년' } } },
 
-  { u: { username: 'demo_lee', password: 'demo1234!', name: '이서연', email: 'lee@careerly.demo', role: 'mentor' },
+  { u: { username: 'demo_lee', password: 'demo1234!', name: '이서연', nickname: '픽셀여우', email: 'lee@careerly.demo', role: 'mentor' },
+    p: { currentJob: '프론트엔드 엔지니어',
+         intro: '교환학생과 병행하며 프론트엔드로 취업했어요. 디자인 시스템·React 포트폴리오를 함께 정리해요.',
+         specialties: ['프론트엔드', 'React', '교환학생', '포트폴리오'],
+         modes: ['video30', 'onsite60'],
+         timeline: [
+           { t: '토스 프론트엔드 엔지니어', d: '2024.01 ~ 현재', s: '결제 화면 디자인 시스템' },
+           { t: '알토대 교환학생', d: '2022.09 ~ 2023.01', s: '핀란드 · 웹 접근성 연구 프로젝트' },
+         ],
+         availability: availabilityIn([3, 5, 8, 12], ['11:00', '15:00', '19:00']) },
     s: { dept: 'cs', field: 'service', job: 'frontend',
+         company: '토스', jobMajor: '1', jobMiddles: ['13'],
+         careers: [{ company: '토스', start: '2024-01', current: true, position: '프론트엔드 엔지니어' }],
          corpType: 'mid',
          gpa: 3.95, gpaMax: 4.5,
          certs: ['정보처리기사', 'GTQ 1급'],
@@ -181,8 +256,20 @@ const DEMO_SEED = [
                  coreCourses: true, langStudy: false, exchange: true, gradSchool: false },
          detail: { exchangeText: '핀란드 알토대 1학기' } } },
 
-  { u: { username: 'demo_park', password: 'demo1234!', name: '박지훈', email: 'park@careerly.demo', role: 'mentor' },
+  { u: { username: 'demo_park', password: 'demo1234!', name: '박지훈', nickname: '숫자수달', email: 'park@careerly.demo', role: 'mentor' },
+    p: { currentJob: 'IB 애널리스트',
+         intro: '증권사 IB본부에서 일합니다. 금융권 자소서와 재무모델링 과제 준비를 도와드려요.',
+         specialties: ['IB', '재무모델링', '금융권 자소서', 'CFA'],
+         modes: ['video30', 'onsite60', 'text'],
+         timeline: [
+           { t: '미래에셋증권 IB본부', d: '2023.01 ~ 현재', s: 'ECM · 인수합병 자문' },
+           { t: '미래에셋증권 인턴', d: '2022.06 ~ 2022.08', s: 'IB본부 리서치 보조' },
+           { t: 'CFA 한국지부 학회 총무', d: '2020.03 ~ 2022.05', s: '밸류에이션 스터디 운영' },
+         ],
+         availability: availabilityIn([2, 5, 7, 10, 14], ['09:00', '13:00', '21:00']) },
     s: { dept: 'business', field: 'finance', job: 'ib',
+         company: '미래에셋증권', jobMajor: '0', jobMiddles: ['03'],
+         careers: [{ company: '미래에셋증권', start: '2023-01', current: true, position: 'IB 애널리스트' }],
          corpType: 'large',
          gpa: 3.7, gpaMax: 4.5,
          certs: ['금융투자분석사', '투자자산운용사', 'CFA Level 1'],
@@ -192,8 +279,19 @@ const DEMO_SEED = [
          detail: { internshipText: '미래에셋증권 IB본부 인턴 (3개월)',
                    activitiesText: 'CFA 한국지부 학회 총무' } } },
 
-  { u: { username: 'demo_choi', password: 'demo1234!', name: '최수아', email: 'choi@careerly.demo', role: 'mentor' },
+  { u: { username: 'demo_choi', password: 'demo1234!', name: '최수아', nickname: '전략고래', email: 'choi@careerly.demo', role: 'mentor' },
+    p: { currentJob: '전략 컨설턴트',
+         intro: '전략 컨설팅펌에서 신사업 프로젝트를 합니다. 케이스 면접과 문제 정의 프레임을 잡아드려요.',
+         specialties: ['전략컨설팅', '케이스면접', '자소서첨삭', '문제해결'],
+         modes: ['onsite60', 'video30'],
+         timeline: [
+           { t: '전략 컨설팅펌 컨설턴트', d: '2022.07 ~ 현재', s: '대기업 신사업 전략 프로젝트' },
+           { t: '경영전략 학회', d: '2019.03 ~ 2021.05', s: '케이스 스터디 운영 · 공모전 대상' },
+         ],
+         availability: availabilityIn([4, 6, 11, 13], ['19:00', '20:00', '21:00']) },
     s: { dept: 'business', field: 'consulting', job: 'strategy',
+         company: '베인앤드컴퍼니', jobMajor: '0', jobMiddles: ['02'],
+         careers: [{ company: '베인앤드컴퍼니', start: '2022-07', current: true, position: '컨설턴트' }],
          corpType: 'large',
          gpa: 4.1, gpaMax: 4.5,
          certs: [],
@@ -202,8 +300,19 @@ const DEMO_SEED = [
                  coreCourses: true, langStudy: true, exchange: true, gradSchool: true },
          detail: { gradSchoolText: '서울대 경영전문대학원 (예정)' } } },
 
-  { u: { username: 'demo_jung', password: 'demo1234!', name: '정도윤', email: 'jung@careerly.demo', role: 'mentor' },
+  { u: { username: 'demo_jung', password: 'demo1234!', name: '정도윤', nickname: '기록부엉이', email: 'jung@careerly.demo', role: 'mentor' },
+    p: { currentJob: '기업금융 심사역',
+         intro: '국책은행 기업금융에서 일합니다. 공기업·금융 공기업 필기와 자소서 준비를 도와드려요.',
+         specialties: ['공기업', 'NCS 필기', '기업금융', '금융권 자소서'],
+         modes: ['text', 'video30'],
+         timeline: [
+           { t: '한국산업은행 기업금융', d: '2023.03 ~ 현재', s: '중견기업 여신 심사' },
+           { t: '금융공기업 취업 스터디', d: '2021.09 ~ 2022.12', s: 'NCS · 전공 필기 스터디 리드' },
+         ],
+         availability: availabilityIn([3, 7, 9, 15], ['20:00', '21:00']) },
     s: { dept: 'business', field: 'finance', job: 'ib',
+         company: '한국산업은행', jobMajor: '0', jobMiddles: ['03'],
+         careers: [{ company: '한국산업은행', start: '2023-03', current: true, position: '기업금융 심사역' }],
          corpType: 'public',
          gpa: 3.5, gpaMax: 4.5,
          certs: ['금융투자분석사'],
@@ -213,9 +322,9 @@ const DEMO_SEED = [
          detail: {} } },
 
   // 멘티 — 스펙 없이 회원만
-  { u: { username: 'mentee_a', password: 'demo1234!', name: '강하늘', email: 'a@careerly.demo', role: 'mentee' }, s: null },
-  { u: { username: 'mentee_b', password: 'demo1234!', name: '윤서윤', email: 'b@careerly.demo', role: 'mentee' }, s: null },
-  { u: { username: 'mentee_c', password: 'demo1234!', name: '임시우', email: 'c@careerly.demo', role: 'mentee' }, s: null },
+  { u: { username: 'mentee_a', password: 'demo1234!', name: '강하늘', nickname: '새벽펭귄', email: 'a@careerly.demo', role: 'mentee' }, s: null },
+  { u: { username: 'mentee_b', password: 'demo1234!', name: '윤서윤', nickname: '주말너구리', email: 'b@careerly.demo', role: 'mentee' }, s: null },
+  { u: { username: 'mentee_c', password: 'demo1234!', name: '임시우', nickname: '문서까치', email: 'c@careerly.demo', role: 'mentee' }, s: null },
 ];
 
 module.exports = { DEMO_SEED, generateRandom };
