@@ -1052,8 +1052,15 @@
         </div>
         <div class="jd-block-peek" data-peek></div>
         <div class="jd-block-body">
-          <textarea id="jd-questions" class="jd-text jd-text--sm" data-grow
-            placeholder="1. 지원 동기와 입사 후 포부를 기술해 주십시오.&#10;2. 직무 수행에 필요한 역량을 갖추기 위해 노력한 경험을 서술해 주십시오.&#10;3. 협업 과정에서 갈등을 해결한 경험을 기술해 주십시오."></textarea>
+          <!-- 문항은 칸마다 하나씩, 번호 없이 **내용만** 적는다(사용자 지시). 번호는
+               '문항 N' 라벨로 화면이 붙인다 — 사용자가 1,2,3 을 직접 치지 않게 한다.
+               js/jd-coach.js 의 renderQBoxes() 가 이 칸들을 그리고, 개행으로 합친 값을
+               아래 숨은 #jd-questions 에 넣어 준다(기존 분석 코드가 그대로 읽는다). -->
+          <div id="jd-q-boxes" class="jd-q-boxes"></div>
+          <button type="button" class="jd-q-add" id="jd-q-add">
+            <i class="ti ti-plus"></i> 문항 추가
+          </button>
+          <textarea id="jd-questions" class="jd-text jd-text--sm" data-grow hidden></textarea>
           <div class="jd-block-foot">
             <span data-stat></span>
             <span class="jd-foot-end">문항을 넣으면 문항마다 어떤 역량·소재를 쓸지 배분해 드려요</span>

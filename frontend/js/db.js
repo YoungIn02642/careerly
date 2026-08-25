@@ -86,6 +86,12 @@ window.DB = (() => {
     return _me && _me.username === username ? _mySpec : null;
   }
 
+  /* 내 정성스펙 활동 목록(스펙입력에서 적은 것). 자소서 코치가 STAR 를 가져올 때 쓴다.
+     로그인 안 했거나 스펙이 없으면 빈 배열. */
+  function myActivities() {
+    return _mySpec?.activities || [];
+  }
+
   /* 회사명 → 기업 규모 자동 판정. 서버가 로컬 캐시만 보므로 입력 중 호출해도 빠르다.
      실패해도 화면이 멈추면 안 되므로 null 을 돌려주고, 호출부는 회원이 직접
      고르는 흐름으로 넘어간다. */
@@ -494,7 +500,7 @@ window.DB = (() => {
 
   return {
     hydrate, refreshSpecs, refreshUsers,
-    currentUser, getAllSpecs, getSpec, getUsers, countByRole, stats,
+    currentUser, getAllSpecs, getSpec, myActivities, getUsers, countByRole, stats,
     checkUsername, verifyStatus, verifyRequest,
     createUser, login, logout, withdraw, changePassword, completeOnboarding, confirmPayment, updateUser, requestRoleChange, upsertSpec, getProfile, updateProfile,
     classifyCompany, suggestCompanies, suggestCerts, recommendCerts, suggestMajors, suggestUniversities, classifyMajor, jobCatalog,

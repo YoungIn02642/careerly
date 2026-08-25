@@ -273,6 +273,79 @@
 2. 직무 수행에 필요한 역량을 갖추기 위해 노력한 경험을 서술해 주십시오.
 3. 팀으로 일하며 갈등을 해결한 경험을 기술해 주십시오.`;
 
+  /* ── 자소서 문항 칸 (번호 없이 내용만, 기본 3개 · 추가 상한) ───────────
+     사용자가 '1. …' 처럼 번호를 직접 치던 것을 없앤다(사용자 지시). 칸마다 하나씩
+     내용만 적고, 번호는 '문항 N' 라벨로 화면이 붙인다. 기본 3칸, '문항 추가'로
+     Q_MAX 까지 늘린다. 값은 개행으로 합쳐 숨은 #jd-questions 에 넣어, 분석·진행도·
+     초안 탭 등 기존 코드가 그대로 읽게 한다(parseQuestions 는 손대지 않는다). */
+  const Q_MAX = 10;          // 문항 상한
+  const Q_DEFAULT = 3;       // 처음 보이는 칸 수
+  const Q_PLACEHOLDERS = [
+    '예) 지원 동기와 입사 후 포부를 기술해 주십시오.',
+    '예) 직무 수행에 필요한 역량을 갖추기 위해 노력한 경험을 서술해 주십시오.',
+    '예) 팀으로 일하며 갈등을 해결한 경험을 기술해 주십시오.',
+  ];
+  let _qBoxes = Array(Q_DEFAULT).fill('');   // 문항 내용(번호 없음)
+
+  /* 칸 값을 개행으로 합쳐 숨은 textarea 에 넣고 input 을 쏜다 — 기존 입력 핸들러
+     (진행도·역량 배분·peek)가 그 이벤트로 갱신된다. */
+  function syncQuestions() {
+    const ta = $('#jd-questions');
+    if (!ta) return;
+    ta.value = _qBoxes.map(s => s.trim()).filter(Boolean).join('\n');
+    ta.dispatchEvent(new Event('input'));
+  }
+
+  function renderQBoxes() {
+    const host = $('#jd-q-boxes');
+    if (!host) return;
+    host.innerHTML = _qBoxes.map((v, i) => `
+      <div class="jd-q-box">
+        <span class="jd-q-num">문항 ${i + 1}</span>
+        <textarea class="jd-q-in" data-q="${i}" rows="2"
+          placeholder="${esc(Q_PLACEHOLDERS[i] || '자소서 문항 내용을 붙여넣거나 적어주세요 (번호 없이)')}">${esc(v)}</textarea>
+        ${_qBoxes.length > 1
+          ? `<button type="button" class="jd-q-del" data-q-del="${i}" aria-label="문항 ${i + 1} 삭제"><i class="ti ti-x"></i></button>`
+          : ''}
+      </div>`).join('');
+    const add = $('#jd-q-add');
+    if (add) {
+      add.disabled = _qBoxes.length >= Q_MAX;
+      add.style.display = _qBoxes.length >= Q_MAX ? 'none' : '';
+    }
+    bindQBoxes(host);
+  }
+
+  function bindQBoxes(host) {
+    host.querySelectorAll('.jd-q-in').forEach(el => {
+      el.addEventListener('input', () => {
+        _qBoxes[+el.dataset.q] = el.value;
+        autoGrow(el);
+        syncQuestions();
+      });
+      el.addEventListener('keydown', e => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); run(); }
+      });
+      autoGrow(el);
+    });
+    host.querySelectorAll('[data-q-del]').forEach(el => {
+      el.addEventListener('click', () => {
+        _qBoxes.splice(+el.dataset.qDel, 1);
+        if (!_qBoxes.length) _qBoxes.push('');
+        renderQBoxes();
+        syncQuestions();
+      });
+    });
+  }
+
+  /* 문항 값을 통째로 갈아끼운다(샘플·기본 문항 채우기에서 쓴다). */
+  function setQBoxes(list) {
+    _qBoxes = (list && list.length) ? list.slice(0, Q_MAX) : Array(Q_DEFAULT).fill('');
+    while (_qBoxes.length < Q_DEFAULT) _qBoxes.push('');   // 최소 기본 칸 수는 유지
+    renderQBoxes();
+    syncQuestions();
+  }
+
   /* ══ 입력부 — 문서형 에디터 ═══════════════════════════════ */
 
   const STEPS = [
@@ -620,12 +693,27 @@
     const sampleBtn = $('#jd-sample');
     if (sampleBtn) sampleBtn.addEventListener('click', () => {
       $('#jd-text').value = SAMPLE;
-      $('#jd-questions').value = SAMPLE_QUESTIONS;
+      /* 샘플 문항은 '1. …' 문자열이라 번호를 떼어 내용만 칸에 넣는다. */
+      setQBoxes(SAMPLE_QUESTIONS.split(/\r?\n/)
+        .map(s => s.replace(/^\s*(\d+[.)]|[-•*])\s*/, '').trim()).filter(Boolean));
       STEPS.forEach(s => { blockOf(s)?.classList.add('is-open'); paintBlock(s); });
       document.querySelectorAll('#jd-doc [data-grow]').forEach(autoGrow);
       paintProgress();
       $('#jd-text').focus();
     });
+
+    /* '문항 추가' — 상한(Q_MAX)까지 빈 칸을 하나 더 연다. */
+    const qAdd = $('#jd-q-add');
+    if (qAdd) qAdd.addEventListener('click', () => {
+      if (_qBoxes.length >= Q_MAX) return;
+      _qBoxes.push('');
+      renderQBoxes();
+      /* 방금 추가한 칸으로 커서를 옮긴다 — 어디에 적어야 하는지 바로 보이게. */
+      $('#jd-q-boxes')?.querySelector(`[data-q="${_qBoxes.length - 1}"]`)?.focus();
+    });
+
+    /* 처음 진입 시 기본 3칸을 그린다. */
+    renderQBoxes();
 
     // 접기·펼치기
     document.querySelectorAll('#jd-doc [data-toggle]').forEach(btn =>
@@ -841,7 +929,7 @@
       /* 문항 칸이 비어 있으면 기본 문항을 실제로 **써 넣는다**. 화면에만 띄우고
          입력칸을 비워 두면, 사용자가 문항을 고치려 할 때 어디를 고쳐야 할지 모른다. */
       if (!parseQuestions().length && $('#jd-questions')) {
-        $('#jd-questions').value = DEFAULT_MOTIVE_Q;
+        setQBoxes([DEFAULT_MOTIVE_Q]);
         paintBlock(STEPS[3]);
       }
       render(_last);
@@ -1335,6 +1423,59 @@
 
      겸사겸사 이 띠가 **내가 지금 뭘 적어 뒀는지**도 보여준다. 설명만 네 칸 떠 있는
      것보다, 적은 것이 보이면 무엇이 비었는지 한눈에 안다. */
+  /* 활동 유형 id → 짧은 이름. 스펙입력(CAS.ACTIVITY_TYPES)과 같은 말이되, 코치에서는
+     CAS 를 안 불러도 되게 필요한 것만 둔다. 없으면 유형 id 를 그대로 쓴다. */
+  const ACT_TYPE_LABEL = {
+    internship: '인턴십', competition: '공모전', extracurricular: '대외활동',
+    project: '프로젝트', research: '연구', club: '동아리·학회',
+    exchange: '교환학생', volunteer: '봉사',
+  };
+  /* 스펙입력에서 STAR 를 적은 활동만 가져올 수 있다(빈 활동은 채울 게 없다). */
+  const actHasStar = a => a?.star && ['s', 't', 'a', 'r'].some(k => (a.star[k] || '').trim());
+  const actTitle = a => a.name || a.org || ACT_TYPE_LABEL[a.type] || a.type || '활동';
+
+  /* 지금 열려 있는 '내 정성스펙 가져오기' 패널 여부. */
+  let _starImportOpen = false;
+
+  /* 내 정성스펙 STAR 가져오기 — 스펙입력(B2)에서 적은 활동의 STAR 를 이 문항의
+     STAR 칸으로 옮긴다(사용자 지시). 활동을 고르면 네 칸이 그 내용으로 채워지고,
+     그대로 AI 초안에 쓰거나 손봐서 쓸 수 있다. */
+  function starImportHtml(tab) {
+    const acts = (window.DB ? DB.myActivities() : []).filter(actHasStar);
+    if (!acts.length) {
+      return `<div class="jd-star-import jd-star-import--empty">
+        <i class="ti ti-info-circle"></i>
+        스펙 관리에서 <b>정성 스펙 활동</b>에 STAR(상황·과제·행동·결과)를 적어 두면,
+        여기로 가져와 바로 쓸 수 있어요.
+      </div>`;
+    }
+    return `<div class="jd-star-import">
+      <button type="button" class="jd-star-import-toggle" data-star-import-toggle
+              aria-expanded="${_starImportOpen}">
+        <i class="ti ti-download"></i> 내가 적은 정성스펙 가져오기
+        <span class="jd-star-import-n">${acts.length}개</span>
+        <i class="ti ti-chevron-${_starImportOpen ? 'up' : 'down'}"></i>
+      </button>
+      ${_starImportOpen ? `
+        <div class="jd-star-import-list">
+          <p class="jd-star-import-note">이 문항(<b>${esc(tab.label)}</b>)의 STAR 칸을 고른 활동 내용으로 채웁니다.
+            채운 뒤 손봐도 돼요.</p>
+          ${acts.map((a, i) => {
+            const parts = ['s', 't', 'a', 'r'].map(k => (a.star[k] || '').trim()).filter(Boolean);
+            const preview = parts.join(' · ');
+            return `<button type="button" class="jd-star-import-item" data-star-import="${i}">
+              <div class="jd-star-import-h">
+                <span class="jd-star-import-type">${esc(ACT_TYPE_LABEL[a.type] || a.type || '활동')}</span>
+                <b>${esc(actTitle(a))}</b>
+                ${a.duration ? `<span class="jd-star-import-dur">${esc(a.duration)}</span>` : ''}
+              </div>
+              <div class="jd-star-import-prev">${esc(preview.length > 120 ? preview.slice(0, 120) + '…' : preview)}</div>
+            </button>`;
+          }).join('')}
+        </div>` : ''}
+    </div>`;
+  }
+
   function starHtml(r) {
     if (!r.star?.length) return '';
     const tab = (_lastTabs || [])[_tab];
@@ -1344,6 +1485,7 @@
       <div class="co-sec-h"><h2>모든 문항의 뼈대 — STAR</h2>
         <span class="co-src">${filled}/4 칸 작성 · 칸을 누르면 바로 아래에서 씁니다 ·
           이 브라우저에만 저장됩니다 · <b>AI 초안 넣기</b>가 이 내용을 읽습니다</span></div>
+      ${tab ? starImportHtml(tab) : ''}
       <div class="jd-star-grid">
         ${r.star.map(s => {
           const val = (saved[s.key] || '').trim();
@@ -1383,6 +1525,38 @@
            '닫기' 버튼을 따로 찾지 않는다. */
         _starOpen = _starOpen === k ? null : k;
         repaintStarInput(box);
+      });
+    });
+
+    /* '내가 적은 정성스펙 가져오기' 펼치기/접기. */
+    const toggle = box.querySelector('[data-star-import-toggle]');
+    if (toggle) toggle.addEventListener('click', () => {
+      _starImportOpen = !_starImportOpen;
+      repaintStarBand(box);
+    });
+
+    /* 활동을 고르면 그 STAR 를 이 문항의 네 칸으로 옮긴다. 기존에 적어 둔 값이 있으면
+       덮어쓰기 전에 물어본다 — 손으로 쓴 것을 말없이 지우면 안 된다. */
+    box.querySelectorAll('[data-star-import]').forEach(el => {
+      el.addEventListener('click', () => {
+        const tab = (_lastTabs || [])[_tab];
+        if (!tab) return;
+        const acts = (window.DB ? DB.myActivities() : []).filter(actHasStar);
+        const act = acts[+el.dataset.starImport];
+        if (!act?.star) return;
+
+        const saved = getStar(tab.key);
+        const hadContent = STAR_KEYS.some(k => (saved[k] || '').trim());
+        if (hadContent && !confirm('이 문항에 이미 적은 STAR 를 고른 활동 내용으로 바꿀까요?')) return;
+
+        for (const K of STAR_KEYS) {
+          saveStar(tab.key, K, (act.star[K.toLowerCase()] || '').trim());
+        }
+        _starImportOpen = false;
+        _starOpen = 'S';
+        repaintStarBand(box);
+        repaintStarInput(box);
+        if (typeof toast === 'function') toast('정성스펙을 가져왔어요. 필요하면 칸을 눌러 손보세요.');
       });
     });
   }

@@ -660,6 +660,41 @@ a.wf-btn { text-decoration: none; }
 .jd-text::placeholder { color: var(--wf-mute-soft); }
 .jd-text--sm { min-height: 108px; }
 
+/* 자소서 문항 칸 — 번호 없이 내용만. '문항 N' 라벨을 화면이 붙인다. */
+.jd-q-boxes { display: flex; flex-direction: column; gap: 10px; padding: 14px 0 4px; }
+.jd-q-box {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: start; gap: 10px;
+}
+.jd-q-num {
+  margin-top: 8px; flex: none; padding: 3px 10px; border-radius: 999px;
+  background: var(--wf-accent-soft, rgba(37,99,235,0.10)); color: var(--wf-accent, #2563eb);
+  font-size: 12px; font-weight: 700; white-space: nowrap;
+}
+.jd-q-in {
+  width: 100%; box-sizing: border-box; font-family: inherit; font-size: 14px; line-height: 1.6;
+  padding: 9px 12px; border: 1px solid var(--wf-hairline); border-radius: 9px; resize: none;
+  min-height: 42px; color: var(--wf-ink); background: #fff;
+}
+.jd-q-in:focus { outline: none; border-color: var(--wf-accent, #2563eb); box-shadow: 0 0 0 2px var(--wf-accent-soft, rgba(37,99,235,0.10)); }
+.jd-q-del {
+  margin-top: 5px; flex: none; width: 30px; height: 30px; border: 1px solid var(--wf-hairline);
+  background: #fff; border-radius: 8px; cursor: pointer; color: var(--wf-mute);
+  display: flex; align-items: center; justify-content: center;
+}
+.jd-q-del:hover { border-color: #ef4444; color: #ef4444; }
+.jd-q-add {
+  margin: 4px 0 2px; display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border: 1px dashed var(--wf-hairline); border-radius: 9px;
+  background: #fff; font-family: inherit; font-size: 13px; font-weight: 600;
+  color: var(--wf-accent, #2563eb); cursor: pointer;
+}
+.jd-q-add:hover { border-color: var(--wf-accent, #2563eb); background: var(--wf-accent-soft, rgba(37,99,235,0.06)); }
+.jd-q-add:disabled { color: var(--wf-mute); cursor: default; opacity: 0.6; }
+@media (max-width: 560px) {
+  .jd-q-box { grid-template-columns: 1fr auto; }
+  .jd-q-num { grid-column: 1 / -1; margin-top: 0; }
+}
+
 .jd-block-foot {
   display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
   padding: 9px 16px; border-top: 1px solid var(--wf-hairline); background: var(--wf-fill);
@@ -705,6 +740,44 @@ a.wf-btn { text-decoration: none; }
 }
 .jd-star-band { margin-bottom: 12px; }
 .jd-star-band .co-sec-h { margin-bottom: 10px; }
+
+/* 내 정성스펙 가져오기 — 스펙입력에서 적은 STAR 활동을 이 문항으로 옮기는 패널. */
+.jd-star-import { margin-bottom: 12px; }
+.jd-star-import--empty {
+  display: flex; align-items: flex-start; gap: 8px; padding: 11px 13px;
+  border: 1px dashed var(--wf-hairline); border-radius: 10px;
+  font-size: 12.8px; line-height: 1.6; color: var(--wf-mute); background: var(--wf-soft, #fafafa);
+}
+.jd-star-import--empty i { margin-top: 2px; }
+.jd-star-import-toggle {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 13px;
+  border: 1px solid var(--wf-hairline); border-radius: 10px; background: #fff;
+  font-family: inherit; font-size: 13.5px; font-weight: 600; color: var(--wf-ink); cursor: pointer;
+}
+.jd-star-import-toggle:hover { border-color: var(--wf-accent, #2563eb); }
+.jd-star-import-toggle .jd-star-import-n {
+  padding: 1px 8px; border-radius: 999px; background: var(--wf-accent-soft, rgba(37,99,235,0.10));
+  color: var(--wf-accent, #2563eb); font-size: 11.5px; font-weight: 700;
+}
+.jd-star-import-toggle .ti-chevron-down, .jd-star-import-toggle .ti-chevron-up { margin-left: auto; }
+.jd-star-import-list {
+  margin-top: 8px; padding: 12px; border: 1px solid var(--wf-hairline); border-radius: 10px;
+  background: var(--wf-soft, #fafafa); display: flex; flex-direction: column; gap: 8px;
+}
+.jd-star-import-note { margin: 0 0 4px; font-size: 12.5px; color: var(--wf-mute); line-height: 1.55; }
+.jd-star-import-item {
+  text-align: left; padding: 10px 12px; border: 1px solid var(--wf-hairline); border-radius: 9px;
+  background: #fff; font-family: inherit; cursor: pointer;
+}
+.jd-star-import-item:hover { border-color: var(--wf-accent, #2563eb); box-shadow: 0 0 0 2px var(--wf-accent-soft, rgba(37,99,235,0.10)); }
+.jd-star-import-h { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+.jd-star-import-type {
+  padding: 1px 7px; border-radius: 999px; background: var(--wf-hairline, #eee);
+  font-size: 11px; font-weight: 700; color: var(--wf-mute);
+}
+.jd-star-import-h b { font-size: 14px; color: var(--wf-ink); }
+.jd-star-import-dur { font-size: 12px; color: var(--wf-mute); }
+.jd-star-import-prev { margin-top: 5px; font-size: 12.5px; line-height: 1.6; color: var(--wf-mute); }
 .jd-ws-bar h2 { font-size: 20px; line-height: 28px; font-weight: 500; color: var(--wf-ink); }
 .jd-ws-bar .jd-ws-src { font-size: 12.8px; color: var(--wf-mute); }
 .jd-ws-bar .jd-ws-end { margin-left: auto; display: flex; align-items: center; gap: 8px; }
