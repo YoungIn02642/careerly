@@ -173,12 +173,25 @@ let _jobTree = null;
 async function jobCatalog() {
   if (_jobTree) return _jobTree;
 
-  const [majors, middles, jobs] = await Promise.all([
+  const [majorsRaw, middlesRaw, jobsRaw] = await Promise.all([
     query('SELECT * FROM job_majors ORDER BY no'),
     query('SELECT * FROM job_middles ORDER BY code'),
     query('SELECT * FROM jobs ORDER BY name'),
   ]);
-  if (!majors.length) return { empty: true, counts: { majors: 0, middles: 0, jobs: 0 }, majors: [] };
+  if (!majorsRaw.length) return { empty: true, counts: { majors: 0, middles: 0, jobs: 0 }, majors: [] };
+
+  /* ── 관리직(임원·부서장)만 제외 (사용자 지시 2026-08-26) ──────────────
+     2차 분류 '01' 은 24개가 전부 대학교 총장·기업 고위임원·행정부고위공무원 같은
+     **신입이 지원할 수 없는 경력 종착지**라, 로드맵/스펙입력 목록에서 뺀다.
+     여기 한 곳이 로드맵·스펙입력·저장 검증(server.js)을 동시에 정하므로, 빼면
+     저장도 자동으로 막힌다(고를 수 없는 값을 저장 시도할 일이 없어진다).
+     나머지 분류는 그대로 둔다(job-filter.js 의 전체 필터는 2026-08-11 결정대로 끈 채).
+     '01' 을 뺀 1차 '경영·사무·금융·보험직' 은 경영·행정·사무직·금융·보험직이 남아
+     이름이 여전히 맞으므로 1차 이름은 손대지 않는다. */
+  const HIDDEN_MIDDLES = new Set(['01']);
+  const majors  = majorsRaw;
+  const middles = middlesRaw.filter(m => !HIDDEN_MIDDLES.has(m.code));
+  const jobs    = jobsRaw.filter(j => !HIDDEN_MIDDLES.has(j.middle_code));
 
   const asJson = v => (typeof v === 'string' ? (() => { try { return JSON.parse(v); } catch { return null; } })() : v);
 
