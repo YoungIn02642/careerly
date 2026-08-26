@@ -188,7 +188,7 @@ window.SpecForm = (() => {
           </div>
         </div>
         <div class="form-group" id="sf-mid-group" hidden>
-          <label>${isMentor ? '현재' : '희망'} 세부직무 <span class="sf-optional">여러 개 선택 가능</span></label>
+          <label>${isMentor ? '현재' : '희망'} 세부직무 <span class="sf-optional">하나만 선택</span></label>
           <div class="sf-chip-pick" id="sf-job-middles"></div>
         </div>
         <!-- 3단계: 개별 직업. 직무찾기(#career)와 같은 깊이까지 고르게 한다(사용자 지시).
@@ -1712,7 +1712,9 @@ window.SpecForm = (() => {
     const jobHost   = document.getElementById('sf-job-jobs');
     if (!majorHost || !midHost) return;
 
-    midState = Array.isArray(spec.jobMiddles) ? [...spec.jobMiddles] : [];
+    /* 세부직무는 하나만 고르므로, 옛 스펙에 여러 개가 저장돼 있어도 첫 번째만 싣는다
+       (라벨 '하나만 선택' 과 화면을 일치시킨다). */
+    midState = Array.isArray(spec.jobMiddles) ? spec.jobMiddles.slice(0, 1) : [];
     jobMajorState = spec.jobMajor || null;
     jobCodesState = Array.isArray(spec.jobCodes) ? [...spec.jobCodes] : [];
 
@@ -1753,9 +1755,11 @@ window.SpecForm = (() => {
       const chip = e.target.closest('[data-mid]');
       if (!chip) return;
       const code = chip.dataset.mid;
-      if (midState.includes(code)) midState = midState.filter(c => c !== code);
-      else midState.push(code);
-      /* 세부직무를 빼면 그 안에서 고른 직업도 뜻이 없어진다 — 남은 세부직무에
+      /* 세부직무는 **하나만** 고른다(사용자 지시). 다른 걸 누르면 갈아타고, 같은 걸
+         다시 누르면 해제한다. 저장 형식은 예전대로 배열이되 원소가 최대 하나다 —
+         서버·집계가 배열을 기대하므로 스키마는 그대로 둔다. */
+      midState = midState.includes(code) ? [] : [code];
+      /* 세부직무를 바꾸면 그 안에서 고른 직업도 뜻이 없어진다 — 새 세부직무에
          속한 직업만 남긴다. */
       pruneJobCodes();
       paintMiddles();
