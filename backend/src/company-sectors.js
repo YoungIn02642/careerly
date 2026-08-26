@@ -7,10 +7,12 @@
    회사는 훨씬 많고, 대개 이름을 못 들어봐서 후보에서 빠진다.
 
    ── 무엇을 보여주나 ──
-   DART 상장사 캐시(약 4,000곳)를 업종코드로 묶는다. 다만 전부 보여주면 이름도 처음
-   보는 소형주가 대부분이라 오히려 고르기 어렵다. 그래서 **공정위 대규모기업집단 ·
-   고용24 공채기업 목록에 이름이 있는 회사만** 남긴다(785곳). 학생이 실제로 지원할
-   만한 규모이면서, 그 안에 모르는 회사가 충분히 많다.
+   DART 상장사 캐시(약 4,000곳) 중 **업종코드가 있는 상장사 전부**를 업종코드로 묶는다.
+   한동안 공정위 대규모기업집단·고용24 공채기업 명단에 든 회사만 785곳으로 좁혔는데,
+   그 명단에 **중소기업이 아예 없어** '중소' 필터가 항상 비었고 회사 수도 적었다
+   (사용자 지적 2026-08-26). 그래서 필터를 걷고 상장사를 다 보여주되, 아는 회사
+   (명단)를 앞에 정렬해 이름을 아는 곳이 위에 오게 한다. 명단에 없는 상장사는
+   규모를 '중소'로 본다(sizeOf 주석).
 
    ── 업종코드를 그대로 쓰지 않는 이유 ──
    KSIC 는 631가지나 되고 '264'(반도체) 같은 숫자라 화면에 못 올린다. 취업 시장에서
@@ -326,14 +328,17 @@ function holdingOf(corp) {
    같은 축의 값이 있어야 한다. company-classify.js 가 이미 그 판정을 한다 —
    여기서 기준을 새로 세우면 스펙 저장 때 붙는 분류와 목록의 분류가 갈린다.
 
-   **모르면 null 이다.** DEFAULT_TYPE(중소기업)으로 떨어뜨리면 안 되는데, 그건
-   "중소기업이다" 가 아니라 "명단에 없다" 는 뜻이기 때문이다. 화면이 그 둘을
-   같은 배지로 적으면 학생은 확인된 사실로 읽는다.
-   (실측으로는 아래 목록 778곳이 전부 matched 다 — known 이 곧 분류 명단이라서다.
-    그래도 null 경로를 남겨 둔다: known 이 넓어지면 바로 생긴다.) */
+   ── 명단에 없으면 '중소'로 본다 (사용자 결정 2026-08-26) ──
+   목록을 상장사 전체로 넓히면서, 대기업·중견·공공 명단 어디에도 없는 **상장사**는
+   중소로 표시한다. 코스닥 소형주는 대부분 실제로 중소·중견이라 이 근사가 대체로
+   맞고, 무엇보다 그래야 '중소' 필터가 실제로 회사를 담는다. 100% 검증된 값은
+   아니므로, 규모가 자소서의 사실 근거로 쓰이는 자리(개요 배지 등)에서는 여전히
+   company-classify 의 matched 를 봐야 한다 — 여기 목록은 '고르는 자리'다. */
 function sizeOf(name) {
   const r = CLASSIFY.classify(name);
-  return r.matched ? (CLASSIFY.CORP_TYPE_ID[r.type] || null) : null;
+  /* classify 는 미등록도 DEFAULT_TYPE(중소)로 돌려주므로 CORP_TYPE_ID[r.type] 는
+     항상 값이 있다(matched 여부와 무관하게 '중소' 로 떨어진다). */
+  return CLASSIFY.CORP_TYPE_ID[r.type] || 'small';
 }
 
 /* 규모별 곳수. 화면이 필터 칩에 숫자를 달고, **0곳인 칩은 아예 안 만든다** —
@@ -355,6 +360,10 @@ function build() {
   const corps = DART.allCorps();
   if (!corps.length) return { sectors: [], total: 0, reason: 'DART 기업 색인이 없습니다. 저장소 루트에서 npm run build 를 실행하세요(깃에 넣지 않는 파일입니다).' };
 
+  /* known = 대기업집단·공채기업 명단. 예전에는 이 명단에 든 회사만 785곳 남겼는데,
+     그 명단에 중소기업이 아예 없어 '중소' 가 목록에 안 떴다. 이제는 **상장사 전체**를
+     보여주고(사용자 결정 2026-08-26), known 은 필터가 아니라 **정렬**에만 쓴다 —
+     아는 회사(명단)를 앞에 두고 그 뒤로 나머지 상장사를 붙인다. */
   const known = new Set([
     ...asArray(readJson('ftc-large-groups.json')).map(x => norm(x.name)),
     ...asArray(readJson('work24-companies.json')).map(x => norm(x.name)),
@@ -372,7 +381,9 @@ function build() {
   const taken = new Set();
   for (const c of corps) {
     const key = norm(c.name);
-    if (!c.industry || !known.has(key) || taken.has(key)) continue;
+    /* 업종코드가 있는 상장사면 전부 넣는다(명단 여부는 정렬에만 쓴다). 업종코드가
+       없는 회사(비상장 등)는 계열로 묶을 수가 없어 뺀다 — 예전과 같다. */
+    if (!c.industry || taken.has(key)) continue;
     const sector = holdingOf(c) || SECTOR_OF.get(parseInt(String(c.industry).slice(0, 2), 10));
     if (!sector) continue;
     const ksic = parseInt(String(c.industry).slice(0, 2), 10);
@@ -384,15 +395,17 @@ function build() {
     /* code(원본 5자리)를 같이 남긴다. 취업 업종 분류(job-industry.js)가 5자리 규칙을
        쓴다 — 204(기타 화학제품) 안에서 2042(세제·화장품)만 '화장품' 으로 빠지는 식이라,
        2자리로 줄여 둔 ksic 만으로는 못 가른다. */
-    buckets.get(sector).push({ name: c.name, stock: c.stock || null, ksic, code: String(c.industry), size: sizeOf(c.name) });
+    buckets.get(sector).push({ name: c.name, stock: c.stock || null, ksic, code: String(c.industry), size: sizeOf(c.name), known: known.has(key) });
   }
 
-  /* 가나다순으로 둔다. 매출 순이 더 좋겠지만 785곳의 재무를 받아오려면 DART 를
-     수천 번 불러야 한다 — 첫 화면이 그만큼 느려질 값어치는 없다. */
+  /* 아는 회사(대기업집단·공채기업 명단)를 앞에, 그 뒤로 나머지 상장사를 가나다순으로.
+     이래야 이름을 아는 회사가 위에 오고 모르는 소형주가 아래로 밀려, 목록이 길어져도
+     고를 수 있다(매출 순이 더 좋겠지만 수천 곳의 재무를 받으면 첫 화면이 느려진다). */
   const sectors = SECTORS
     .map(([name]) => ({
       name,
-      companies: buckets.get(name).sort((a, b) => a.name.localeCompare(b.name, 'ko')),
+      companies: buckets.get(name).sort((a, b) =>
+        (b.known - a.known) || a.name.localeCompare(b.name, 'ko')),
     }))
     .filter(s => s.companies.length);
 
@@ -523,10 +536,14 @@ function industryTree() {
     for (const c of s.companies) {
       if (!c.size || c.size === 'public') continue;
       const hit = JOB.classify(c.name, c.code);
-      /* 분류표가 못 받는 회사는 조용히 버리지 않는다 — 목록에서 사라진 회사는
-         아무도 못 찾고, 왜 없는지도 알 수 없다. 실측 778곳 전부 분류된다. */
-      if (!hit) throw new Error(`취업 업종 분류 실패: ${c.name} (업종코드 ${c.code})`);
-      ((tree[hit.major] ||= {})[hit.minor] ||= []).push({ n: c.name, s: c.size });
+      /* 분류표가 못 받는 회사는 버리지 않고 **'기타 업종'** 으로 모은다(사용자 지시로
+         상장사 전체를 보여주면서 생겼다 — 예전 785곳은 전부 분류됐다). 조용히 빠뜨리면
+         목록에서 사라진 회사를 아무도 못 찾는다. 그래서 목록 맨 끝에 '기타 업종 › 기타'
+         칸을 두어, 업종으로는 못 좁혀도 이름으로는 찾히게 한다. */
+      const major = hit ? hit.major : '기타 업종';
+      const minor = hit ? hit.minor : '기타';
+      ((tree[major] ||= {})[minor] ||= []).push({ n: c.name, s: c.size });
+      if (!hit) { all.push(c); continue; }
       /* 이름으로 옮긴 회사는 업종 추천의 근거에서 뺀다 — 그 회사의 업종코드는
          지금 사업과 어긋나서 옮긴 것이라, 대표로 세우면 엉뚱한 추천이 붙는다. */
       if (hit.by !== 'name') (codesOf[hit.minor] ||= new Set()).add(c.ksic);
@@ -559,6 +576,9 @@ function industryTree() {
   const order = JOB.TAXONOMY
     .map(([major, minors]) => [major, minors.filter(m => tree[major] && tree[major][m])])
     .filter(([, minors]) => minors.length);
+  /* 분류표에 없어 '기타 업종' 으로 모인 회사가 있으면 목록 맨 끝에 붙인다 —
+     TAXONOMY 순서(지원자 많은 쪽 먼저) 다음에 온다. */
+  if (tree['기타 업종']) order.push(['기타 업종', ['기타']]);
 
   _tree = {
     order, tree,

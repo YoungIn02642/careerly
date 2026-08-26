@@ -38,9 +38,16 @@ if (!r.total) {
   ok('같은 회사가 두 계열에 겹치지 않는다', new Set(all).size === all.length,
      `→ ${all.length}곳 중 중복 ${all.length - new Set(all).size}건`);
 
-  ok('계열 안은 가나다순이다', r.sectors.every(s => {
-    const names = s.companies.map(c => c.name);
-    return names.every((n, i) => i === 0 || names[i - 1].localeCompare(n, 'ko') <= 0);
+  ok('계열 안은 아는 회사(명단) 먼저, 그 안에서 가나다순이다', r.sectors.every(s => {
+    /* 상장사 전체를 보여주면서, 이름을 아는 명단 회사(known)를 앞에 두고 그 뒤로
+       나머지 상장사를 붙인다. 두 그룹 각각은 가나다순이다. */
+    const ks = s.companies.map(c => !!c.known);
+    const firstUnknown = ks.indexOf(false);
+    const knownBlockOk = firstUnknown === -1 || ks.slice(firstUnknown).every(k => k === false);
+    const sorted = arr => arr.every((n, i) => i === 0 || arr[i - 1].localeCompare(n, 'ko') <= 0);
+    const known = s.companies.filter(c => c.known).map(c => c.name);
+    const unknown = s.companies.filter(c => !c.known).map(c => c.name);
+    return knownBlockOk && sorted(known) && sorted(unknown);
   }));
 
   /* 이 화면의 목적이 "몰랐던 회사를 만나는 것"이라 목록이 너무 작으면 의미가 없다. */
@@ -184,7 +191,9 @@ ok('대기업과 중견기업이 둘 다 있다', (r.sizes.large || 0) > 0 && (r
 /* 분류가 목록 쪽에서 따로 계산되고 있지 않은지 — 표본으로 대조한다. */
 ok('배지가 company-classify 판정과 같다', allCos.slice(0, 200).every(c => {
   const j = CLASSIFY.classify(c.name);
-  return c.size === (j.matched ? CLASSIFY.CORP_TYPE_ID[j.type] : null);
+  /* 명단에 없는 상장사는 '중소' 로 본다(sizeOf). classify 는 미등록도 중소(DEFAULT)로
+     돌려주므로, matched 여부와 상관없이 CORP_TYPE_ID[type] 하나로 비교하면 된다. */
+  return c.size === CLASSIFY.CORP_TYPE_ID[j.type];
 }));
 
 /* 음차 미매칭 — 자동완성은 대기업이라고 하는데 그걸 골라 저장하면 중소기업이 되던 것.
@@ -228,7 +237,7 @@ ok('회사가 두 계열에 겹치지 않는다', (() => {
   }
   return true;
 })());
-ok('빼내도 총합은 그대로', r.total === 778, `→ ${r.total}곳`);
+ok('빼내도 총합은 그대로(상장사 전체)', r.total >= 3000, `→ ${r.total}곳`);
 
 console.log('\n── 7. 공공기관 목록 ──');
 /* 공공기관은 대부분 비상장이라 업종코드가 없어 계열 목록에 4곳밖에 못 들어간다.

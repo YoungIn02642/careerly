@@ -509,6 +509,26 @@ window.CompanyCover = (() => {
                아는 회사 8곳만 보고 나간다. -->
           ${stepsHtml()}
           ${pickerHtml()}
+          ${(() => {
+            /* 고른 업종(+규모 필터) 아래 회사를 하단 레인으로 — 최근 본/많이 찾는 회사와
+               같은 타일 모양이다(사용자 지시). 업종이나 규모를 하나라도 좁혔을 때만
+               띄운다(아무것도 안 좁혔으면 3,900곳이라 레인이 의미가 없다). */
+            const narrowed = path.length > 0 || sizeFilter;
+            if (!narrowed) return '';
+            const list = companiesUnder(path);
+            if (!list.length) return '';
+            const CAP = 12;
+            const shown = list.slice(0, CAP);
+            const sizeTag = sizeFilter && SIZE_LABEL[sizeFilter] ? ` · ${SIZE_LABEL[sizeFilter]}` : '';
+            return `
+            <section>
+              <div class="co-lane-h"><h2>고른 업종 회사</h2><span>${list.length.toLocaleString()}곳${sizeTag}</span></div>
+              <div class="co-lane-grid">${shown.map(c => tile({ name: c.n })).join('')}</div>
+              ${list.length > shown.length
+                ? `<p class="jd-hint">…외 ${(list.length - shown.length).toLocaleString()}곳. 위에서 업종을 더 좁히거나 규모 필터를 걸면 줄어들어요.</p>`
+                : ''}
+            </section>`;
+          })()}
           ${rec.length ? `
             <section>
               <div class="co-lane-h"><h2>최근 본 회사</h2><span>${rec.length}곳</span></div>
@@ -576,6 +596,18 @@ window.CompanyCover = (() => {
   const companiesAt = p => { const n = nodeAt(p); return isLeaf(n) ? keepSize(n) : []; };
   const atLeaf = () => isLeaf(nodeAt(path));
 
+  /* 지금 고른 업종 경로 **아래 전체** 회사(하위 리프까지 모두), 규모 필터 적용.
+     결과 레인(하단)이 쓴다 — 아직 리프까지 안 내려가도 지금까지 좁힌 회사를 보여준다. */
+  function companiesUnder(p) {
+    const node = nodeAt(p);
+    if (node == null) return [];
+    if (isLeaf(node)) return keepSize(node);
+    const out = [];
+    const walk = n => { if (isLeaf(n)) out.push(...n); else if (n) Object.values(n).forEach(walk); };
+    walk(node);
+    return keepSize(out);
+  }
+
   /* ── 선택지가 하나뿐인 단계는 건너뛴다 ────────────────────────
      '외식·프랜차이즈' 는 1곳이고 공공 '기타공공기관 > 어느 부처' 도 한 칸뿐인 경우가
      있다. 누를 것이 하나만 있는 화면은 고르는 것이 아니라 확인 도장을 찍는 일이라,
@@ -607,10 +639,9 @@ window.CompanyCover = (() => {
   const stepsNow = () => (path[0] === '기관·공공' ? STEPS_PUBLIC : STEPS_PRIVATE);
 
   /* ── 기업 형태 필터 ──────────────────────────────────────────
-     중소기업 칩은 만들지 않는다. 이 목록이 **상장사 ∩ (공정위 ∪ 고용24)** 라
-     중소기업이 한 곳도 없어서(실측 0곳), 눌러도 빈 화면이 나오는 칩은 필터 탓인지
-     자료 탓인지 알 수 없어 고장으로 읽힌다. 대신 1단계에서 중소를 고른 사람에게는
-     **왜 없는지와 대신 무엇을 할 수 있는지**를 적는다. */
+     목록을 상장사 전체로 넓히면서 중소기업도 생겼다(사용자 지시 2026-08-26) — 명단
+     (공정위·고용24)에 없는 상장사를 중소로 보기 때문이다. 그래서 이제 중소 칩도 만든다.
+     0곳인 칩은 여전히 안 만든다(눌러도 빈 화면이면 고장으로 읽힌다). */
   function filterHtml() {
     if (!treeData) return '';
     const goal = Roadmap.corpType();
@@ -619,14 +650,17 @@ window.CompanyCover = (() => {
       { id: null,     label: '전체' },
       { id: 'large',  label: '대기업',   n: counts.large },
       { id: 'mid',    label: '중견기업', n: counts.mid },
+      { id: 'small',  label: '중소기업', n: counts.small },
       { id: 'public', label: '공공기관', n: counts.public },
     ].filter(c => c.id === null || c.n > 0);
 
+    /* 중소는 '명단에 없는 상장사' 라 규모가 100% 확정된 값은 아니다 — 고른 사람에게만
+       한 줄로 일러 준다(대부분 실제 중소·중견 소형주라 대체로 맞다). */
     const note = goal === 'small'
       ? `<div class="co-note co-note--tight"><i class="ti ti-info-circle"></i>
-           1단계에서 <b>중소기업</b>을 고르셨는데, 아래 목록에는 중소기업이 없어요 —
-           <b>상장사 가운데 공채를 내는 회사</b>만 모은 목록이라서요.
-           회사 이름을 알고 있다면 <b>위 검색창</b>에 적으면 바로 리포트가 열립니다.</div>`
+           <b>중소기업</b>은 대기업·중견 명단에 없는 상장사를 모은 것이라, 규모가 확정된
+           값은 아니에요(대부분 코스닥 중소·중견입니다). 아는 회사가 있으면
+           <b>위 검색창</b>에 적으면 바로 리포트가 열립니다.</div>`
       : '';
 
     return `
