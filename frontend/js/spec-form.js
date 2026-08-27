@@ -1459,6 +1459,9 @@ window.SpecForm = (() => {
       starS: a.star?.s || '', starT: a.star?.t || '',
       starA: a.star?.a || '', starR: a.star?.r || '',
     }));
+    /* 서버에서 온 만큼이 '이미 저장된 활동' 이다. 여기서 세어 두지 않으면 STAR 저장
+       버튼이 새 줄과 저장된 줄을 구분하지 못한다. */
+    savedActCount = actState.length;
     if (!actState.length) actState.push({});
     paintActivities();
   }
@@ -1487,8 +1490,16 @@ window.SpecForm = (() => {
     wrap.addEventListener('change', onChange);
     wrap.addEventListener('input', onChange);
     wrap.addEventListener('click', e => {
+      /* STAR 만 저장 — 이 칸의 값만 서버로 보낸다(전체 저장이 아니다). */
+      const star = e.target.closest('[data-star-save]');
+      if (star) { saveStarAt(+star.dataset.starSave); return; }
+
       const btn = e.target.closest('[data-act-remove]');
       if (!btn) return;
+      /* 활동을 지우면 그 뒤 활동의 순번이 앞으로 밀린다. 서버에 있는 줄 수도 같이
+         줄여 두지 않으면, 밀린 자리의 'STAR 저장' 이 **엉뚱한 활동을 덮어쓸** 수 있다.
+         (서버도 type 을 대조해 한 번 더 막지만, 화면이 먼저 정직해야 한다.) */
+      if (+btn.dataset.i < savedActCount) savedActCount -= 1;
       actState.splice(+btn.dataset.i, 1);
       if (!actState.length) actState.push({});
       paintActivities();
@@ -1540,10 +1551,29 @@ window.SpecForm = (() => {
     { k: 'starA', lab: 'A · 행동', hint: '직접 무엇을 했나요? (예: 캐시 도입, 쿼리 인덱스 재설계)' },
     { k: 'starR', lab: 'R · 결과', hint: '결과는 어땠나요? 수치로. (예: 평균 응답 820ms→300ms)' },
   ];
+  /* 서버에 이미 저장돼 있는 활동 수. 저장할 때마다 갱신한다.
+     이 수보다 뒤에 있는 활동은 **아직 서버에 없는 줄**이라 STAR 만 따로 저장할 수 없다
+     (저장할 자리가 없다). 그때는 아래 [저장]으로 전체를 한 번 저장해야 한다. */
+  let savedActCount = 0;
+
   function starBlock(a, i) {
+    /* ── STAR 저장 버튼 (사용자 지시 2026-08-28) ──────────────────────
+       STAR 를 적어 두고 폼 맨 아래 [저장]을 안 눌러서, 자소서 코치에 안 뜨는 일이
+       있었다("적었는데 안 떠"). STAR 는 다른 칸과 성격이 다르다 — 학점처럼 고치는
+       값이 아니라 **한 번에 길게 쓰는 글**이라, 다 쓰고 나면 그 자리에서 저장하고
+       싶어진다. 그래서 이 칸만 저장하는 버튼을 여기 둔다.
+       전체 저장(PUT /api/specs/me)이 아니라 활동 하나의 STAR 만 고치는 좁은 API 를
+       쓴다 — 전체 저장은 보낸 것으로 다 덮어써서, 작은 버튼이 하기엔 큰 일이다. */
+    const saved = i < savedActCount;
     return `
       <div class="sf-act-star">
-        <div class="sf-act-star-head">활동 내용 <b>STAR</b> 로 적기 <span>상황·과제·행동·결과</span></div>
+        <div class="sf-act-star-head">활동 내용 <b>STAR</b> 로 적기 <span>상황·과제·행동·결과</span>
+          <button type="button" class="sf-star-save" data-star-save="${i}">
+            <i class="ti ti-device-floppy"></i> STAR 저장
+          </button>
+          <span class="sf-star-msg" data-star-msg="${i}">${
+            saved ? '' : '아직 저장 전인 활동이에요 — 눌러서 저장할 수 있어요'}</span>
+        </div>
         <div class="sf-act-star-grid">
           ${STAR_FIELDS.map(f => `
             <label class="sf-act-star-cell">
@@ -1552,7 +1582,44 @@ window.SpecForm = (() => {
                 placeholder="${escapeHtml(f.hint)}">${escapeHtml(a[f.k] || '')}</textarea>
             </label>`).join('')}
         </div>
+        <p class="sf-act-star-note">저장하면 <b>자소서 코치</b>의 문항별 칸에서 이 활동을 골라
+          그대로 쓰거나 고쳐 쓸 수 있어요.</p>
       </div>`;
+  }
+
+  /* STAR 한 칸의 저장. 이미 서버에 있는 활동이면 그 활동의 STAR 만 고치고,
+     아직 없는 줄이면 전체 저장으로 넘긴다(그래야 활동 자체가 만들어진다). */
+  async function saveStarAt(i) {
+    const a = actState[i];
+    const msg = document.querySelector(`[data-star-msg="${i}"]`);
+    const say = (text, cls = '') => { if (msg) { msg.textContent = text; msg.className = `sf-star-msg ${cls}`; } };
+
+    if (!a || !a.type) { say('활동 유형을 먼저 고르세요', 'is-bad'); return; }
+    const star = {};
+    for (const [k, f] of [['s', 'starS'], ['t', 'starT'], ['a', 'starA'], ['r', 'starR']]) {
+      const v = (a[f] || '').trim();
+      if (v) star[k] = v;
+    }
+    if (!Object.keys(star).length) { say('STAR 를 한 칸이라도 적어주세요', 'is-bad'); return; }
+
+    /* 아직 서버에 없는 줄이면 STAR 만 저장할 자리가 없다. 사용자에게 두 번 일을
+       시키지 않고 여기서 전체 저장으로 넘긴다 — 결과는 같고 길만 다르다. */
+    if (i >= savedActCount) {
+      say('활동을 먼저 저장하는 중…');
+      const ok = await handleSave();
+      say(ok ? 'STAR 를 저장했어요' : '저장하지 못했어요 — 위 안내를 확인해 주세요', ok ? 'is-ok' : 'is-bad');
+      return;
+    }
+
+    say('저장 중…');
+    try {
+      await DB.saveActivityStar(i, star, a.type);
+      say('STAR 를 저장했어요 · 자소서 코치에서 바로 쓸 수 있어요', 'is-ok');
+    } catch (e) {
+      /* 순번이 밀린 경우(다른 탭에서 활동을 지웠다) 서버가 409 로 알려준다.
+         그때는 전체 저장이 답이라 그 말을 그대로 보여준다. */
+      say(e.message || '저장하지 못했어요', 'is-bad');
+    }
   }
 
   /* 인턴십 주최기관(=회사) → 기업 규모 자동 판정.
@@ -1886,6 +1953,8 @@ window.SpecForm = (() => {
     }
   }
 
+  /* 성공하면 true, 검증·저장 실패면 false 를 돌려준다 — STAR 저장 버튼이 전체 저장으로
+     넘어갔을 때 그 결과를 그 자리에 적어야 한다(saveStarAt). */
   async function handleSave(user) {
     const success = document.getElementById('sf-success');
     const error   = document.getElementById('sf-error');
@@ -1910,11 +1979,11 @@ window.SpecForm = (() => {
        추천도 못 한다. 다만 **분류(dept) 실패는 막지 않는다**(위 주석 참고). */
     if (!major) {
       failValidation(error, '학과를 입력해주세요.', 'sf-major');
-      return;
+      return false;
     }
     if (gpa != null && (isNaN(gpa) || gpa < 0 || gpa > gpaMax)) {
       failValidation(error, `학점은 0 ~ ${gpaMax} 사이여야 합니다.`, 'sf-gpa');
-      return;
+      return false;
     }
 
     const certs = collectCerts();
@@ -1923,7 +1992,7 @@ window.SpecForm = (() => {
     const scoreErr = validateScores();
     if (scoreErr) {
       failValidation(error, scoreErr, 'sf-lang-list');
-      return;
+      return false;
     }
     const scores = collectScores();
 
@@ -1951,7 +2020,7 @@ window.SpecForm = (() => {
       /* 서버가 거절한 경우다. 검증 실패와 같은 자리(토스트 + 상자)로 알린다 —
          alert 창은 확인을 눌러야 사라지는데다, 어느 칸이 문제인지도 못 알려준다. */
       failValidation(error, `저장하지 못했어요 — ${e.message}`);
-      return;
+      return false;
     } finally {
       saveBtn.disabled = false;
     }
@@ -1967,9 +2036,15 @@ window.SpecForm = (() => {
     certEditing = new Set();
     paintCerts();
 
+    /* 방금 보낸 활동이 곧 서버에 있는 활동이다. STAR 만 저장하는 버튼이 이 수를 보고
+       '이 줄은 서버에 있나'를 판단한다(starBlock). */
+    savedActCount = activities.length;
+    paintActivities();
+
     if (typeof toast === 'function') toast('스펙 정보를 저장했어요');
     else { success.style.display = 'block'; setTimeout(() => { success.style.display = 'none'; }, 2500); }
     updateNavAuth();
+    return true;
   }
 
   function escapeHtml(s) {

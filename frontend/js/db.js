@@ -473,6 +473,16 @@ window.DB = (() => {
     await refreshSpecs();
   }
 
+  /* 활동 하나의 STAR 만 저장한다(스펙 관리의 'STAR 저장' 버튼).
+     upsertSpec 을 쓰지 않는 이유 — 그쪽은 **보낸 것으로 전체를 교체**해서, 지금 화면에
+     안 들어 있는 값까지 덮는다. 저장 뒤 _mySpec 을 곧바로 갈아 끼운다: 자소서 코치가
+     이 값을 읽는데, 새로고침해야 보이면 "적었는데 안 뜬다"가 된다(실제 지적). */
+  async function saveActivityStar(index, star, type) {
+    const r = await api('PUT', `/api/specs/me/activities/${index}/star`, { star, type });
+    if (r?.spec) _mySpec = r.spec;
+    return r;
+  }
+
   /* 프로필(학교 등)은 스펙과 다른 테이블이다. 스펙 폼에서 함께 저장하지만
      통계에 쓰이는 값이 아니라 refreshSpecs 를 부르지 않는다. */
   async function getProfile() {
@@ -502,7 +512,7 @@ window.DB = (() => {
     hydrate, refreshSpecs, refreshUsers,
     currentUser, getAllSpecs, getSpec, myActivities, getUsers, countByRole, stats,
     checkUsername, verifyStatus, verifyRequest,
-    createUser, login, logout, withdraw, changePassword, completeOnboarding, confirmPayment, updateUser, requestRoleChange, upsertSpec, getProfile, updateProfile,
+    createUser, login, logout, withdraw, changePassword, completeOnboarding, confirmPayment, updateUser, requestRoleChange, upsertSpec, saveActivityStar, getProfile, updateProfile,
     classifyCompany, suggestCompanies, suggestCerts, recommendCerts, suggestMajors, suggestUniversities, classifyMajor, jobCatalog,
     mentors,
     analyzeCas, casFit, specFingerprint, coachJd, draftJd, motiveJd, guideJd, companyAnalysis, companyBusiness, companyIndustryTree, jdPosting,

@@ -475,6 +475,25 @@ const specs = {
     });
     return specs.byUser(userId);
   },
+
+  /* ── 활동 하나의 STAR 만 저장 (사용자 지시 2026-08-28) ─────────────
+     STAR 를 적어 두고 폼 아래 [저장]을 안 눌러 자소서 코치에 안 뜨는 일이 있었다.
+     그래서 STAR 칸 옆에 자기 저장 버튼을 뒀는데, 그게 upsert(전체 교체)를 부르면
+     **손대지 않은 다른 칸까지 지금 화면의 값으로 덮는다.** 여기만 고치는 길을 따로 낸다.
+
+     활동을 가리키는 값은 순번이다. spec_activities 는 화면으로 나갈 때 id 를 안 싣고
+     (toActivity), 목록은 항상 `ORDER BY id` 로 같은 순서다 — 화면이 본 N 번째와
+     여기서 세는 N 번째가 같다. 그 사이에 활동을 추가·삭제하면 어긋나므로, 라우트가
+     활동 종류(type)를 같이 받아 **다른 활동에 덮어쓰지 않도록** 확인한다. */
+  async saveActivityStar(userId, index, star, expectType) {
+    const rows = await query(
+      'SELECT id, type FROM spec_activities WHERE user_id=? ORDER BY id', [userId]);
+    const row = rows[index];
+    if (!row) return { ok: false, reason: 'not-found' };
+    if (expectType && row.type !== expectType) return { ok: false, reason: 'mismatch' };
+    await query('UPDATE spec_activities SET star=? WHERE id=?', [starJson(star), row.id]);
+    return { ok: true, total: rows.length };
+  },
 };
 
 // ── 정적 참조 ───────────────────────────────────────────────

@@ -657,13 +657,26 @@ a.wf-btn { text-decoration: none; }
   background: transparent; color: var(--wf-ink);
   font-family: inherit; font-size: 15px; line-height: 1.85;
 }
+/* display 를 준 요소는 hidden 속성이 먹지 않는다(UA 의 [hidden]{display:none} 을
+   이 규칙이 이긴다). 4번 칸의 숨은 거울 textarea(#jd-questions)가 그래서 화면에
+   그대로 보였고, 문항 목록이 카드 아래에 한 번 더 찍혔다(사용자 지적 스크린샷).
+   main.css 에 같은 함정이 이미 적혀 있다 — 규칙을 여기에도 건다. */
+.jd-text[hidden] { display: none; }
 .jd-text::placeholder { color: var(--wf-mute-soft); }
 .jd-text--sm { min-height: 108px; }
 
 /* 자소서 문항 칸 — 번호 없이 내용만. '문항 N' 라벨을 화면이 붙인다. */
-.jd-q-boxes { display: flex; flex-direction: column; gap: 10px; padding: 14px 0 4px; }
+/* ── 문항 카드 ────────────────────────────────────────────────
+   ① 좌우 여백이 0 이라 입력칸이 카드 밖으로 삐져나와 보였다(사용자 지적).
+      본문(.jd-block-body)이 여백을 안 주므로 여기서 16px 을 준다.
+   ② 문항 아래에 정성스펙·STAR 가 붙으면서 한 문항이 '줄' 이 아니라 '카드' 가 됐다. */
+.jd-q-boxes { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px 4px; }
 .jd-q-box {
-  display: grid; grid-template-columns: auto 1fr auto; align-items: start; gap: 10px;
+  border: 1px solid var(--wf-hairline); border-radius: 12px; background: #fff;
+  padding: 12px; min-width: 0;
+}
+.jd-q-line {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 10px;
 }
 .jd-q-num {
   margin-top: 8px; flex: none; padding: 3px 10px; border-radius: 999px;
@@ -671,10 +684,50 @@ a.wf-btn { text-decoration: none; }
   font-size: 12px; font-weight: 700; white-space: nowrap;
 }
 .jd-q-in {
-  width: 100%; box-sizing: border-box; font-family: inherit; font-size: 14px; line-height: 1.6;
+  width: 100%; min-width: 0; box-sizing: border-box;
+  font-family: inherit; font-size: 14px; line-height: 1.6;
   padding: 9px 12px; border: 1px solid var(--wf-hairline); border-radius: 9px; resize: none;
   min-height: 42px; color: var(--wf-ink); background: #fff;
 }
+
+/* ── 고른 정성스펙 카드 안의 STAR 칸 ───────────────────────── */
+.jd-q-mode { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.jd-q-mode-lab { font-size: 12.5px; color: var(--wf-mute); }
+.jd-q-mode-b {
+  padding: 6px 12px; border: 1px solid var(--wf-hairline); border-radius: 999px;
+  background: #fff; font-family: inherit; font-size: 12.5px; font-weight: 600;
+  color: var(--wf-body); cursor: pointer;
+}
+.jd-q-mode-b.is-on {
+  border-color: var(--wf-accent, #2563eb); color: var(--wf-accent, #2563eb);
+  background: var(--wf-accent-soft, rgba(37,99,235,0.10));
+}
+.jd-q-star {
+  margin-top: 10px; display: grid; gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+.jd-q-star-h {
+  grid-column: 1 / -1; display: flex; align-items: baseline; gap: 8px;
+  font-size: 12.5px; color: var(--wf-mute);
+}
+.jd-q-star-h b { font-size: 13px; color: var(--wf-ink); }
+.jd-q-star-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.jd-q-star-tag { font-size: 11.5px; font-weight: 700; color: var(--wf-body-mid); }
+.jd-q-star-in {
+  width: 100%; min-width: 0; box-sizing: border-box; resize: none;
+  padding: 8px 10px; border: 1px solid var(--wf-hairline); border-radius: 8px;
+  font-family: inherit; font-size: 13px; line-height: 1.55; color: var(--wf-ink); background: #fff;
+}
+/* '그대로 쓰기' 는 읽기 전용이다 — 고칠 수 있는 것처럼 보이면 여기서 고치고
+   스펙 관리에는 안 남는다. 보이는 것과 되는 것을 맞춘다. */
+.jd-q-star.is-locked .jd-q-star-in { background: var(--wf-fill); color: var(--wf-body-mid); cursor: default; }
+.jd-q-hint { margin: 8px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--wf-mute); }
+.jd-q-hint--warn { color: var(--wf-error); }
+.jd-q-link {
+  border: 0; background: none; padding: 0; font-family: inherit; font-size: inherit;
+  color: var(--wf-accent, #2563eb); font-weight: 600; text-decoration: underline; cursor: pointer;
+}
+.jd-ready-todo { color: var(--wf-warn, #b26a00); font-weight: 600; }
 .jd-q-in:focus { outline: none; border-color: var(--wf-accent, #2563eb); box-shadow: 0 0 0 2px var(--wf-accent-soft, rgba(37,99,235,0.10)); }
 .jd-q-del {
   margin-top: 5px; flex: none; width: 30px; height: 30px; border: 1px solid var(--wf-hairline);
@@ -683,7 +736,7 @@ a.wf-btn { text-decoration: none; }
 }
 .jd-q-del:hover { border-color: #ef4444; color: #ef4444; }
 .jd-q-add {
-  margin: 4px 0 2px; display: inline-flex; align-items: center; gap: 6px;
+  margin: 4px 16px 2px; display: inline-flex; align-items: center; gap: 6px;
   padding: 8px 14px; border: 1px dashed var(--wf-hairline); border-radius: 9px;
   background: #fff; font-family: inherit; font-size: 13px; font-weight: 600;
   color: var(--wf-accent, #2563eb); cursor: pointer;
@@ -691,7 +744,7 @@ a.wf-btn { text-decoration: none; }
 .jd-q-add:hover { border-color: var(--wf-accent, #2563eb); background: var(--wf-accent-soft, rgba(37,99,235,0.06)); }
 .jd-q-add:disabled { color: var(--wf-mute); cursor: default; opacity: 0.6; }
 @media (max-width: 560px) {
-  .jd-q-box { grid-template-columns: 1fr auto; }
+  .jd-q-line { grid-template-columns: minmax(0, 1fr) auto; }
   .jd-q-num { grid-column: 1 / -1; margin-top: 0; }
 }
 
@@ -742,42 +795,35 @@ a.wf-btn { text-decoration: none; }
 .jd-star-band .co-sec-h { margin-bottom: 10px; }
 
 /* 내 정성스펙 가져오기 — 스펙입력에서 적은 STAR 활동을 이 문항으로 옮기는 패널. */
-.jd-star-import { margin-bottom: 12px; }
+/* 이 문항의 정성스펙 — **읽기 전용 한 줄**이다. 고르고 고치는 자리는 입력 4번 칸
+   하나뿐이라(2026-08-28), 여기 있던 목록·토글은 없앴다. */
+.jd-star-import {
+  margin-bottom: 12px; display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px;
+  padding: 9px 13px; border: 1px solid var(--wf-hairline); border-radius: 10px; background: #fff;
+}
+.jd-star-import b { font-size: 13.5px; color: var(--wf-ink); }
+.jd-star-import-mode {
+  padding: 1px 8px; border-radius: 999px; background: var(--wf-accent-soft, rgba(37,99,235,0.10));
+  color: var(--wf-accent, #2563eb); font-size: 11.5px; font-weight: 700;
+}
+.jd-star-import-go {
+  margin-left: auto; border: 1px solid var(--wf-hairline); border-radius: 8px; background: #fff;
+  padding: 5px 10px; font-family: inherit; font-size: 12.5px; font-weight: 600;
+  color: var(--wf-body); cursor: pointer;
+}
+.jd-star-import-go:hover { border-color: var(--wf-accent, #2563eb); color: var(--wf-accent, #2563eb); }
 .jd-star-import--empty {
   display: flex; align-items: flex-start; gap: 8px; padding: 11px 13px;
   border: 1px dashed var(--wf-hairline); border-radius: 10px;
   font-size: 12.8px; line-height: 1.6; color: var(--wf-mute); background: var(--wf-soft, #fafafa);
 }
 .jd-star-import--empty i { margin-top: 2px; }
-.jd-star-import-toggle {
-  display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 13px;
-  border: 1px solid var(--wf-hairline); border-radius: 10px; background: #fff;
-  font-family: inherit; font-size: 13.5px; font-weight: 600; color: var(--wf-ink); cursor: pointer;
-}
-.jd-star-import-toggle:hover { border-color: var(--wf-accent, #2563eb); }
-.jd-star-import-toggle .jd-star-import-n {
-  padding: 1px 8px; border-radius: 999px; background: var(--wf-accent-soft, rgba(37,99,235,0.10));
-  color: var(--wf-accent, #2563eb); font-size: 11.5px; font-weight: 700;
-}
-.jd-star-import-toggle .ti-chevron-down, .jd-star-import-toggle .ti-chevron-up { margin-left: auto; }
-.jd-star-import-list {
-  margin-top: 8px; padding: 12px; border: 1px solid var(--wf-hairline); border-radius: 10px;
-  background: var(--wf-soft, #fafafa); display: flex; flex-direction: column; gap: 8px;
-}
-.jd-star-import-note { margin: 0 0 4px; font-size: 12.5px; color: var(--wf-mute); line-height: 1.55; }
-.jd-star-import-item {
-  text-align: left; padding: 10px 12px; border: 1px solid var(--wf-hairline); border-radius: 9px;
-  background: #fff; font-family: inherit; cursor: pointer;
-}
-.jd-star-import-item:hover { border-color: var(--wf-accent, #2563eb); box-shadow: 0 0 0 2px var(--wf-accent-soft, rgba(37,99,235,0.10)); }
-.jd-star-import-h { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+.jd-star-import--empty .jd-star-import-go { margin-left: 0; }
 .jd-star-import-type {
   padding: 1px 7px; border-radius: 999px; background: var(--wf-hairline, #eee);
   font-size: 11px; font-weight: 700; color: var(--wf-mute);
 }
-.jd-star-import-h b { font-size: 14px; color: var(--wf-ink); }
 .jd-star-import-dur { font-size: 12px; color: var(--wf-mute); }
-.jd-star-import-prev { margin-top: 5px; font-size: 12.5px; line-height: 1.6; color: var(--wf-mute); }
 .jd-ws-bar h2 { font-size: 20px; line-height: 28px; font-weight: 500; color: var(--wf-ink); }
 .jd-ws-bar .jd-ws-src { font-size: 12.8px; color: var(--wf-mute); }
 .jd-ws-bar .jd-ws-end { margin-left: auto; display: flex; align-items: center; gap: 8px; }
@@ -1037,33 +1083,64 @@ a.wf-btn { text-decoration: none; }
 
 .jd-empty { padding: 40px 18px; text-align: center; font-size: 14px; line-height: 1.7; color: var(--wf-mute); }
 
-/* ── 보관함 ────────────────────────────────────────────────── */
-.jd-lib { display: flex; flex-direction: column; gap: 12px; }
-.jd-lib-group { border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-md); overflow: hidden; }
-.jd-lib-company {
-  display: flex; align-items: center; gap: 10px; padding: 12px 14px;
-  border-bottom: 1px solid var(--wf-hairline); background: var(--wf-fill);
+/* ── 문항별 정성스펙 · STAR (문항 칸 아래 별도 칸) ───────────────
+   문항 카드 안에 있던 것을 밖으로 뺐다(사용자 지시 2026-08-28). 문항은 문항끼리
+   한눈에 보이고, 경험은 여기서 문항별로 채운다. 비워 둬도 분석은 돌아간다. */
+.jd-ss {
+  margin-top: 18px; padding: 16px; border: 1px solid var(--wf-hairline);
+  border-radius: var(--wf-r-md); background: var(--wf-canvas);
 }
-.jd-lib-company b { font-size: 15px; font-weight: 500; color: var(--wf-ink); }
-.jd-lib-company .wf-btn { margin-left: auto; }
-.jd-lib-item { border-bottom: 1px solid var(--wf-hairline); }
-.jd-lib-item:last-child { border-bottom: 0; }
-.jd-lib-h {
-  display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px 14px;
+.jd-ss-h { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px; margin-bottom: 4px; }
+.jd-ss-h h2 { margin: 0; font-size: 17px; font-weight: 500; color: var(--wf-ink); }
+.jd-ss-h .co-src { font-size: 12.5px; color: var(--wf-mute); line-height: 1.6; }
+.jd-ss-empty { margin: 10px 0 0; font-size: 13px; color: var(--wf-mute); }
+.jd-ss-ready { margin: 8px 0 0; font-size: 13px; color: var(--wf-ok, #00a83a); }
+.jd-ss-ready b { font-weight: 700; }
+/* ── 정성스펙 카드 (하나 또는 여럿 고른다) ─────────────────────────
+   안 고른 카드는 한 줄, 고른 카드만 STAR 칸이 펼쳐진다. 전부 펼쳐 두면 활동 수만큼
+   화면이 길어져서 '무엇을 골랐는지' 가 안 보인다. */
+.jd-sc-list { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.jd-sc { border: 1px solid var(--wf-hairline); border-radius: 12px; background: #fff; overflow: hidden; }
+.jd-sc.is-on { border-color: var(--wf-accent, #2563eb); box-shadow: 0 0 0 2px var(--wf-accent-soft, rgba(37,99,235,0.10)); }
+.jd-sc-h {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px 13px;
   border: 0; background: transparent; font: inherit; text-align: left; cursor: pointer;
 }
-.jd-lib-h:hover { background: var(--wf-fill); }
-.jd-lib-h b { font-size: 14px; font-weight: 500; color: var(--wf-ink); }
-.jd-lib-meta { margin-left: auto; font-family: var(--font-code); font-size: 11px; color: var(--wf-mute); }
-.jd-lib-item.is-open .jd-block-chev { transform: rotate(180deg); }
-.jd-lib-body { padding: 0 14px 14px; }
-.jd-lib-text {
-  margin: 0; padding: 13px 15px; border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-md);
-  background: var(--wf-canvas); font-family: inherit; font-size: 14px; line-height: 1.9;
-  color: var(--wf-ink); white-space: pre-wrap; word-break: break-word;
-  max-height: 340px; overflow-y: auto;
+.jd-sc-h:hover { background: var(--wf-fill); }
+.jd-sc-check {
+  flex: none; width: 22px; height: 22px; border-radius: 7px; display: flex;
+  align-items: center; justify-content: center; font-size: 13px;
+  border: 1px solid var(--wf-hairline); color: var(--wf-mute-soft); background: #fff;
 }
-.jd-lib-act { display: flex; gap: 7px; margin-top: 10px; }
+.jd-sc.is-on .jd-sc-check {
+  border-color: var(--wf-accent, #2563eb); background: var(--wf-accent, #2563eb); color: #fff;
+}
+.jd-sc-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.jd-sc-t b { font-size: 14px; font-weight: 500; color: var(--wf-ink); }
+.jd-sc-t small { font-size: 12px; color: var(--wf-mute); }
+.jd-sc-star {
+  flex: none; padding: 2px 8px; border-radius: 999px; background: var(--wf-fill);
+  font-size: 11.5px; font-weight: 700; color: var(--wf-mute); white-space: nowrap;
+}
+.jd-sc-star.is-part { background: color-mix(in srgb, var(--wf-warn, #ffae13) 16%, transparent); color: #b26a00; }
+.jd-sc-star.is-ok { background: color-mix(in srgb, var(--wf-ok, #00a83a) 14%, transparent); color: var(--wf-ok, #00a83a); }
+/* '대표' 는 AI 초안이 쓰는 STAR 라는 뜻이다 — 배지 하나로 그 사실을 말한다. */
+.jd-sc-lead {
+  flex: none; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700;
+  background: var(--wf-accent-soft, rgba(37,99,235,0.10)); color: var(--wf-accent, #2563eb);
+}
+.jd-sc-lead-b {
+  margin-left: auto; padding: 3px 9px; border: 1px solid var(--wf-hairline); border-radius: 999px;
+  background: #fff; font-family: inherit; font-size: 11.5px; font-weight: 600;
+  color: var(--wf-body); cursor: pointer;
+}
+.jd-sc-lead-b:hover { border-color: var(--wf-accent, #2563eb); color: var(--wf-accent, #2563eb); }
+.jd-sc-body { padding: 0 13px 13px 45px; }
+@media (max-width: 560px) { .jd-sc-body { padding-left: 13px; } }
+
+/* ── 보관함 진입 (사이드바) ─────────────────────────────────── */
+.jd-side-lib { margin-top: 14px; }
+.jd-side-libnote { margin: 0; font-size: 12px; color: var(--wf-mute); text-align: center; }
 
 @media (max-width: 1080px) {
   .jd-split { grid-template-columns: 1fr; }
@@ -1297,6 +1374,16 @@ a.wf-btn { text-decoration: none; }
 }
 .co-chip-size--large { background: color-mix(in srgb, var(--wf-purple, #7a3dff) 12%, transparent); color: var(--wf-purple, #7a3dff); }
 .co-chip-size--public { background: color-mix(in srgb, var(--wf-blue, #3b89ff) 12%, transparent); color: var(--wf-blue, #3b89ff); }
+/* 중견은 색을 준다(사용자 지시 2026-08-28). 중견이 1,326곳으로 목록에서 가장 많은데
+   중소와 같은 회색이라 스치듯 봐서는 안 갈렸다. 대기업 보라·공공 파랑과 겹치지 않게
+   주황을 쓰되, #ff6b00 을 11px 글자로 흰 배경에 얹으면 대비가 3:1 언저리라 모자라서
+   글자만 한 단계 어둡게 섞는다(면은 원색 12%). 중소는 회색 기본값 그대로 —
+   '아직 규모가 작다'가 색으로 강조될 이유가 없다. */
+.co-chip-size--mid {
+  background: color-mix(in srgb, var(--wf-orange, #ff6b00) 12%, transparent);
+  color: color-mix(in srgb, var(--wf-orange, #ff6b00) 78%, #000);
+}
+.co-chip-size--small { background: var(--wf-fill); color: var(--wf-mute); }
 
 /* 공공기관 칩은 두 줄이다 — 유형(공기업(시장형))과 소관부처가 이름만큼 중요하다. */
 .co-chip--org { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; }
@@ -1663,3 +1750,69 @@ a.wf-btn { text-decoration: none; }
   cursor: pointer;
 }
 .jd-step-more:hover { border-color: var(--wf-ink); color: var(--wf-ink); }
+
+/* ══ 내 자소서 보관함 (#drafts) ═══════════════════════════════
+   자소서 코치 아래 붙어 있던 목록을 자기 페이지로 옮기면서 이름도 갈랐다(dr-*).
+   같은 이름(jd-lib-*)을 그대로 쓰면 코치 화면의 규칙과 섞여, 한쪽을 고칠 때
+   다른 쪽이 조용히 따라 바뀐다. */
+.dr-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+.dr-count { font-size: 13px; color: var(--wf-mute); }
+.dr-count b { font-weight: 600; color: var(--wf-ink); }
+.dr-bar .wf-btn:last-child { margin-left: auto; }
+.dr-bar .wf-btn.is-on {
+  border-color: var(--wf-warn, #ffae13); color: #b26a00;
+  background: color-mix(in srgb, var(--wf-warn, #ffae13) 12%, transparent);
+}
+
+.dr-list { display: flex; flex-direction: column; gap: 14px; }
+.dr-group { border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-md); overflow: hidden; }
+.dr-company {
+  display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+  border-bottom: 1px solid var(--wf-hairline); background: var(--wf-fill);
+}
+.dr-company b { font-size: 15px; font-weight: 500; color: var(--wf-ink); }
+.dr-company .wf-btn { margin-left: auto; }
+
+.dr-item { border-bottom: 1px solid var(--wf-hairline); }
+.dr-item:last-child { border-bottom: 0; }
+.dr-item-h { display: flex; align-items: stretch; }
+/* 즐겨찾기는 글을 여는 것과 **다른 일**이라 버튼을 따로 둔다 — 한 버튼 안에 넣으면
+   별을 누르려다 글이 열린다. */
+.dr-fav {
+  flex: none; width: 42px; border: 0; background: transparent; cursor: pointer;
+  color: var(--wf-mute-soft); font-size: 16px;
+}
+.dr-fav:hover { color: var(--wf-warn, #ffae13); }
+.dr-item.is-fav .dr-fav { color: var(--wf-warn, #ffae13); }
+.dr-open {
+  display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; padding: 11px 14px 11px 0;
+  border: 0; background: transparent; font: inherit; text-align: left; cursor: pointer;
+}
+.dr-open:hover { background: var(--wf-fill); }
+.dr-open b { font-size: 14px; font-weight: 500; color: var(--wf-ink); }
+.dr-meta { margin-left: auto; font-family: var(--font-code); font-size: 11px; color: var(--wf-mute); }
+.dr-chev { transition: transform .15s ease; color: var(--wf-mute); }
+.dr-item.is-open .dr-chev { transform: rotate(180deg); }
+.dr-body { padding: 0 14px 14px 42px; }
+.dr-text {
+  margin: 0; padding: 13px 15px; border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-md);
+  background: var(--wf-canvas); font-family: inherit; font-size: 14px; line-height: 1.9;
+  color: var(--wf-ink); white-space: pre-wrap; word-break: break-word;
+  max-height: 340px; overflow-y: auto;
+}
+.dr-act { display: flex; gap: 7px; margin-top: 10px; flex-wrap: wrap; }
+.dr-del:hover { border-color: var(--wf-error); color: var(--wf-error); }
+.dr-empty { padding: 30px 0; font-size: 13.5px; color: var(--wf-mute); text-align: center; }
+.dr-blank {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 56px 20px; border: 1px dashed var(--wf-hairline); border-radius: var(--wf-r-md);
+  color: var(--wf-mute); text-align: center;
+}
+.dr-blank i { font-size: 28px; color: var(--wf-mute-soft); }
+.dr-blank b { font-size: 15px; color: var(--wf-ink); }
+.dr-blank p { margin: 0 0 6px; font-size: 13px; line-height: 1.6; }
+
+@media (max-width: 560px) {
+  .dr-body { padding-left: 14px; }
+  .dr-meta { margin-left: 0; }
+}

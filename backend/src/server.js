@@ -844,6 +844,44 @@ app.put('/api/specs/me', requireAuth, ah(async (req, res) => {
   res.json({ message: '스펙이 저장되었습니다.', spec });
 }));
 
+/* ── 활동 하나의 STAR 만 저장 (사용자 지시 2026-08-28) ──────────────
+   왜 따로 두나 — 위 PUT /api/specs/me 는 **보낸 것으로 전체를 교체**한다(활동·자격증은
+   DELETE 후 INSERT). STAR 칸 옆의 작은 저장 버튼이 그걸 부르면, 손대지 않은 학점·
+   자격증까지 지금 화면의 값으로 덮어쓴다. 그래서 STAR 만 고치는 좁은 길을 낸다.
+
+   index 는 활동 목록의 순번이다(목록은 항상 ORDER BY id 라 화면과 순서가 같다).
+   type 을 같이 받아 그 자리 활동이 화면이 본 그 활동인지 확인한다 — 다른 탭에서
+   활동을 지웠다면 순번이 밀려 **엉뚱한 활동의 내용을 덮어쓸 수 있다.** */
+app.put('/api/specs/me/activities/:index/star', requireAuth, ah(async (req, res) => {
+  const index = Number(req.params.index);
+  if (!Number.isInteger(index) || index < 0) {
+    return res.status(400).json({ error: '활동 번호가 올바르지 않습니다.' });
+  }
+  const star = req.body?.star;
+  if (star != null && typeof star !== 'object') {
+    return res.status(400).json({ error: 'STAR 형식이 올바르지 않습니다.' });
+  }
+  /* 한 칸 4,000자면 자소서 한 문항보다 길다. 그 이상은 붙여넣기 사고로 본다. */
+  for (const k of ['s', 't', 'a', 'r']) {
+    if (star?.[k] != null && String(star[k]).length > 4000) {
+      return res.status(400).json({ error: 'STAR 한 칸은 4,000자까지 적을 수 있어요.' });
+    }
+  }
+  const r = await repo.specs.saveActivityStar(
+    req.user.id, index, star, typeof req.body?.type === 'string' ? req.body.type : null);
+  if (!r.ok) {
+    /* 순번이 밀렸거나 활동이 사라진 경우. 화면이 전체 저장으로 넘어갈 수 있게
+       이유를 구분해 준다 — '저장 실패' 한 줄만 주면 사용자가 할 수 있는 게 없다. */
+    return res.status(409).json({
+      error: r.reason === 'mismatch'
+        ? '활동 목록이 바뀌었어요. 아래 [저장]으로 전체를 저장해 주세요.'
+        : '아직 저장되지 않은 활동이에요. 아래 [저장]을 먼저 눌러주세요.',
+      reason: r.reason,
+    });
+  }
+  res.json({ message: 'STAR 를 저장했습니다.', spec: await repo.specs.byUser(req.user.id) });
+}));
+
 // 닉네임 등 회원 정보 수정
 app.put('/api/users/me', requireAuth, ah(async (req, res) => {
   const patch = {};

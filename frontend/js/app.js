@@ -6,6 +6,7 @@ const PAGES = [
   'dashboard', 'search', 'profile', 'mentoring',   // ← 구 mentoring.html
   'specup',                                        // 스펙 채우기 (js/specup.js) — 로드맵 2단계의 곁가지
   'jd',                                            // 자소서 코치 (js/jd-coach.js)
+  'drafts',                                        // 내 자소서 보관함 (js/drafts.js) — 코치의 하위 화면
   'company',                                       // 회사 검색 (js/company-cover.js) — 자소서 코치의 앞 단계
   'mentor-profile',                                // 멘토 소개 입력 (js/mentor-profile.js)
   'insight',                                       // 커리어 인사이트 — 커뮤니티 게시판 (js/insight.js)
@@ -39,8 +40,10 @@ function showPage(page) {
      지금은 상단바에 자기 자리가 생겼으므로 자기를 강조한다 — 눌러서 들어왔는데 다른
      메뉴에 불이 들어오면 어디에 있는지 알 수 없다. 곁가지라는 사실은 화면 머리의
      '커리어 로드맵 2단계 · 스펙UP' 이 여전히 말해 준다. */
+  /* 회사 검색·보관함은 '자소서 코치' 의 하위 화면이라 같은 메뉴를 강조한다 —
+     눌러서 들어왔는데 아무 메뉴에도 불이 없으면 어디에 있는지 알 수 없다. */
   const navKey = page === 'profile' ? 'search'
-    : page === 'company' ? 'jd' : page;
+    : (page === 'company' || page === 'drafts') ? 'jd' : page;
   updateNavActive(NAV_HIGHLIGHT.includes(navKey) ? navKey : '');
 
   if (page === 'mypage')     initMypage();
@@ -61,6 +64,7 @@ function showPage(page) {
   if (page === 'specup')     SpecUp.onEnter();
   if (page === 'jd')         JdCoach.onEnter();
   if (page === 'company')    CompanyCover.onEnter();
+  if (page === 'drafts')     Drafts.onEnter();
   if (page === 'insight')    Insight.onEnter();
   if (MENTORING_PAGES.includes(page)) Mentoring.onEnter(page);
 

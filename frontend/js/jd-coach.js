@@ -44,37 +44,33 @@
      안 따라온다는 한계는 화면에 적어 둔다.
 
      키는 '회사명 + 항목 이름'. 회사명을 안 적었으면 공용 칸(기본)으로 떨어진다 —
-     회사를 적어야 회사별로 따로 쌓인다. */
-  const LS_DRAFTS = 'careerly_jd_drafts_v1';
+     회사를 적어야 회사별로 따로 쌓인다.
 
-  function loadDrafts() {
-    try { return JSON.parse(localStorage.getItem(LS_DRAFTS)) || {}; } catch { return {}; }
-  }
+     ── 저장소는 drafts.js 가 들고 있다 (2026-08-28) ──
+     보관함이 자기 페이지로 나가면서(js/drafts.js) 초안 저장소도 그쪽으로 옮겼다.
+     **여기서 localStorage 를 직접 파싱하지 않는다** — 같은 키를 두 파일이 각자 읽으면
+     저장 형식을 바꿀 때 한쪽만 고쳐진다(문자열 → { text, at } 로 바꾼 전례가 있다). */
+  const draftStore = () => (root.Drafts ? root.Drafts.store : null);
+
   function draftScope() {
     return ($('#jd-company')?.value || '').trim() || '(회사 미지정)';
   }
 
-  /* 저장 형태가 두 가지다. 처음에는 문자열만 넣었는데(v1), 보관함에서 "언제 쓴 글인지"를
-     보여주려면 시각이 필요해 { text, at } 로 바꿨다(v2). 이미 저장해 둔 초안을 버릴 수는
-     없으므로 **읽을 때 두 모양을 다 받는다.** 다음에 저장될 때 자연스럽게 v2 가 된다. */
-  function unwrap(v) {
-    if (typeof v === 'string') return { text: v, at: null };
-    if (v && typeof v === 'object') return { text: String(v.text || ''), at: v.at || null };
-    return { text: '', at: null };
-  }
-
   function getDraft(label) {
-    return unwrap(loadDrafts()[draftScope()]?.[label]).text;
+    return draftStore()?.get(draftScope(), label) || '';
   }
   function saveDraft(label, text) {
-    const all = loadDrafts();
-    const scope = draftScope();
-    all[scope] = all[scope] || {};
-    if (text.trim()) all[scope][label] = { text, at: Date.now() };
-    else delete all[scope][label];            // 비우면 흔적을 남기지 않는다
-    if (!Object.keys(all[scope]).length) delete all[scope];
-    localStorage.setItem(LS_DRAFTS, JSON.stringify(all));
-    paintLibrary();
+    draftStore()?.set(draftScope(), label, text);
+    paintLibCount();
+  }
+
+  /* 사이드바의 '내 자소서 보관함' 아래 한 줄 — 몇 건이 쌓였는지. 목록 자체는
+     보관함 페이지가 그린다(여기서 또 그리면 같은 목록이 두 곳에 생긴다). */
+  function paintLibCount() {
+    const el = $('#jd-lib-count');
+    if (!el) return;
+    const n = draftStore()?.count() || 0;
+    el.textContent = n ? `저장된 초안 ${n.toLocaleString()}건` : '아직 저장된 초안이 없어요';
   }
 
   /* ── STAR 입력 보관 ──────────────────────────────────────────
@@ -108,145 +104,27 @@
     localStorage.setItem(LS_STAR, JSON.stringify(all));
   }
 
-  /* 지금 탭의 STAR 를 { S,T,A,R } 로. 한 칸도 안 썼으면 null 을 준다 —
-     빈 객체를 보내면 서버가 "STAR 가 있다" 고 보고 활동 목록 쪽 안내를 끈다. */
+  /* AI 초안이 재료로 쓰는 STAR — **고른 정성스펙 중 대표(맨 앞)** 것이다.
+     한 칸도 안 썼으면 null 을 준다. 빈 객체를 보내면 서버가 "STAR 가 있다" 고 보고
+     활동 목록 쪽 안내를 끈다.
+
+     ── 여러 개를 골랐는데 왜 하나만 쓰나 ──
+     서버 초안 API 가 STAR 를 하나만 받는다(POST /api/jd/draft). 네 칸을 여러 경험에서
+     섞어 보내면 "한 경험을 끝까지 푼 문단" 이 아니라 짜깁기가 나온다. 그래서 대표
+     하나를 쓰고, **무엇이 쓰이는지 화면에 적는다**(renderSpecStar 의 머리줄). */
+  /* 대표 정성스펙의 STAR. 없으면 빈 객체 — 화면은 '미작성' 으로 그린다. */
+  function leadStar() {
+    const lead = picks()[0];
+    return lead ? starOfPick(lead.actKey) : {};
+  }
+
   function currentStar() {
-    const tab = (_lastTabs || [])[_tab];
-    if (!tab) return null;
-    const v = getStar(tab.key);
+    const lead = picks()[0];
+    if (!lead) return null;
+    const v = starOfPick(lead.actKey);
     return STAR_KEYS.some(k => (v[k] || '').trim()) ? v : null;
   }
 
-  /* ── 보관함 ────────────────────────────────────────────────
-     초안은 예전에도 저장은 됐지만, 분석을 다시 돌리기 전에는 **화면에 꺼낼 방법이
-     없었다**. 어제 쓴 글이 어디 있는지 알 수 없으면 저장한 것이 아니다.
-     그래서 회사별로 모아 보여주고, 여기서 바로 열어 읽고 복사할 수 있게 한다. */
-  const timeAgo = at => {
-    if (!at) return '';
-    const m = Math.floor((Date.now() - at) / 60000);
-    if (m < 1) return '방금';
-    if (m < 60) return `${m}분 전`;
-    const h = Math.floor(m / 60);
-    if (h < 24) return `${h}시간 전`;
-    const d = Math.floor(h / 24);
-    return d < 30 ? `${d}일 전` : new Date(at).toLocaleDateString('ko-KR');
-  };
-
-  function libraryEntries() {
-    const all = loadDrafts();
-    return Object.entries(all).map(([company, items]) => ({
-      company,
-      drafts: Object.entries(items)
-        .map(([label, v]) => ({ label, ...unwrap(v) }))
-        .filter(d => d.text.trim())
-        .sort((a, b) => (b.at || 0) - (a.at || 0)),
-    })).filter(g => g.drafts.length)
-      .sort((a, b) => (b.drafts[0].at || 0) - (a.drafts[0].at || 0));
-  }
-
-  let _libOpen = null;      // 지금 펼쳐 본 초안 키 (회사::항목)
-
-  function paintLibrary() {
-    const box = $('#jd-library');
-    if (!box) return;
-    const groups = libraryEntries();
-    if (!groups.length) { box.hidden = true; box.innerHTML = ''; return; }
-
-    const total = groups.reduce((n, g) => n + g.drafts.length, 0);
-    box.hidden = false;
-    box.innerHTML = `
-      <div class="co-sec-h">
-        <h2>내 자소서 보관함</h2>
-        <span class="co-src">${groups.length}개 회사 · 초안 ${total}건 · 이 브라우저에만 저장됩니다</span>
-      </div>
-      <div class="jd-lib">
-        ${groups.map(g => `
-          <div class="jd-lib-group">
-            <div class="jd-lib-company">
-              <span class="wf-avatar wf-avatar--sm" style="--co-color:${accentOf(g.company)}">${esc(g.company.charAt(0))}</span>
-              <b>${esc(g.company)}</b>
-              <span class="wf-badge wf-badge--mute">${g.drafts.length}건</span>
-              <button type="button" class="wf-btn wf-btn--xs" data-lib-open="${esc(g.company)}">이 회사로 이어쓰기</button>
-            </div>
-            ${g.drafts.map(d => {
-              const key = `${g.company}::${d.label}`;
-              const open = _libOpen === key;
-              return `<div class="jd-lib-item ${open ? 'is-open' : ''}">
-                <button type="button" class="jd-lib-h" data-lib-toggle="${esc(key)}">
-                  <b>${esc(d.label)}</b>
-                  <span class="jd-lib-meta">${d.text.length.toLocaleString()}자${d.at ? ` · ${timeAgo(d.at)}` : ''}</span>
-                  <i class="ti ti-chevron-down jd-block-chev"></i>
-                </button>
-                ${open ? `<div class="jd-lib-body">
-                  <pre class="jd-lib-text">${esc(d.text)}</pre>
-                  <div class="jd-lib-act">
-                    <button type="button" class="wf-btn wf-btn--xs" data-lib-copy="${esc(key)}">복사</button>
-                    <button type="button" class="wf-btn wf-btn--xs" data-lib-del="${esc(key)}">삭제</button>
-                  </div>
-                </div>` : ''}
-              </div>`;
-            }).join('')}
-          </div>`).join('')}
-      </div>`;
-
-    bindLibrary(box);
-  }
-
-  /* 회사명 색은 회사 리포트 화면과 같은 규칙으로 고른다(같은 회사 = 같은 색). */
-  const LIB_ACCENTS = ['#7a3dff', '#ed52cb', '#3b89ff', '#ff6b00', '#00a83a'];
-  function accentOf(name) {
-    let h = 0;
-    for (const ch of String(name)) h = (h * 31 + ch.codePointAt(0)) % 9973;
-    return LIB_ACCENTS[h % LIB_ACCENTS.length];
-  }
-
-  function draftAt(key) {
-    const [company, label] = key.split('::');
-    return unwrap(loadDrafts()[company]?.[label]).text;
-  }
-
-  function bindLibrary(box) {
-    box.querySelectorAll('[data-lib-toggle]').forEach(el =>
-      el.addEventListener('click', () => {
-        _libOpen = _libOpen === el.dataset.libToggle ? null : el.dataset.libToggle;
-        paintLibrary();
-      }));
-
-    box.querySelectorAll('[data-lib-copy]').forEach(el =>
-      el.addEventListener('click', async () => {
-        try {
-          await navigator.clipboard.writeText(draftAt(el.dataset.libCopy));
-          el.textContent = '복사됨';
-          setTimeout(() => { el.textContent = '복사'; }, 1500);
-        } catch { el.textContent = '복사 실패'; }
-      }));
-
-    box.querySelectorAll('[data-lib-del]').forEach(el =>
-      el.addEventListener('click', () => {
-        const [company, label] = el.dataset.libDel.split('::');
-        /* 지우면 되돌릴 수 없다 — 자소서는 다시 쓰기 어려운 글이라 한 번 묻는다. */
-        if (!confirm(`${company} · ${label} 초안을 지울까요? 되돌릴 수 없어요.`)) return;
-        const all = loadDrafts();
-        delete all[company]?.[label];
-        if (all[company] && !Object.keys(all[company]).length) delete all[company];
-        localStorage.setItem(LS_DRAFTS, JSON.stringify(all));
-        _libOpen = null;
-        paintLibrary();
-      }));
-
-    /* 그 회사로 이어쓰기 — 회사명을 채우면 저장 칸(scope)이 그 회사로 바뀌므로
-       분석을 다시 돌렸을 때 예전 초안이 그대로 불러와진다. */
-    box.querySelectorAll('[data-lib-open]').forEach(el =>
-      el.addEventListener('click', () => {
-        const input = $('#jd-company');
-        if (!input) return;
-        input.value = el.dataset.libOpen;
-        input.dispatchEvent(new Event('input'));
-        STEPS.forEach(paintBlock);
-        paintProgress();
-        $('#jd-doc')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }));
-  }
 
   /* 회사 리포트 화면(company-cover.js)에서 담은 근거를 같은 키로 읽는다.
      지원동기 문항은 공고가 아니라 이 사실들로 쓴다. */
@@ -287,6 +165,87 @@
   ];
   let _qBoxes = Array(Q_DEFAULT).fill('');   // 문항 내용(번호 없음)
 
+  /* ── 문항마다 정성스펙 + STAR (사용자 지시 2026-08-28) ──────────────
+     분석을 돌리기 전에 **문항마다** ① 어떤 정성스펙(활동)으로 쓸지 고르고
+     ② 그 경험을 STAR 로 적게 한다. 둘 다 없으면 '역량 분석하기'가 안 눌린다.
+
+     ── 왜 분석 앞으로 옮겼나 ──
+     예전에는 분석 결과 화면에서 STAR 를 받았다. 그런데 그 자리에서는 이미 AI 초안
+     버튼이 눈앞에 있어서, STAR 를 비워 둔 채 초안부터 누르는 흐름이 자연스러웠다.
+     그렇게 만든 초안은 활동 이름만 알고 내용을 몰라서 "노력했고 잘 마무리했습니다"
+     류의 관용구로 채워진다(draft-coach.js 주석의 실측). 재료를 먼저 받는다.
+
+     ── 문항이 아니라 **활동** 단위다 (사용자 지시 2026-08-28, 두 번째 개편) ──
+     처음에는 문항마다 정성스펙을 하나씩 붙였다. 그런데 자소서를 쓸 때 사람은 문항을
+     먼저 나눠 놓고 경험을 배정하지 않는다 — **쓸 경험을 먼저 고르고** 그걸 문항에
+     맞춰 푼다. 한 경험이 두 문항에 들어가기도 한다. 그래서 지금은 정성스펙을 카드로
+     늘어놓고 **하나 또는 여럿을 고르는** 방식이다. 문항을 안 적어도 고를 수 있다.
+
+     ── 무엇을 저장하나 ──
+     · 고른 활동 + 그대로/고쳐쓰기 → LS_PICK (회사별)
+     · STAR 본문 → 기존 LS_STAR 를 그대로 쓰되 슬롯 키가 **활동키**다.
+       (저장소를 새로 파지 않는다. 결과 화면 STAR 띠·AI 초안이 같은 함수로 읽는다.) */
+  const LS_PICK = 'careerly_jd_pick_v1';
+
+  /* 활동의 신원. spec_activities 는 화면으로 나올 때 id 를 안 싣는다(repo.toActivity).
+     그래서 유형·이름·기관·기간을 이어 키로 쓴다 — 사람이 그 넷을 똑같이 두 번 적는
+     일은 사실상 없고, 순번을 키로 쓰면 활동 하나를 지웠을 때 문항의 소재가 조용히
+     옆 활동으로 바뀐다. */
+  const actKeyOf = a => ['type', 'name', 'org', 'duration']
+    .map(k => String(a?.[k] || '').trim()).join('|');
+
+  const myActs = () => (window.DB ? DB.myActivities() : []) || [];
+  const actByKey = key => myActs().find(a => actKeyOf(a) === key) || null;
+
+  /* 고른 활동들. **순서가 뜻을 가진다** — 맨 앞이 '대표' 이고, AI 초안이 그 STAR 를
+     재료로 쓴다(서버 초안 API 가 STAR 를 하나만 받는다). 카드에서 순서를 바꿀 수 있다. */
+  function loadPicks() {
+    try { return JSON.parse(localStorage.getItem(LS_PICK)) || {}; } catch { return {}; }
+  }
+  function picks() {
+    const v = loadPicks()[draftScope()];
+    return Array.isArray(v) ? v.filter(x => x && x.actKey) : [];
+  }
+  function savePicks(list) {
+    const all = loadPicks();
+    const scope = draftScope();
+    if (list.length) all[scope] = list; else delete all[scope];
+    localStorage.setItem(LS_PICK, JSON.stringify(all));
+  }
+  const pickOf = key => picks().find(x => x.actKey === key) || null;
+
+  /* STAR 본문의 슬롯 키 — 활동 하나당 하나다. 같은 활동을 여러 문항에 써도 STAR 는
+     하나면 된다(같은 경험이니까). 'act:' 를 붙여 옛 문항키(문항1…)와 섞이지 않게 한다. */
+  const starKeyOf = actKey => `act:${actKey}`;
+
+  /* 고른 활동의 STAR 를 그 활동의 STAR 칸으로 복사한다. '그대로 쓰기'는 그릴 때마다
+     다시 복사한다 — 스펙 관리에서 원본을 고치면 여기도 따라 바뀌어야 '그대로'다. */
+  function copyStarFromAct(act) {
+    const key = starKeyOf(actKeyOf(act));
+    for (const K of STAR_KEYS) saveStar(key, K, (act?.star?.[K.toLowerCase()] || '').trim());
+  }
+
+  /* STAR 한 벌이 다 찼는지. 규칙만 떼어 둔다 — 저장소·DOM 없이 검사할 수 있어야
+     테스트가 붙는다(test/jd-questions.test.js).
+
+     **이 규칙은 막는 데 쓰지 않는다.** 비어 있어도 분석은 돌아간다(사용자 지시).
+     화면은 "무엇이 비었는지" 를 말하는 데만 쓴다. */
+  function starGate(star) {
+    const missing = STAR_KEYS.filter(K => !((star || {})[K] || '').trim());
+    if (missing.length === STAR_KEYS.length) return { ok: false, empty: true, missing, why: 'STAR 를 적어주세요' };
+    if (missing.length) return { ok: false, empty: false, missing, why: `${missing.join('·')} 칸이 비었어요` };
+    return { ok: true, empty: false, missing, why: '' };
+  }
+
+  const starOfPick = key => getStar(starKeyOf(key));
+
+  /* 고른 정성스펙의 준비 상태 — 사이드바 한 줄과 카드 머리가 같이 읽는다. */
+  function picksReady() {
+    const list = picks();
+    const done = list.filter(p => starGate(starOfPick(p.actKey)).ok).length;
+    return { total: list.length, done, ok: list.length > 0 && done === list.length };
+  }
+
   /* 칸 값을 개행으로 합쳐 숨은 textarea 에 넣고 input 을 쏜다 — 기존 입력 핸들러
      (진행도·역량 배분·peek)가 그 이벤트로 갱신된다. */
   function syncQuestions() {
@@ -296,17 +255,36 @@
     ta.dispatchEvent(new Event('input'));
   }
 
+  /* 활동 한 줄 이름 — 고르는 목록과 고른 뒤 표시에 같은 문구를 쓴다. */
+  function actLabel(a) {
+    const bits = [ACT_TYPE_LABEL[a.type] || a.type || '활동', actTitle(a)];
+    if (a.org && a.org !== a.name) bits.push(a.org);
+    if (a.duration) bits.push(a.duration);
+    return bits.filter(Boolean).join(' · ');
+  }
+
+  const STAR_FIELDS = [
+    { k: 'S', lab: '상황', hint: '어떤 상황·배경이었나요?' },
+    { k: 'T', lab: '과제', hint: '맡은 목표·과제는 무엇이었나요?' },
+    { k: 'A', lab: '행동', hint: '직접 무엇을 했나요?' },
+    { k: 'R', lab: '결과', hint: '결과는 어땠나요? 되도록 수치로.' },
+  ];
+
+  /* 문항 칸 — 문항 내용만 받는다. 정성스펙·STAR 는 아래 카드 칸에서 따로 고른다
+     (사용자 지시 2026-08-28). */
   function renderQBoxes() {
     const host = $('#jd-q-boxes');
     if (!host) return;
     host.innerHTML = _qBoxes.map((v, i) => `
       <div class="jd-q-box">
-        <span class="jd-q-num">문항 ${i + 1}</span>
-        <textarea class="jd-q-in" data-q="${i}" rows="2"
-          placeholder="${esc(Q_PLACEHOLDERS[i] || '자소서 문항 내용을 붙여넣거나 적어주세요 (번호 없이)')}">${esc(v)}</textarea>
-        ${_qBoxes.length > 1
-          ? `<button type="button" class="jd-q-del" data-q-del="${i}" aria-label="문항 ${i + 1} 삭제"><i class="ti ti-x"></i></button>`
-          : ''}
+        <div class="jd-q-line">
+          <span class="jd-q-num">문항 ${i + 1}</span>
+          <textarea class="jd-q-in" data-q="${i}" rows="2"
+            placeholder="${esc(Q_PLACEHOLDERS[i] || '자소서 문항 내용을 붙여넣거나 적어주세요 (번호 없이)')}">${esc(v)}</textarea>
+          ${_qBoxes.length > 1
+            ? `<button type="button" class="jd-q-del" data-q-del="${i}" aria-label="문항 ${i + 1} 삭제"><i class="ti ti-x"></i></button>`
+            : ''}
+        </div>
       </div>`).join('');
     const add = $('#jd-q-add');
     if (add) {
@@ -316,9 +294,228 @@
     bindQBoxes(host);
   }
 
+  /* ── 정성스펙 카드 한 장 ────────────────────────────────────────
+     활동 하나를 카드로 보여주고, 누르면 고른다(복수 선택). 고른 카드만 STAR 칸이
+     펼쳐진다 — 안 고른 카드까지 네 칸씩 열려 있으면 화면이 활동 수만큼 길어진다. */
+  function specCardHtml(act, order) {
+    const key = actKeyOf(act);
+    const pick = pickOf(key);
+    const on = Boolean(pick);
+    const srcHasStar = actHasStar(act);
+    const mode = srcHasStar ? (pick?.mode === 'edited' ? 'edited' : 'as-is') : 'edited';
+    /* '그대로 쓰기' 는 그릴 때마다 원본을 다시 복사한다. 스펙 관리에서 STAR 를 고친
+       뒤 여기로 돌아왔을 때 옛 내용이 남아 있으면 '그대로' 가 거짓말이 된다. */
+    if (on && mode === 'as-is' && srcHasStar) copyStarFromAct(act);
+    const star = starOfPick(key);
+    const g = starGate(star);
+    const filled = STAR_KEYS.length - g.missing.length;
+
+    return `
+      <div class="jd-sc ${on ? 'is-on' : ''}" data-sc="${esc(key)}">
+        <button type="button" class="jd-sc-h" data-sc-pick="${esc(key)}" aria-pressed="${on}">
+          <span class="jd-sc-check"><i class="ti ti-${on ? 'check' : 'plus'}"></i></span>
+          <span class="jd-sc-t">
+            <b>${esc(actTitle(act))}</b>
+            <small>${esc([ACT_TYPE_LABEL[act.type] || act.type || '활동',
+                          act.org && act.org !== act.name ? act.org : '',
+                          act.duration || ''].filter(Boolean).join(' · '))}</small>
+          </span>
+          <span class="jd-sc-star ${g.ok ? 'is-ok' : filled ? 'is-part' : ''}">${
+            srcHasStar || filled ? `STAR ${filled}/4` : 'STAR 없음'}</span>
+          ${on && order === 0 ? '<span class="jd-sc-lead">대표</span>' : ''}
+        </button>
+
+        ${on ? `
+          <div class="jd-sc-body">
+            ${srcHasStar
+              ? `<div class="jd-q-mode" role="group" aria-label="가져온 STAR 를 고칠지 고르기">
+                   <span class="jd-q-mode-lab">스펙 관리의 STAR 를</span>
+                   <button type="button" class="jd-q-mode-b ${mode === 'as-is' ? 'is-on' : ''}"
+                           data-sc-mode="${esc(key)}" data-mode="as-is">그대로 쓰기</button>
+                   <button type="button" class="jd-q-mode-b ${mode === 'edited' ? 'is-on' : ''}"
+                           data-sc-mode="${esc(key)}" data-mode="edited">여기서 고쳐 쓰기</button>
+                 </div>`
+              : `<p class="jd-q-hint">스펙 관리에 STAR 가 없는 활동이에요 — 여기서 적으면 됩니다.
+                   (여기 적은 내용은 이 자소서에만 저장돼요.)</p>`}
+
+            <div class="jd-q-star ${mode === 'as-is' ? 'is-locked' : ''}">
+              <div class="jd-q-star-h">
+                <b>STAR</b>
+                <span>${filled}/4 칸${mode === 'as-is' ? ' · 스펙 관리 내용 그대로' : ''}</span>
+                ${order > 0 ? `<button type="button" class="jd-sc-lead-b" data-sc-lead="${esc(key)}">대표로</button>` : ''}
+              </div>
+              ${STAR_FIELDS.map(f => `
+                <label class="jd-q-star-cell">
+                  <span class="jd-q-star-tag">${f.k} · ${f.lab}</span>
+                  <textarea class="jd-q-star-in" data-sc-star="${esc(key)}" data-star-key="${f.k}" rows="2"
+                    ${mode === 'as-is' ? 'readonly' : ''}
+                    placeholder="${esc(f.hint)}">${esc(star[f.k] || '')}</textarea>
+                </label>`).join('')}
+            </div>
+          </div>` : ''}
+      </div>`;
+  }
+
+  /* ── 정성스펙 카드 칸 (문항과 무관하게 언제나 쓴다) ───────────────────
+     문항별로 하나씩 붙이던 것을 **카드 목록 + 복수 선택**으로 바꿨다
+     (사용자 지시 2026-08-28). 사람은 문항을 먼저 나눠 놓고 경험을 배정하지 않는다 —
+     쓸 경험을 먼저 고르고 그걸 문항에 맞춰 푼다. 한 경험이 두 문항에 들어가기도 한다.
+
+     고른 순서에서 **맨 앞이 대표**다. AI 초안이 그 STAR 를 재료로 쓴다(서버 초안 API 가
+     STAR 를 하나만 받는다). 여러 개를 골랐을 때 무엇이 쓰이는지 화면에 적어 둔다 —
+     안 적으면 "두 개 골랐는데 왜 하나만 반영되지" 가 된다. */
+  function renderSpecStar() {
+    const host = $('#jd-spec-star');
+    if (!host) return;
+    const acts = myActs();
+
+    if (!acts.length) {
+      host.innerHTML = `
+        <div class="jd-ss-h">
+          <h2>정성스펙 · STAR <span class="wf-badge wf-badge--mute">선택</span></h2>
+          <span class="co-src">이 자소서에 쓸 경험을 고르고 STAR 로 적습니다</span>
+        </div>
+        <p class="jd-ss-empty"><i class="ti ti-info-circle"></i>
+          스펙 관리에 <b>정성 스펙 활동</b>이 없어요.
+          <button type="button" class="jd-q-link" data-q-spec-go>스펙 관리에서 활동 추가하기</button></p>`;
+      bindSpecStar(host);
+      return;
+    }
+
+    /* 고른 순서대로 앞에 놓는다 — 대표가 맨 위에 보여야 '무엇이 쓰이는지' 가 눈에 온다. */
+    const order = picks().map(x => x.actKey);
+    const sorted = [...acts].sort((x, y) => {
+      const ix = order.indexOf(actKeyOf(x)), iy = order.indexOf(actKeyOf(y));
+      if (ix < 0 && iy < 0) return 0;
+      if (ix < 0) return 1;
+      if (iy < 0) return -1;
+      return ix - iy;
+    });
+    const r = picksReady();
+    const lead = order.length ? actByKey(order[0]) : null;
+
+    host.innerHTML = `
+      <div class="jd-ss-h">
+        <h2>정성스펙 · STAR <span class="wf-badge wf-badge--mute">선택</span></h2>
+        <span class="co-src">이 자소서에 쓸 경험을 <b>하나 또는 여러 개</b> 고르고 STAR 로 적습니다 ·
+          <b>비워 둬도 분석은 됩니다</b> — 채우면 AI 초안이 내 경험으로 쓰입니다 ·
+          이 브라우저에만 저장돼요</span>
+      </div>
+      ${r.total ? `<p class="jd-ss-ready"><i class="ti ti-check"></i>
+        <b>${r.total}개</b> 골랐고 그중 <b>${r.done}개</b>가 STAR 4칸을 채웠어요${
+          lead ? ` · AI 초안은 대표인 <b>${esc(actTitle(lead))}</b> 의 STAR 를 씁니다` : ''}.</p>`
+        : '<p class="jd-ss-empty">카드를 눌러 이 자소서에 쓸 경험을 고르세요. 여러 개 골라도 됩니다.</p>'}
+      <div class="jd-sc-list">
+        ${sorted.map(act => specCardHtml(act, order.indexOf(actKeyOf(act)))).join('')}
+      </div>`;
+    bindSpecStar(host);
+  }
+
+  /* 카드 칸의 손잡이들. 문항 칸(bindQBoxes)과 나눠 둔다 — 두 칸이 서로 다른 때에
+     다시 그려지므로, 한 함수에서 둘 다 묶으면 없어진 요소에 다시 묶게 된다. */
+  function bindSpecStar(host) {
+    /* 카드를 눌러 고르거나 뺀다(복수 선택). 고를 때 원본에 STAR 가 있으면 기본이
+       '그대로 쓰기' 다 — 이미 적어 둔 것을 다시 적게 하지 않는다. */
+    host.querySelectorAll('[data-sc-pick]').forEach(el => {
+      el.addEventListener('click', () => {
+        const key = el.dataset.scPick;
+        const list = picks();
+        const at = list.findIndex(x => x.actKey === key);
+        if (at >= 0) {
+          /* 뺄 때 STAR 본문은 지우지 않는다 — 잘못 눌렀다가 다시 고르면 그대로
+             돌아와야 한다. 손으로 쓴 글을 클릭 한 번으로 날리지 않는다. */
+          list.splice(at, 1);
+        } else {
+          const act = actByKey(key);
+          list.push({ actKey: key, mode: actHasStar(act) ? 'as-is' : 'edited' });
+          if (actHasStar(act)) copyStarFromAct(act);
+        }
+        savePicks(list);
+        renderSpecStar();
+        paintProgress();
+      });
+    });
+
+    /* '그대로 쓰기 ↔ 여기서 고쳐 쓰기'. 그대로로 되돌리면 원본을 다시 복사한다 —
+       그게 '그대로' 의 뜻이고, 고쳐 둔 내용을 남겨 두면 어느 쪽이 진짜인지 알 수 없다. */
+    host.querySelectorAll('[data-sc-mode]').forEach(el => {
+      el.addEventListener('click', () => {
+        const key = el.dataset.scMode;
+        const mode = el.dataset.mode;
+        const act = actByKey(key);
+        const cur = pickOf(key);
+        if (mode === 'as-is' && cur?.mode === 'edited') {
+          const star = starOfPick(key);
+          const changed = STAR_KEYS.some(K => (star[K] || '').trim()
+            !== (act?.star?.[K.toLowerCase()] || '').trim());
+          if (changed && !confirm('여기서 고친 내용을 버리고 스펙 관리의 STAR 로 되돌릴까요?')) return;
+          copyStarFromAct(act);
+        }
+        savePicks(picks().map(x => (x.actKey === key ? { ...x, mode } : x)));
+        renderSpecStar();
+      });
+    });
+
+    /* 대표 바꾸기 — 그 카드를 맨 앞으로. AI 초안이 대표의 STAR 를 재료로 쓴다. */
+    host.querySelectorAll('[data-sc-lead]').forEach(el => {
+      el.addEventListener('click', () => {
+        const key = el.dataset.scLead;
+        const list = picks();
+        const at = list.findIndex(x => x.actKey === key);
+        if (at < 0) return;
+        list.unshift(list.splice(at, 1)[0]);
+        savePicks(list);
+        renderSpecStar();
+        paintProgress();
+      });
+    });
+
+    /* 활동이 하나도 없으면 스펙 관리로 보낸다. 탭까지 지정한다 — navigate('mypage')
+       만 하면 직전에 보던 탭이 열려서 계정 화면이 뜬다(app.js navigateTo 주석). */
+    host.querySelectorAll('[data-q-spec-go]').forEach(el => {
+      el.addEventListener('click', () => {
+        if (typeof navigateTo === 'function') navigateTo('mypage', 'spec');
+        else if (typeof navigate === 'function') navigate('mypage');
+      });
+    });
+
+    /* STAR 칸. 저장은 결과 화면의 STAR 띠와 같은 저장소를 쓴다(활동키). */
+    host.querySelectorAll('[data-sc-star]').forEach(el => {
+      autoGrow(el);
+      el.addEventListener('input', () => {
+        const key = el.dataset.scStar;
+        saveStar(starKeyOf(key), el.dataset.starKey, el.value);
+        autoGrow(el);
+        paintPickState(key);
+      });
+    });
+  }
+
+  /* 카드 머리의 숫자만 다시 칠한다. 타이핑 중에 카드를 통째로 다시 그리면 커서를
+     잃는다 — 저장은 이미 끝났으니 표시만 갱신하면 된다. */
+  function paintPickState(key) {
+    const card = $('#jd-spec-star')?.querySelector(`[data-sc="${CSS.escape(key)}"]`);
+    if (!card) { paintProgress(); return; }
+    const g = starGate(starOfPick(key));
+    const filled = STAR_KEYS.length - g.missing.length;
+    const badge = card.querySelector('.jd-sc-star');
+    if (badge) {
+      badge.className = `jd-sc-star ${g.ok ? 'is-ok' : filled ? 'is-part' : ''}`;
+      badge.textContent = `STAR ${filled}/4`;
+    }
+    const head = card.querySelector('.jd-q-star-h span');
+    if (head) {
+      const asIs = card.querySelector('.jd-q-star')?.classList.contains('is-locked');
+      head.textContent = `${filled}/4 칸${asIs ? ' · 스펙 관리 내용 그대로' : ''}`;
+    }
+    paintProgress();
+  }
+
   function bindQBoxes(host) {
     host.querySelectorAll('.jd-q-in').forEach(el => {
       el.addEventListener('input', () => {
+        /* 문항은 이제 아래 카드 칸과 **엮이지 않는다**(사용자 지시 2026-08-28).
+           정성스펙은 문항이 아니라 자소서 한 벌에 붙으므로, 여기서는 값만 반영한다. */
         _qBoxes[+el.dataset.q] = el.value;
         autoGrow(el);
         syncQuestions();
@@ -451,22 +648,37 @@
        결과를 낸다고 믿게 두면 안 된다. */
     const hasPosting = valueOf('#jd-text').length >= 30;
     const evCount = evidenceFor(valueOf('#jd-company')).length;
-    const canRun = hasPosting || evCount > 0;
+    const hasSource = hasPosting || evCount > 0;
+    /* ── 정성스펙·STAR 는 **권장이지 조건이 아니다** (사용자 지시 2026-08-28) ──
+       있으면 초안이 내 경험으로 채워지고, 없으면 분석까지만 나온다. 그 차이를 문장으로
+       말하되 버튼은 잠그지 않는다 — 공고를 붙여넣고 요구 역량부터 보는 것이 이 화면의
+       첫 용도다. */
+    const canRun = hasSource;
+    const picked = picksReady();
 
     const bar = $('#jd-ready-fill');
     if (bar) {
       bar.style.width = `${(done / STEPS.length) * 100}%`;
       bar.parentElement.classList.toggle('is-ready', canRun);
     }
+    const runBtn = $('#jd-run');
+    if (runBtn) {
+      runBtn.disabled = false;
+      runBtn.title = canRun ? '' : '채용공고나 회사 근거가 필요해요';
+    }
     const ready = $('#jd-ready');
     if (ready) {
-      ready.innerHTML = hasPosting
-        ? `${STEPS.length}개 중 <b>${done}개</b> 입력됨.${
-            valueOf('#jd-questions') ? '' : ' 문항까지 넣으면 문항별 배분까지 나와요.'}`
-        : evCount
-          ? `담아 온 회사 근거 <b>${evCount}건</b>으로 <b>지원동기</b>부터 쓸 수 있어요.
-             공고를 넣으면 <b>직무역량</b> 문항까지 분석합니다.`
-          : `<b>채용공고</b>를 넣거나, 회사 리포트에서 <b>근거를 담아</b> 오세요.`;
+      const qLine = picked.total
+        ? (picked.ok
+            ? `정성스펙 <b>${picked.total}개</b>를 골랐고 STAR 도 다 찼어요.`
+            : `정성스펙 <b>${picked.total}개</b> 중 STAR 를 다 채운 건 <b>${picked.done}개</b>예요 —
+               <span class="jd-ready-opt">없어도 분석은 되고,</span> 채우면 초안이 내 경험으로 쓰여요.`)
+        : `아래 <b>정성스펙 카드</b>에서 이 자소서에 쓸 경험을 고르면 초안이 정확해져요.`;
+      ready.innerHTML = hasSource
+        ? `${hasPosting
+              ? `${STEPS.length}개 중 <b>${done}개</b> 입력됨.`
+              : `담아 온 회사 근거 <b>${evCount}건</b>으로 씁니다.`} ${qLine}`
+        : `<b>채용공고</b>를 넣거나, 회사 리포트에서 <b>근거를 담아</b> 오세요.`;
     }
   }
 
@@ -712,8 +924,9 @@
       $('#jd-q-boxes')?.querySelector(`[data-q="${_qBoxes.length - 1}"]`)?.focus();
     });
 
-    /* 처음 진입 시 기본 3칸을 그린다. */
+    /* 처음 진입 시 기본 3칸과 정성스펙 카드를 그린다. */
     renderQBoxes();
+    renderSpecStar();
 
     // 접기·펼치기
     document.querySelectorAll('#jd-doc [data-toggle]').forEach(btn =>
@@ -811,12 +1024,17 @@
       applied = applyPickedJob(picked);
     }
 
+    /* 정성스펙 카드는 **로그인한 사람의 활동**이라 화면에 들어올 때마다 달라진다
+       (스펙 관리에서 활동을 추가하고 돌아오는 흐름이 흔하다). 한 번만 그려 두면
+       방금 적은 활동이 카드에 없다. */
+    renderQBoxes();
+    renderSpecStar();
     STEPS.forEach(paintBlock);
     document.querySelectorAll('#jd-doc [data-grow]').forEach(autoGrow);
     paintEvidence();
     paintProgress();
     paintStepComps();
-    paintLibrary();
+    paintLibCount();
 
     /* 어디까지 채워졌는지에 따라 다르게 알린다.
          head — 제목·조건만
@@ -858,6 +1076,12 @@
     const statusEl = $('#jd-status');
     const resultEl = $('#jd-result');
     const text = analysisText();
+
+    /* 정성스펙·STAR 는 **막지 않는다**(사용자 지시 2026-08-28, 같은 날 두 번째 지시).
+       한 번은 없으면 못 돌리게 했었다. 그런데 공고를 막 붙여넣고 "무슨 역량을 요구하나"
+       부터 보고 싶은 것이 이 화면의 첫 용도인데, 거기서 STAR 넉 줄을 먼저 요구하면
+       화면이 시작부터 잠긴다. 재료가 없으면 초안이 얕아질 뿐 분석은 돌아간다 —
+       그 사실은 STAR 칸 쪽에 적어 두고, 여기서는 길을 막지 않는다. */
 
     /* 공고가 없으면 담아 온 회사 근거로 간다. 서버는 역량 추출을 건너뛰고
        안내 문구(disclaimer·checklist)만 준다 — 그 문장들의 단일 출처가 서버라
@@ -1434,58 +1658,50 @@
   const actHasStar = a => a?.star && ['s', 't', 'a', 'r'].some(k => (a.star[k] || '').trim());
   const actTitle = a => a.name || a.org || ACT_TYPE_LABEL[a.type] || a.type || '활동';
 
-  /* 지금 열려 있는 '내 정성스펙 가져오기' 패널 여부. */
-  let _starImportOpen = false;
-
-  /* 내 정성스펙 STAR 가져오기 — 스펙입력(B2)에서 적은 활동의 STAR 를 이 문항의
-     STAR 칸으로 옮긴다(사용자 지시). 활동을 고르면 네 칸이 그 내용으로 채워지고,
-     그대로 AI 초안에 쓰거나 손봐서 쓸 수 있다. */
-  function starImportHtml(tab) {
-    const acts = (window.DB ? DB.myActivities() : []).filter(actHasStar);
-    if (!acts.length) {
+  /* ── 이 문항의 정성스펙 (읽기 전용 요약) ──────────────────────
+     STAR 를 **고르고 적는 자리는 입력 4번 칸 하나**다(사용자 지시 2026-08-28).
+     예전에는 결과 화면에도 '가져오기' 패널이 있어서 같은 값을 두 곳에서 고쳤는데,
+     어느 쪽이 진짜인지 알 수 없었다. 여기서는 무엇을 골랐는지만 보여주고, 고치려면
+     그 자리로 데려간다. */
+  function qSpecBandHtml() {
+    const list = picks();
+    if (!list.length) {
       return `<div class="jd-star-import jd-star-import--empty">
         <i class="ti ti-info-circle"></i>
-        스펙 관리에서 <b>정성 스펙 활동</b>에 STAR(상황·과제·행동·결과)를 적어 두면,
-        여기로 가져와 바로 쓸 수 있어요.
+        고른 정성스펙이 없어요 — 아래 STAR 는 이 자소서에만 저장됩니다.
+        <button type="button" class="jd-star-import-go" data-q-goto>정성스펙 고르러 가기</button>
+      </div>`;
+    }
+    const lead = actByKey(list[0].actKey);
+    if (!lead) {
+      return `<div class="jd-star-import jd-star-import--empty">
+        <i class="ti ti-info-circle"></i>
+        골라 둔 활동을 스펙 관리에서 찾지 못했어요.
+        <button type="button" class="jd-star-import-go" data-q-goto>다시 고르기</button>
       </div>`;
     }
     return `<div class="jd-star-import">
-      <button type="button" class="jd-star-import-toggle" data-star-import-toggle
-              aria-expanded="${_starImportOpen}">
-        <i class="ti ti-download"></i> 내가 적은 정성스펙 가져오기
-        <span class="jd-star-import-n">${acts.length}개</span>
-        <i class="ti ti-chevron-${_starImportOpen ? 'up' : 'down'}"></i>
-      </button>
-      ${_starImportOpen ? `
-        <div class="jd-star-import-list">
-          <p class="jd-star-import-note">이 문항(<b>${esc(tab.label)}</b>)의 STAR 칸을 고른 활동 내용으로 채웁니다.
-            채운 뒤 손봐도 돼요.</p>
-          ${acts.map((a, i) => {
-            const parts = ['s', 't', 'a', 'r'].map(k => (a.star[k] || '').trim()).filter(Boolean);
-            const preview = parts.join(' · ');
-            return `<button type="button" class="jd-star-import-item" data-star-import="${i}">
-              <div class="jd-star-import-h">
-                <span class="jd-star-import-type">${esc(ACT_TYPE_LABEL[a.type] || a.type || '활동')}</span>
-                <b>${esc(actTitle(a))}</b>
-                ${a.duration ? `<span class="jd-star-import-dur">${esc(a.duration)}</span>` : ''}
-              </div>
-              <div class="jd-star-import-prev">${esc(preview.length > 120 ? preview.slice(0, 120) + '…' : preview)}</div>
-            </button>`;
-          }).join('')}
-        </div>` : ''}
+      <span class="jd-star-import-type">${esc(ACT_TYPE_LABEL[lead.type] || lead.type || '활동')}</span>
+      <b>${esc(actTitle(lead))}</b>
+      ${lead.duration ? `<span class="jd-star-import-dur">${esc(lead.duration)}</span>` : ''}
+      <span class="jd-star-import-mode">${list[0].mode === 'edited' ? '여기서 고쳐 씀' : '스펙 관리 그대로'}</span>
+      ${list.length > 1 ? `<span class="jd-star-import-dur">외 ${list.length - 1}개 고름</span>` : ''}
+      <button type="button" class="jd-star-import-go" data-q-goto>바꾸기</button>
     </div>`;
   }
 
+  /* 결과 화면의 STAR 띠는 **고른 정성스펙 중 대표** 의 STAR 를 보여주고 고친다.
+     문항키로 따로 저장하던 것을 활동키 하나로 모았다(2026-08-28) — 같은 경험을 두
+     문항에 쓰면서 STAR 를 두 벌 적게 하는 것은 같은 글을 두 번 쓰게 하는 일이다. */
   function starHtml(r) {
     if (!r.star?.length) return '';
-    const tab = (_lastTabs || [])[_tab];
-    const saved = tab ? getStar(tab.key) : {};
+    const saved = leadStar();
     const filled = STAR_KEYS.filter(k => (saved[k] || '').trim()).length;
     return `<div class="jd-star-band">
       <div class="co-sec-h"><h2>모든 문항의 뼈대 — STAR</h2>
         <span class="co-src">${filled}/4 칸 작성 · 칸을 누르면 바로 아래에서 씁니다 ·
           이 브라우저에만 저장됩니다 · <b>AI 초안 넣기</b>가 이 내용을 읽습니다</span></div>
-      ${tab ? starImportHtml(tab) : ''}
+      ${qSpecBandHtml()}
       <div class="jd-star-grid">
         ${r.star.map(s => {
           const val = (saved[s.key] || '').trim();
@@ -1528,35 +1744,13 @@
       });
     });
 
-    /* '내가 적은 정성스펙 가져오기' 펼치기/접기. */
-    const toggle = box.querySelector('[data-star-import-toggle]');
-    if (toggle) toggle.addEventListener('click', () => {
-      _starImportOpen = !_starImportOpen;
-      repaintStarBand(box);
-    });
-
-    /* 활동을 고르면 그 STAR 를 이 문항의 네 칸으로 옮긴다. 기존에 적어 둔 값이 있으면
-       덮어쓰기 전에 물어본다 — 손으로 쓴 것을 말없이 지우면 안 된다. */
-    box.querySelectorAll('[data-star-import]').forEach(el => {
+    /* 정성스펙을 바꾸러 간다 — 고르는 자리는 입력부의 카드 칸 하나뿐이다.
+       여기서 또 고르게 하면 같은 값을 두 곳에서 고치게 된다. */
+    box.querySelectorAll('[data-q-goto]').forEach(el => {
       el.addEventListener('click', () => {
-        const tab = (_lastTabs || [])[_tab];
-        if (!tab) return;
-        const acts = (window.DB ? DB.myActivities() : []).filter(actHasStar);
-        const act = acts[+el.dataset.starImport];
-        if (!act?.star) return;
-
-        const saved = getStar(tab.key);
-        const hadContent = STAR_KEYS.some(k => (saved[k] || '').trim());
-        if (hadContent && !confirm('이 문항에 이미 적은 STAR 를 고른 활동 내용으로 바꿀까요?')) return;
-
-        for (const K of STAR_KEYS) {
-          saveStar(tab.key, K, (act.star[K.toLowerCase()] || '').trim());
-        }
-        _starImportOpen = false;
-        _starOpen = 'S';
-        repaintStarBand(box);
-        repaintStarInput(box);
-        if (typeof toast === 'function') toast('정성스펙을 가져왔어요. 필요하면 칸을 눌러 손보세요.');
+        const host = $('#jd-spec-star');
+        host?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        host?.querySelector('[data-sc-pick]')?.focus({ preventScroll: true });
       });
     });
   }
@@ -1591,7 +1785,7 @@
     const w = write.find(x => x.key === _starOpen);
     if (!w) return '<div class="jd-starin"></div>';
     const meta = (r.star || []).find(s => s.key === w.key) || {};
-    const val = getStar(tab.key)[w.key] || '';
+    const val = leadStar()[w.key] || '';
     const next = nextStarKey(w.key);
 
     return `<div class="jd-starin">
@@ -1664,7 +1858,8 @@
         if (state) state.textContent = '입력 중…';
         clearTimeout(timer);
         timer = setTimeout(() => {
-          saveStar(tab.key, key, ta.value);
+          const lead = picks()[0];
+          if (lead) saveStar(starKeyOf(lead.actKey), key, ta.value);
           if (state) state.textContent = `저장됨 · ${ta.value.trim().length}자`;
           /* 위 띠의 '미작성/N자' 와 미리보기를 같이 고친다. 한쪽만 고치면 같은 화면에
              '미작성' 과 '120자' 가 동시에 떠서 어느 쪽이 맞는지 알 수 없다.
@@ -2115,6 +2310,7 @@
     init, onEnter, focusItem,
     // 화면 없이 검증하는 규칙들 (test/jd-questions.test.js)
     classifyQuestion, competenciesFor, parseQuestions, questionDraftKey, QUESTION_TYPES,
+    starGate, actKeyOf,
     checkDraft,
   };
 
