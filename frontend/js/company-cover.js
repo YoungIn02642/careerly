@@ -684,7 +684,12 @@ window.CompanyCover = (() => {
   }
 
   /* 진행 표시 — 지금 어디까지 왔는지. 자동으로 건너뛴 단계는 점선으로 남긴다.
-     지우면 "내가 안 골랐는데 정해져 있다" 가 되어 고장으로 읽힌다. */
+     지우면 "내가 안 골랐는데 정해져 있다" 가 되어 고장으로 읽힌다.
+
+     ── 눌러서 그 단계로 돌아간다 (사용자 지시) ──
+     이미 고른 단계(완료)나 지금 단계를 누르면 그 단계의 선택창이 열린다. 아코디언
+     헤더와 같은 data-open 을 달아 같은 핸들러(path 를 그 단계까지 자른다)를 쓴다.
+     아직 못 온 뒤 단계는 누를 수 없다 — 앞을 건너뛸 수는 없기 때문이다. */
   function stepsHtml() {
     if (!treeData) return '';
     const S = stepsNow();
@@ -692,7 +697,10 @@ window.CompanyCover = (() => {
       const v = i < S.length - 1 ? path[i] : null;
       const cls = v ? (skipped[i] ? 'is-done is-skip' : 'is-done') : (i === path.length ? 'is-on' : '');
       const label = v ? (skipped[i] ? `${v} (자동)` : v) : st.t;
-      return `<span class="co-step ${cls}" title="${esc(label)}"><i>${i + 1}</i>${esc(label)}</span>${
+      const nav = v != null || i === path.length;      // 완료됐거나 지금 단계면 누를 수 있다
+      const tag = nav ? 'button type="button"' : 'span';
+      return `<${tag} class="co-step ${cls}${nav ? ' co-step--nav' : ''}"
+                ${nav ? `data-open="${i}"` : ''} title="${esc(label)}"><i>${i + 1}</i>${esc(label)}</${nav ? 'button' : 'span'}>${
         i < S.length - 1 ? '<span class="co-step-arw">›</span>' : ''}`;
     }).join('')}</div>`;
   }

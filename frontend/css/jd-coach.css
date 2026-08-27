@@ -1250,6 +1250,9 @@ a.wf-btn { text-decoration: none; }
   color: var(--wf-ok, #00a83a);
 }
 .co-step.is-skip { border-style: dashed; }
+/* 누를 수 있는 단계(완료·현재) — 눌러서 그 선택창으로 돌아간다. button 이라 폰트를 물려준다. */
+.co-step--nav { font-family: inherit; cursor: pointer; }
+.co-step--nav:hover { border-color: var(--wf-ink); color: var(--wf-ink); }
 .co-step-arw { color: var(--wf-hairline); font-size: 13px; }
 
 /* ── 단계 카드 (B안) ─────────────────────────────────────────
