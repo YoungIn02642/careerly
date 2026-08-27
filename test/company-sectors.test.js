@@ -178,22 +178,23 @@ const CLASSIFY = require('../backend/src/company-classify.js');
 const allCos = r.sectors.flatMap(s => s.companies);
 
 ok('회사마다 규모가 붙는다', allCos.every(c => 'size' in c));
-ok('규모 값은 4분류 안에서만 나온다',
-   allCos.every(c => c.size === null || ['large', 'mid', 'small', 'public'].includes(c.size)),
+ok('규모 값은 정해진 분류 안에서만 나온다(unknown=규모 미확인 포함)',
+   allCos.every(c => c.size === null || ['large', 'mid', 'small', 'public', 'unknown'].includes(c.size)),
    `→ ${[...new Set(allCos.map(c => c.size))].join(', ')}`);
 ok('규모별 곳수를 같이 준다',
    r.sizes && Object.values(r.sizes).reduce((a, b) => a + b, 0) === allCos.filter(c => c.size).length,
    `→ ${JSON.stringify(r.sizes)}`);
-/* 이 목록은 상장사 ∩ (공정위 ∪ 고용24) 라서 큰 회사만 남는다. 중소기업이 0곳인 것은
-   버그가 아니라 사실이고, **화면이 그 사실을 적어야 한다.** */
-ok('대기업과 중견기업이 둘 다 있다', (r.sizes.large || 0) > 0 && (r.sizes.mid || 0) > 0);
+/* 이제 상장사 전체를 보여준다. 명단(공정위·고용24)에 잡힌 대기업·중견은 그 규모가
+   붙고, 명단에 없는 상장사는 'unknown'(규모 미확인)이 된다 — 대다수가 여기 해당한다. */
+ok('대기업·중견과 규모 미확인이 모두 있다',
+   (r.sizes.large || 0) > 0 && (r.sizes.mid || 0) > 0 && (r.sizes.unknown || 0) > 0);
 
 /* 분류가 목록 쪽에서 따로 계산되고 있지 않은지 — 표본으로 대조한다. */
 ok('배지가 company-classify 판정과 같다', allCos.slice(0, 200).every(c => {
   const j = CLASSIFY.classify(c.name);
-  /* 명단에 없는 상장사는 '중소' 로 본다(sizeOf). classify 는 미등록도 중소(DEFAULT)로
-     돌려주므로, matched 여부와 상관없이 CORP_TYPE_ID[type] 하나로 비교하면 된다. */
-  return c.size === CLASSIFY.CORP_TYPE_ID[j.type];
+  /* 명단에 잡힌 회사만(matched) 그 규모를 붙이고, 명단에 없는 상장사는
+     'unknown'(규모 미확인)으로 둔다 — '중소'로 단정하면 실제 중견을 잘못 적는다. */
+  return c.size === (j.matched ? CLASSIFY.CORP_TYPE_ID[j.type] : 'unknown');
 }));
 
 /* 음차 미매칭 — 자동완성은 대기업이라고 하는데 그걸 골라 저장하면 중소기업이 되던 것.

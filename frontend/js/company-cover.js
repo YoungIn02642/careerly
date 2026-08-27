@@ -647,20 +647,23 @@ window.CompanyCover = (() => {
     const goal = Roadmap.corpType();
     const counts = treeData.sizes || {};
     const chips = [
-      { id: null,     label: '전체' },
-      { id: 'large',  label: '대기업',   n: counts.large },
-      { id: 'mid',    label: '중견기업', n: counts.mid },
-      { id: 'small',  label: '중소기업', n: counts.small },
-      { id: 'public', label: '공공기관', n: counts.public },
+      { id: null,       label: '전체' },
+      { id: 'large',    label: '대기업',   n: counts.large },
+      { id: 'mid',      label: '중견기업', n: counts.mid },
+      { id: 'small',    label: '중소기업', n: counts.small },
+      { id: 'public',   label: '공공기관', n: counts.public },
+      /* 명단(대기업·중견·공공)에 없는 상장사. '중소'로 단정하지 않는다 —
+         실제 중견을 중소로 잘못 적는 일이 있어서다(리노공업 등). */
+      { id: 'unknown',  label: '규모 미확인', n: counts.unknown },
     ].filter(c => c.id === null || c.n > 0);
 
-    /* 중소는 '명단에 없는 상장사' 라 규모가 100% 확정된 값은 아니다 — 고른 사람에게만
-       한 줄로 일러 준다(대부분 실제 중소·중견 소형주라 대체로 맞다). */
-    const note = goal === 'small'
+    /* '규모 미확인'을 고르거나, 로드맵에서 중소를 골라 왔는데 중소 명단이 비어 있을 때
+       왜 '규모 미확인'인지 한 줄로 일러 준다. */
+    const note = (goal === 'small' || sizeFilter === 'unknown')
       ? `<div class="co-note co-note--tight"><i class="ti ti-info-circle"></i>
-           <b>중소기업</b>은 대기업·중견 명단에 없는 상장사를 모은 것이라, 규모가 확정된
-           값은 아니에요(대부분 코스닥 중소·중견입니다). 아는 회사가 있으면
-           <b>위 검색창</b>에 적으면 바로 리포트가 열립니다.</div>`
+           <b>규모 미확인</b>은 대기업·중견·공공 명단에 없는 상장사예요 — 대부분 코스닥
+           중소·중견이지만, 규모를 단정하지 않았습니다(명단에 없는 곳을 '중소'로 찍으면
+           실제 중견을 잘못 적어서요). 아는 회사는 <b>위 검색창</b>에 적으면 바로 열립니다.</div>`
       : '';
 
     return `
@@ -768,7 +771,7 @@ window.CompanyCover = (() => {
   /* 회사 칩 한 벌. 규모를 배지로 단다 — 이름만 늘어놓으면 학생이 고를 근거가 없다.
      **규모 필터가 켜져 있으면 배지를 뺀다.** 모든 칩에 '중견' 이 똑같이 붙어 있으면
      정보가 아니라 잡음이고, 그 말은 이미 필터 칩이 하고 있다. */
-  const SIZE_LABEL = { large: '대기업', mid: '중견', small: '중소', public: '공공' };
+  const SIZE_LABEL = { large: '대기업', mid: '중견', small: '중소', public: '공공', unknown: '규모 미확인' };
   const companyChip = c => `<button type="button" class="co-chip" data-pick="${esc(c.n)}">
       ${esc(c.n)}${!sizeFilter && c.s && SIZE_LABEL[c.s]
         ? `<em class="co-chip-size co-chip-size--${esc(c.s)}">${SIZE_LABEL[c.s]}</em>` : ''}
