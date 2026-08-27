@@ -21,9 +21,17 @@
    즉시 멈추고 지금까지 채운 것을 저장한다 — 계속 던져봐야 전부 실패한다.
 
    사용:
-     node scripts/build-dart-industry.js               # 빈 것만 채운다
+     node scripts/build-dart-industry.js               # 빈 것만 채운다(상장사)
      node scripts/build-dart-industry.js --limit=200   # 200건만
      node scripts/build-dart-industry.js --force       # 전부 다시
+     node scripts/build-dart-industry.js --work24      # 고용24 공채기업(비상장 포함)
+
+   ── --work24 는 왜 있나 (2026-08-28) ──
+   회사 찾기에 비상장 공채기업 953곳을 넣었더니(작업정리 37장) 업종코드가 없어
+   전부 '기타 업종' 한 칸에 쌓였다 — 목록의 4분의 1이 업종으로는 못 찾히는 회사였다.
+   고용24 명단에는 업종이 없지만, 이 회사들 상당수는 외부감사 대상이라 **DART 기업
+   개황에는 업종코드가 있다.** 상장사만 채우던 이 스크립트를 그 이름들로도 돌린다.
+   (--unlisted 로 11만 건을 전부 도는 것과 다르다. 필요한 953곳만 본다.)
    env: DART_API_KEY */
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const fs = require('fs');
@@ -43,6 +51,26 @@ const SAVE_EVERY = 100;
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+/* 고용24 공채기업 명단의 이름을 DART 고유번호로 옮긴다. 이름이 색인에 없으면
+   (비상장 중 외부감사 대상이 아닌 회사) 채울 방법이 없으니 조용히 건너뛴다 —
+   실측 953곳 중 757곳(79%)이 색인에 있었다. */
+function work24Scope(corps) {
+  const path = require('path');
+  const file = path.join(__dirname, '..', 'data', 'work24-companies.json');
+  const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const list = Array.isArray(raw) ? raw : (raw.companies || Object.values(raw).find(Array.isArray) || []);
+  const out = [];
+  const seen = new Set();
+  for (const c of list) {
+    const corp = c.name && DART.findCorp(c.name);
+    if (!corp || seen.has(corp.code)) continue;
+    seen.add(corp.code);
+    out.push(corp);
+  }
+  console.log(`고용24 명단 ${list.length.toLocaleString()}곳 → DART 색인에서 찾은 회사 ${out.length.toLocaleString()}곳`);
+  return out;
+}
+
 async function main() {
   if (!DART.isConfigured()) {
     console.error('DART_API_KEY 가 없습니다. backend/.env 에 넣어 주세요.');
@@ -58,7 +86,9 @@ async function main() {
      DART 일일 한도(20,000건)로 엿새가 걸린다. 업종코드를 쓰는 곳은 경쟁사 목록과
      계열별 둘러보기인데 둘 다 상장사만 본다(비상장은 매출 비교가 불가능하다).
      비상장사도 채우려면 --unlisted. */
-  const scope = process.argv.includes('--unlisted') ? corps : corps.filter(c => c.stock);
+  const scope = process.argv.includes('--work24') ? work24Scope(corps)
+    : process.argv.includes('--unlisted') ? corps
+    : corps.filter(c => c.stock);
   const todo = scope.filter(c => FORCE || !c.industry).slice(0, LIMIT);
 
   console.log(`대상 ${todo.length.toLocaleString()}건 / 상장사 ${corps.filter(c => c.stock).length.toLocaleString()}건 / 전체 ${corps.length.toLocaleString()}건`);

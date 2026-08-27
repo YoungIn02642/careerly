@@ -184,17 +184,24 @@ ok('규모 값은 정해진 분류 안에서만 나온다(unknown=규모 미확�
 ok('규모별 곳수를 같이 준다',
    r.sizes && Object.values(r.sizes).reduce((a, b) => a + b, 0) === allCos.filter(c => c.size).length,
    `→ ${JSON.stringify(r.sizes)}`);
-/* 이제 상장사 전체를 보여준다. 명단(공정위·고용24)에 잡힌 대기업·중견은 그 규모가
-   붙고, 명단에 없는 상장사는 'unknown'(규모 미확인)이 된다 — 대다수가 여기 해당한다. */
-ok('대기업·중견과 규모 미확인이 모두 있다',
-   (r.sizes.large || 0) > 0 && (r.sizes.mid || 0) > 0 && (r.sizes.unknown || 0) > 0);
+/* 목록은 **활성 회사만** 담는다(2026-08-28 사용자 지시). 명단(공정위·고용24)에 잡힌
+   대기업·중견은 그 규모가 붙고, 명단에 없는 상장사는 DART 매출로 중견/중소를 가른다.
+   둘 다 못 받는 회사는 최근 3년 재무 공시가 없는 **상장폐지·휴면**이라 목록에서 뺀다 —
+   실측으로 무작위 80곳을 천천히 재조회해도 0곳이 활성이었다(레이트리밋이 아니다). */
+ok('대·중견·중소가 모두 있다',
+   (r.sizes.large || 0) > 0 && (r.sizes.mid || 0) > 0 && (r.sizes.small || 0) > 0,
+   `→ ${JSON.stringify(r.sizes)}`);
+ok('규모 미확인은 남기지 않는다(폐지사는 제외됐다)', !(r.sizes.unknown > 0));
 
 /* 분류가 목록 쪽에서 따로 계산되고 있지 않은지 — 표본으로 대조한다. */
 ok('배지가 company-classify 판정과 같다', allCos.slice(0, 200).every(c => {
   const j = CLASSIFY.classify(c.name);
-  /* 명단에 잡힌 회사만(matched) 그 규모를 붙이고, 명단에 없는 상장사는
-     'unknown'(규모 미확인)으로 둔다 — '중소'로 단정하면 실제 중견을 잘못 적는다. */
-  return c.size === (j.matched ? CLASSIFY.CORP_TYPE_ID[j.type] : 'unknown');
+  /* 명단에 잡힌 회사는 그 규모 그대로. 명단에 없는 상장사는 DART 매출로 채우므로
+     여기서 값을 단정하지 않고 '중견/중소 중 하나' 인지만 본다 — 명단을 다시
+     해석하지만 않으면 된다(기준을 두 곳에 두면 스펙 저장값과 배지가 갈린다). */
+  return j.matched
+    ? c.size === CLASSIFY.CORP_TYPE_ID[j.type]
+    : ['mid', 'small'].includes(c.size);
 }));
 
 /* 음차 미매칭 — 자동완성은 대기업이라고 하는데 그걸 골라 저장하면 중소기업이 되던 것.
@@ -238,7 +245,31 @@ ok('회사가 두 계열에 겹치지 않는다', (() => {
   }
   return true;
 })());
-ok('빼내도 총합은 그대로(상장사 전체)', r.total >= 3000, `→ ${r.total}곳`);
+/* 폐지사를 뺀 대신 비상장 공채기업(고용24 중견·대기업)을 더했다. 옛 목록(778곳)보다
+   많으면서 전부 활성이어야 한다 — 실측 약 2,000곳. */
+ok('활성 회사만으로도 옛 목록보다 많다', r.total > 1500, `→ ${r.total}곳`);
+const offMarket = allCos.filter(c => c.offMarket);
+ok('비상장 공채기업이 들어와 있다', offMarket.length > 100, `→ ${offMarket.length}곳`);
+const pubKey = n => n.replace(/\s+/g, '');
+const pubNames = new Set(S.publicOrgs().lanes.flatMap(l => l.companies.map(c => pubKey(c.name))));
+ok('비상장 공채기업은 공공기관과 겹치지 않는다',
+   offMarket.every(c => !pubNames.has(pubKey(c.name))),
+   '고용24 명단은 안산도시개발 같은 지방출자출연기관도 대기업으로 적어 온다');
+
+/* 공공기관은 업종코드가 생겨 민간 루프로 들어와도 '공공' 이어야 한다. 고용24 명단이
+   지방출자출연기관을 '대기업' 으로 적어 오는데 그 라벨을 그대로 쓰면, 같은 기관이
+   업종 트리(민간)와 공공 레인에 두 번 나온다 — 실측 안산도시개발. */
+ok('공공기관은 민간 목록에 섞여도 공공 규모다',
+   allCos.every(c => !pubNames.has(pubKey(c.name)) || c.size === 'public'));
+
+/* 이름 흔들림 — 고용24 는 '네이버', DART 는 'NAVER' 로 적는다. 이름만 대조하면 같은
+   회사가 업종 아래 한 번, '기타 공채기업' 에 또 한 번 들어간다(실측 8건). */
+ok('이름이 달라도 같은 회사를 두 번 담지 않는다', (() => {
+  const DART = require('../backend/src/dart.js');
+  const k = n => n.replace(/\(주\)|\(유\)|주식회사/g, '').replace(/\s+/g, '').toLowerCase();
+  const listed = new Set(allCos.filter(c => !c.offMarket).map(c => k(c.name)));
+  return offMarket.every(c => { const corp = DART.findCorp(c.name); return !corp || !listed.has(k(corp.name)); });
+})(), '네이버/NAVER · 엔씨소프트/NC · 정식품/정·식품');
 
 console.log('\n── 7. 공공기관 목록 ──');
 /* 공공기관은 대부분 비상장이라 업종코드가 없어 계열 목록에 4곳밖에 못 들어간다.

@@ -335,9 +335,41 @@ function holdingOf(corp) {
    명단에 없는 상장사는 **'unknown'(규모 미확인)** 으로 둔다. 회사는 그대로 다 보여주되
    틀린 규모를 단정하지 않는다. (참고: 현재 어느 명단에도 '중소' 라벨이 없어서 —
    공정위=대기업, 고용24=대기업·중견·공공 — 사실상 대부분이 '규모 미확인'이 된다.) */
+/* ── 명단 밖 상장사의 규모를 채우는 두 표 (있으면 읽는다) ──────────
+   · listed-sizes.json  : DART 매출 → 'small' | 'mid' | 'none'
+     (scripts/build-listed-sizes.js 가 만든다)
+   · venture-companies.json : 벤처인증 기업 이름 (scripts/fetch-venture.js 가 만든다)
+   둘 다 없으면 명단 밖 상장사는 '규모 미확인'(unknown) 그대로다.
+
+   **'none' 과 '표에 없음' 은 다르다.** 'none' 은 3년치 재무를 물어봤는데 매출이 없는
+   회사(상장폐지·휴면·SPAC·선박투자회사)이고, 표에 아예 없으면 아직 안 물어본 것이다.
+   둘 다 여기서는 unknown 이 되어 목록에서 빠지지만, 스크립트가 이 둘을 섞은 탓에
+   멀쩡한 상장사 1,400여 곳이 '폐지'로 사라진 적이 있다(작업정리 37장). */
+let _listedSizes, _ventureSet;
+function listedSizes() {
+  if (_listedSizes) return _listedSizes;
+  _listedSizes = readJson('listed-sizes.json') || {};
+  return _listedSizes;
+}
+function ventureSet() {
+  if (_ventureSet) return _ventureSet;
+  const j = readJson('venture-companies.json');
+  const names = Array.isArray(j) ? j : (j?.companies || []);
+  _ventureSet = new Set(names.map(x => CLASSIFY.normalize(typeof x === 'string' ? x : (x?.name || ''))).filter(Boolean));
+  return _ventureSet;
+}
+
 function sizeOf(name) {
   const r = CLASSIFY.classify(name);
-  return r.matched ? (CLASSIFY.CORP_TYPE_ID[r.type] || 'unknown') : 'unknown';
+  if (r.matched) return CLASSIFY.CORP_TYPE_ID[r.type] || 'unknown';
+  /* 명단(대기업·중견·공공)에 없는 상장사 — 두 표로 규모를 채운다.
+     ① DART 매출 기준(가장 신뢰) → 중소/중견 ② 벤처명단(벤처인증 = 대부분 중소) → 중소
+     둘 다 없으면 '규모 미확인'. 매출이 벤처보다 정확하므로 매출이 먼저다. */
+  const key = CLASSIFY.normalize(name);
+  const byRevenue = listedSizes()[key];
+  if (byRevenue === 'mid' || byRevenue === 'small') return byRevenue;
+  if (ventureSet().has(key)) return 'small';
+  return 'unknown';
 }
 
 /* 규모별 곳수. 화면이 필터 칩에 숫자를 달고, **0곳인 칩은 아예 안 만든다** —
@@ -378,6 +410,10 @@ function build() {
      **먼저 나온 것만** 남긴다 — 목록에 보이는 것과 눌러서 열리는 것이 같아야 한다. */
   const buckets = new Map(SECTORS.map(([n]) => [n, []]));
   const taken = new Set();
+  /* 공공 레인(publicOrgs)에 이미 있는 기관의 이름. 아래 두 루프가 같이 본다 —
+     민간 목록과 공공 목록에 같은 기관이 두 번 나오면 "몇 곳인가"를 셀 수 없다. */
+  const publicNames = new Set(publicOrgs().lanes.flatMap(l => l.companies.map(c => norm(c.name))));
+  const isPublicOrg = name => publicNames.has(norm(name)) || publicNames.has(norm(CLASSIFY.displayName(name)));
   for (const c of corps) {
     const key = norm(c.name);
     /* 업종코드가 있는 상장사면 전부 넣는다(명단 여부는 정렬에만 쓴다). 업종코드가
@@ -385,6 +421,25 @@ function build() {
     if (!c.industry || taken.has(key)) continue;
     const sector = holdingOf(c) || SECTOR_OF.get(parseInt(String(c.industry).slice(0, 2), 10));
     if (!sector) continue;
+    /* ── 상장폐지·휴면 회사는 뺀다 (사용자 지시 2026-08-28) ──────────
+       sizeOf 가 unknown 이면 대기업·중견·공공 명단에도 없고 매출 표에도 답이 없는
+       회사다. 매출 표(listed-sizes.json)가 'none' 으로 적어 둔 회사는 3년치 재무를
+       실제로 물어봤는데 매출이 없는 곳 — 상장폐지·휴면·기업인수목적회사(SPAC)·
+       선박투자회사다. 지원할 수 없으니 뺀다.
+
+       **이 줄은 매출 표를 믿고 회사를 지운다.** 표가 틀리면 멀쩡한 회사가 조용히
+       사라지고, 목록이 줄어든 것 말고는 아무 증상이 없다 — 실제로 표를 만드는
+       스크립트가 API 한도 오류를 '매출 없음' 으로 적는 바람에 상장사 1,400여 곳이
+       없어진 적이 있다(작업정리 37장). 목록 수가 갑자기 줄면 여기가 아니라
+       **listed-sizes.json 부터** 본다. */
+    let size = sizeOf(c.name);
+    if (size === 'unknown') continue;
+    /* 공공 레인에 있는 기관은 무슨 라벨이 붙어 있든 'public' 이다. 업종 트리는
+       public 을 민간 쪽에서 건너뛰므로(industryTree) 이걸로 중복이 사라진다.
+       실측: 안산도시개발이 고용24 명단에 **대기업**으로 올라와 있어서, 업종코드가
+       생기자마자 민간 목록과 공공 목록에 두 번 나왔다. 명단 라벨보다 공공기관
+       명단이 정확하다 — 그쪽은 기관 유형까지 들고 있다. */
+    if (isPublicOrg(c.name)) size = 'public';
     const ksic = parseInt(String(c.industry).slice(0, 2), 10);
     taken.add(key);
     /* 회사마다 KSIC 중분류 2자리를 남긴다. 계열(15개)은 화면에 올리려고 넓게 묶은
@@ -394,7 +449,37 @@ function build() {
     /* code(원본 5자리)를 같이 남긴다. 취업 업종 분류(job-industry.js)가 5자리 규칙을
        쓴다 — 204(기타 화학제품) 안에서 2042(세제·화장품)만 '화장품' 으로 빠지는 식이라,
        2자리로 줄여 둔 ksic 만으로는 못 가른다. */
-    buckets.get(sector).push({ name: c.name, stock: c.stock || null, ksic, code: String(c.industry), size: sizeOf(c.name), known: known.has(key) });
+    buckets.get(sector).push({ name: c.name, stock: c.stock || null, ksic, code: String(c.industry), size, known: known.has(key) });
+  }
+
+  /* ── 비상장 공채기업 추가 (사용자 지시 2026-08-28) ─────────────────
+     우리 목록은 DART 상장사 기반이라 배민·무신사 같은 **비상장 중견·대기업**이
+     통째로 빠졌다. 고용24 공채기업 명단에는 이들이 있으므로(대기업·중견 라벨과 함께)
+     위 DART 루프에서 안 잡힌 것을 여기서 더한다.
+     업종코드가 없어 15개 계열로 못 묶으므로 '기타 공채기업' 한 계열로 모은다
+     (industryTree 가 이들을 '기타 업종' 으로 내려보낸다). 규모는 고용24 라벨을
+     그대로 쓴다(company-classify 가 이미 그 명단을 읽는다 → sizeOf 가 large/mid).
+     공공기관·공기업은 공공 레인(buildPublic)에서 따로 다루므로 여기선 뺀다. */
+  const OTHER_SECTOR = '기타 공채기업';
+  const otherBucket = [];
+  /* 공공 레인에 이미 있는 기관은 제외한다(위 isPublicOrg 와 같은 규칙). 규모 라벨만
+     보고 거르면 샌다 — 고용24 명단은 지방출자출연기관을 '대기업' 으로 적어 온다. */
+  for (const c of asArray(readJson('work24-companies.json'))) {
+    const key = norm(c.name);
+    if (!c.name || taken.has(key)) continue;
+    if (isPublicOrg(c.name)) continue;
+    /* 이름이 달라서 위 루프와 안 겹쳐 보이는 같은 회사를 거른다. 고용24 는 학생이
+       쓰는 이름으로, DART 는 등기명으로 적는다 — 실측 8건: 네이버/NAVER,
+       엔씨소프트/NC, 정식품/정·식품, 와이지원/와이지-원, 그리고 국세청 표기 오류가
+       그대로 들어온 '스튜디오프리즘(국세청오류)' 같은 것들. 그냥 두면 같은 회사가
+       업종 아래 한 번, '기타 공채기업' 에 또 한 번 나온다.
+       (dart.js findCorp 가 그 이름 흔들림을 이미 알고 있다 — 규칙을 여기 또 두지 않는다.) */
+    const corp = DART.findCorp(c.name);
+    if (corp && taken.has(norm(corp.name))) continue;
+    const size = sizeOf(c.name);
+    if (size !== 'large' && size !== 'mid') continue;   // 비상장 중견·대기업만
+    taken.add(key);
+    otherBucket.push({ name: c.name, stock: null, ksic: null, code: null, size, known: true, offMarket: true });
   }
 
   /* 아는 회사(대기업집단·공채기업 명단)를 앞에, 그 뒤로 나머지 상장사를 가나다순으로.
@@ -407,6 +492,12 @@ function build() {
         (b.known - a.known) || a.name.localeCompare(b.name, 'ko')),
     }))
     .filter(s => s.companies.length);
+
+  /* 비상장 공채기업은 계열 맨 뒤에 '기타 공채기업' 으로 붙인다(업종코드가 없어
+     15개 계열엔 못 들어간다). 이름순으로만 정렬한다. */
+  if (otherBucket.length) {
+    sectors.push({ name: OTHER_SECTOR, companies: otherBucket.sort((a, b) => a.name.localeCompare(b.name, 'ko')) });
+  }
 
   const all = sectors.flatMap(s => s.companies);
   return { sectors, total: all.length, sizes: countSizes(all), reason: null };
