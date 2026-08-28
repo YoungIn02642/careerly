@@ -28,6 +28,7 @@ const { router: mentoringRouter } = require("./routes/mentoring");
 const { router: paymentsRouter } = require("./routes/payments");
 const { router: insightRouter } = require("./routes/insight");
 const specupRouter = require("./routes/specup");
+const donationsRouter = require("./routes/donations");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -90,13 +91,16 @@ app.use("/api/company", companyAnalysisRouter);
 app.use("/api/specup", specupRouter);
 /* 멘토링·결제·인사이트는 라우터 안에서 req.user 를 보므로 세션을 먼저 붙여 준다
    (전역 requireAuth 는 아니다 — 가격표·게시판 읽기는 비로그인도 본다). */
-app.use(["/api/mentoring", "/api/payments", "/api/insights"], async (req, res, next) => {
+app.use(["/api/mentoring", "/api/payments", "/api/insights", "/api/donations"], async (req, res, next) => {
   try { req.user = await getCurrentUser(req); next(); }
   catch (e) { next(e); }
 });
 app.use("/api/mentoring", mentoringRouter);
 app.use("/api/payments", paymentsRouter);
 app.use("/api/insights", insightRouter);
+/* 자소서 기증 — 동의 기반 합격 코퍼스. 읽기(/meta·/stats)는 비로그인도 되고,
+   기증(POST)만 라우터 안에서 req.user 를 본다(insight 와 같은 방식). */
+app.use("/api/donations", donationsRouter);
 
 function publicUser(user) {
   return {

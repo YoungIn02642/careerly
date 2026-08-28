@@ -311,3 +311,31 @@ CREATE TABLE IF NOT EXISTS insight_comments (
   CONSTRAINT fk_icmt_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   KEY idx_icmt_post (post_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ════════════════════════════════════════════════════════════
+--  자소서 기증 (동의 기반 합격 코퍼스 · A 참조군)
+--  합격한 사용자가 **본인 자소서를 직접, 동의 아래** 기증한다(남의 글을 긁지 않는다).
+--  저장 전에 개인정보를 규칙으로 익명화한다(frontend/js/anonymize.js) — 여기 들어오는
+--  본문은 이미 익명화된 것이다. 문장 복붙이 아니라 **직무·문항유형별 통계 참조군**으로만 쓴다.
+-- ════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS cover_donations (
+  id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+  -- 기증자. 탈퇴해도 코퍼스는 남되(익명이므로), 연결만 끊는다(SET NULL).
+  user_id       VARCHAR(32)  NULL,
+  job_field     VARCHAR(64)  NOT NULL,     -- 직무(대분류) — 통계 묶음 키
+  question_type VARCHAR(32)  NOT NULL,     -- 문항유형(motive/competency/collab/challenge/growth)
+  result        VARCHAR(16)  NOT NULL DEFAULT 'pass',
+  -- 익명화된 STAR 본문 { s, t, a, r }. 원문(개인정보 포함)은 저장하지 않는다.
+  star          JSON         NOT NULL,
+  char_count    INT          NOT NULL DEFAULT 0,
+  -- 결과(R)에 수치가 있는지 — "이 직무 합격 답의 N%는 R에 수치가 있다" 통계용.
+  has_number_result TINYINT(1) NOT NULL DEFAULT 0,
+  -- 무엇을 몇 개 가렸는지 [{type,count}] — 투명성(사용자·감사용).
+  masked        JSON         NULL,
+  -- 저장은 동의했을 때만 일어나므로 사실상 1이지만, 근거를 남긴다.
+  consent       TINYINT(1)   NOT NULL DEFAULT 1,
+  created_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_cover_don_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+  KEY idx_cover_don_job (job_field),
+  KEY idx_cover_don_qtype (question_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
