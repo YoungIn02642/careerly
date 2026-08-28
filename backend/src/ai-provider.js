@@ -1,8 +1,12 @@
 /* ══════════════════════════════════════════════════════════════
-   LLM 프로바이더 한 겹  (Groq 전용)
+   LLM 프로바이더 한 겹  (기본 Groq · 자소서 초안만 Gemini 로 라우팅)
 
    원래 이 코드는 routes/casAnalyze.js 안에 있었다. AI 를 쓰는 화면이
    셋(CAS 스펙 분석 · 직무역량 코치 · 자소서 AI 초안)이 되면서 밖으로 뺐다.
+
+   ── callModel 은 Groq 전용이다 (스펙 분류·역량 추출) ──
+   초안만 산문 품질이 결과라, 아래 callDraftModel 이 GEMINI_API_KEY 유무를 보고
+   Gemini(ai-gemini.js) 로 명시적으로 보낸다. 그 라우팅 규칙은 이 파일 맨 아래.
 
    ── Ollama 를 걷어낸 이유 (2026-08) ──────────────────────────
    예전에는 Ollama(로컬)를 기본으로 두고 Groq 를 선택지로 뒀다. 그런데 기본값이
@@ -125,7 +129,27 @@ async function callModel(text, system, { num_predict = 512 } = {}) {
   return completion.choices?.[0]?.message?.content || '{}';
 }
 
+/* ── 자소서 AI 초안 프로바이더 라우팅 ──────────────────────────
+   초안(/api/jd/draft·/motive)만 산문 품질이 결과라, 한국어가 더 자연스러운 Gemini 로
+   보낸다(사용자 선택 2026-08-28). 나머지(스펙 분류·역량 추출)는 위 callModel = Groq 그대로.
+
+   **명시적 라우팅이다** — 옛 Ollama 사고(환경변수가 안 읽혀 조용히 엉뚱한 데로 떨어짐)를
+   되풀이하지 않으려고, GEMINI_API_KEY 가 있을 때만 Gemini 로 가고 없으면 Groq 로
+   되돌아간다. 되돌아가는 곳이 '안 켜진 로컬 도구'가 아니라 이미 설정된 Groq 라 정상
+   경로다. 무엇으로 썼는지는 draftProvider()·draftModel() 이 딱 잘라 말한다(응답에 실어
+   화면이 구분한다). 판단 기준이 '키의 존재' 하나라 이 세 함수는 항상 같은 답을 준다. */
+const GEMINI = require('./ai-gemini');
+const useGemini = () => GEMINI.isConfigured();
+
+const draftProvider = () => (useGemini() ? GEMINI.PROVIDER : PROVIDER);
+const draftModel = () => (useGemini() ? GEMINI.modelLabel() : modelLabel());
+
+async function callDraftModel(text, system, opts = {}) {
+  return useGemini() ? GEMINI.callModel(text, system, opts) : callModel(text, system, opts);
+}
+
 module.exports = {
   callModel, modelLabel, isConfigured,
   PROVIDER, GROQ_MODEL, TIMEOUT_MS,
+  callDraftModel, draftProvider, draftModel,
 };

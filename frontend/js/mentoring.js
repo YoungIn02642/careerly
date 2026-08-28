@@ -66,6 +66,14 @@ function categoryName(code) {
   return mentorCategories().find(M => M.code === code)?.name || '';
 }
 
+/* 멘토 찾기의 '분야' 필터에 깔 분류. **멘토가 직접 정한 '멘토링 가능 분야'(mentorFields)에
+   실제로 있는 것만** 깐다(사용자 지시). 멘토가 정하고 멘티가 그 안에서 고르는 구조라,
+   아무 멘토도 안 고른 분야를 칩으로 깔면 눌러도 0명이 된다. */
+function offeredFieldCategories() {
+  const offered = new Set(MENTORS.flatMap(m => m.mentorFields || []));
+  return mentorCategories().filter(M => offered.has(M.code));
+}
+
 /* 아바타 색 — 예전에는 시드 데이터에 pal 이 박혀 있었다. 실제 회원에는 그런 칸이
    없고 만들 이유도 없어서, 아이디에서 결정론적으로 고른다(같은 사람은 늘 같은 색). */
 /* PAL_KEYS 는 아래 '내 멘토링' 쪽에서 이미 만들어 둔 것을 쓴다(같은 팔레트다).
@@ -605,12 +613,12 @@ async function enterSearch(){
 
 /* 필터 선택지는 **지금 있는 멘토에서 뽑는다.** 예전에는 가짜 멘토 102명에서
    뽑아서, 목록에 없는 회사·전문분야가 드롭다운에 가득했다(고르면 0명).
-   분야 칩만 KECO 분류 전체를 깐다 — 아직 멘토가 없는 분야도 "여긴 없구나" 가
-   보여야 하고, 칩이 멘토 수에 따라 늘었다 줄었다 하면 화면이 흔들린다. */
+   분야 칩은 **멘토가 정한 '멘토링 가능 분야'** 에 있는 것만 깐다(사용자 지시) —
+   멘토가 정하고 멘티가 그 안에서 고르는 구조다. */
 function initSearchFilters(){
   const chipBox = $('#filter-chips');
   if (chipBox){
-    const cats = mentorCategories();
+    const cats = offeredFieldCategories();
     chipBox.innerHTML = `<span class="chip on" data-cat="전체" onclick="setFilter('전체')">전체</span>` +
       cats.map(M=>`<span class="chip" data-cat="${M.code}" onclick="setFilter('${M.code}')"><span class="chip-no">${String(M.no).padStart(2,'0')}</span>${escapeHTML(M.name)}</span>`).join('');
     chipBox.addEventListener('scroll', updateChipsArrows);
@@ -638,9 +646,11 @@ function getFilteredMentors(){
   const sortBy   = $('#sort-by') ? $('#sort-by').value : 'recommend';
 
   let list = MENTORS.filter(m=>{
-    /* 분야는 멘토 스펙의 KECO 1차 코드로 거른다. 안 고른 멘토는 '전체' 에서만 보인다 —
-       임의로 아무 분야에 넣으면 그 분야를 고른 후배에게 엉뚱한 선배가 뜬다. */
-    if (searchFilter!=='전체' && m.jobMajor!==searchFilter) return false;
+    /* 분야는 멘토가 정한 '멘토링 가능 분야'(mentorFields)로 거른다(사용자 지시).
+       멘토가 정하고 멘티가 그 안에서 고르는 구조다. 분야를 안 정한 멘토는
+       '전체' 에서만 보인다 — 임의로 아무 분야에 넣으면 그 분야를 고른 후배에게
+       엉뚱한 선배가 뜬다. */
+    if (searchFilter!=='전체' && !(m.mentorFields||[]).includes(searchFilter)) return false;
     if (fCompany!=='all' && m.company!==fCompany) return false;
     /* 경력을 안 적은 멘토(years=null)는 연차 필터를 걸면 빠진다. 1년차로 치면
        '경력 없음' 과 '1년차' 가 한 칸에 섞인다. */
@@ -1071,12 +1081,16 @@ async function payAndApply(){
   const btn = $('.btn-submit-req');
   if (btn) btn.disabled = true;
 
+  /* 신청은 결제 전에 서버에 pending 으로 만들어진다. 결제를 취소하거나 결제 전
+     단계에서 멈추면 이 pending 을 되돌려야 한다 — 안 그러면 결제 안 한 신청이
+     '보낸 요청'에 남는다(사용자 지적 2026-08-25). request 를 밖에 두어 catch 에서 쓴다. */
+  let request = null;
   try {
-    const { request } = await api('POST', '/api/mentoring/requests', {
+    ({ request } = await api('POST', '/api/mentoring/requests', {
       /* mentorName 은 안 보낸다 — 서버가 목록에서 찾아 채운다(routes/mentoring.js). */
       mentorId: m.id, format: f.id, message: msg,
       slotDate: reqDate, slotTime: reqTime,
-    });
+    }));
 
     const cfg = await api('GET', '/api/payments/config');
     if (!cfg.enabled) {
@@ -1084,6 +1098,8 @@ async function payAndApply(){
       return goApplied();
     }
     if (!window.TossPayments) {
+      /* 결제를 못 여는데 신청만 남기면 안 된다 — 방금 만든 pending 을 되돌린다. */
+      await cancelPendingQuietly(request);
       toast('결제 모듈을 불러오지 못했어요. 새로고침 후 다시 시도해 주세요.', { icon: false });
       return;
     }
@@ -1101,15 +1117,27 @@ async function payAndApply(){
       successUrl: location.origin + '/#mentoring',
       failUrl: location.origin + '/#mentoring',
     });
-    /* 여기까지 왔다는 건 결제창이 닫혔다는 뜻이다. 승인은 successUrl 로 돌아온 뒤
-       app.js 의 결제 복귀 처리(handlePaymentReturn)가 이어서 한다. */
+    /* 여기까지 왔다는 건 결제창이 닫혔다는 뜻이다(성공이면 successUrl 로 리다이렉트되어
+       이 줄에 오지 않는다). 승인 전이므로 pending 을 되돌린다. */
+    await cancelPendingQuietly(request);
   } catch (e) {
     /* 사용자가 결제창을 닫은 것은 오류가 아니다 — 에러 메시지를 띄우면 놀란다. */
     if (e?.code === 'USER_CANCEL') toast('결제를 취소했어요', { icon: false });
     else toast(e.message || '신청에 실패했어요', { icon: false });
+    /* 결제 전에 멈춘 것이므로 방금 만든 pending 신청을 취소한다 —
+       이게 없으면 결제를 취소해도 '보낸 요청'에 신청이 남는다. */
+    await cancelPendingQuietly(request);
   } finally {
     if (btn) btn.disabled = false;
   }
+}
+
+/* 결제 전에 멈췄을 때 방금 만든 pending 신청을 되돌린다. 되돌리기 자체가 실패해도
+   사용자에겐 이미 취소 안내를 했으므로 조용히 넘긴다(다음 신청 때 pending 을 갱신한다). */
+async function cancelPendingQuietly(request){
+  if (!request?.id) return;
+  try { await api('POST', `/api/mentoring/requests/${request.id}/cancel`); }
+  catch { /* noop — 서버에 pending 이 남아도 재시도 때 갱신되고, 목록엔 표시 규칙상 안 뜬다 */ }
 }
 
 function goApplied(){

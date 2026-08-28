@@ -6,6 +6,7 @@ const PAGES = [
   'dashboard', 'search', 'profile', 'mentoring',   // ← 구 mentoring.html
   'specup',                                        // 스펙 채우기 (js/specup.js) — 로드맵 2단계의 곁가지
   'jd',                                            // 자소서 코치 (js/jd-coach.js)
+  'drafts',                                        // 내 자소서 보관함 (js/drafts.js) — 코치의 하위 화면
   'company',                                       // 회사 검색 (js/company-cover.js) — 자소서 코치의 앞 단계
   'mentor-profile',                                // 멘토 소개 입력 (js/mentor-profile.js)
   'insight',                                       // 커리어 인사이트 — 커뮤니티 게시판 (js/insight.js)
@@ -18,6 +19,11 @@ const NAV_HIGHLIGHT = ['career', 'dashboard', 'specup', 'jd', 'search', 'mentori
 const MENTORING_PAGES = ['dashboard', 'search', 'profile', 'mentoring'];
 
 function showPage(page) {
+  /* 로그인 후 되돌아갈 후보 — 이어서 작업할 수 있는 화면에 머물 때만 갱신한다
+     (RESUMABLE_PAGES 주석 참고). 하위 경로(#company/… 등)까지 담아 자리를 살린다. */
+  if (RESUMABLE_PAGES.includes(page)) {
+    _lastResumableHash = window.location.hash.replace(/^#/, '') || page;
+  }
   PAGES.forEach(p => {
     const el = document.getElementById('page-' + p);
     if (!el) return;
@@ -39,8 +45,10 @@ function showPage(page) {
      지금은 상단바에 자기 자리가 생겼으므로 자기를 강조한다 — 눌러서 들어왔는데 다른
      메뉴에 불이 들어오면 어디에 있는지 알 수 없다. 곁가지라는 사실은 화면 머리의
      '커리어 로드맵 2단계 · 스펙UP' 이 여전히 말해 준다. */
+  /* 회사 검색·보관함은 '자소서 코치' 의 하위 화면이라 같은 메뉴를 강조한다 —
+     눌러서 들어왔는데 아무 메뉴에도 불이 없으면 어디에 있는지 알 수 없다. */
   const navKey = page === 'profile' ? 'search'
-    : page === 'company' ? 'jd' : page;
+    : (page === 'company' || page === 'drafts') ? 'jd' : page;
   updateNavActive(NAV_HIGHLIGHT.includes(navKey) ? navKey : '');
 
   if (page === 'mypage')     initMypage();
@@ -61,6 +69,7 @@ function showPage(page) {
   if (page === 'specup')     SpecUp.onEnter();
   if (page === 'jd')         JdCoach.onEnter();
   if (page === 'company')    CompanyCover.onEnter();
+  if (page === 'drafts')     Drafts.onEnter();
   if (page === 'insight')    Insight.onEnter();
   if (MENTORING_PAGES.includes(page)) Mentoring.onEnter(page);
 
@@ -70,10 +79,73 @@ function showPage(page) {
 
 function navigate(page) {
   closeNavDrawer();
+  /* 로그인·가입 화면으로 떠나기 직전의 위치를 기억해 둔다 — 로그인에 성공하면
+     그리로 되돌린다(goAfterLogin). SPA 라 페이지 DOM 은 숨겨질 뿐 살아 있어서,
+     되돌아가기만 하면 자소서 입력·고른 스펙·STAR 가 그대로다. */
+  if (page === 'login' || page === 'signup') rememberReturn();
   history.pushState({ page }, '', '#' + page);
   showPage(page);
 }
 window.navigate = navigate;
+
+/* ── 로그인 후 되돌아갈 곳 ──────────────────────────────────────
+   예전에는 로그인에 성공하면 무조건 홈(main)으로 갔다. 그래서 자소서 코치에서
+   스펙/STAR 를 적다가 로그인하러 가면, 돌아왔을 때 홈이라 회사찾기부터 다시 해야 했다.
+   떠나기 직전 위치를 기억했다가(rememberReturn) 성공 후 그리로 돌린다(goAfterLogin).
+
+   저장은 sessionStorage 다 — 소셜 로그인은 제공자 사이트로 실제 이동했다가 서버가
+   /#main 으로 되돌려보내므로(전체 리로드) 모듈 변수는 날아간다. 같은 탭·오리진으로
+   돌아오니 sessionStorage 는 남는다. */
+const RETURN_KEY = 'careerly_login_return';
+const AUTH_PAGES = ['login', 'signup', 'onboarding'];
+
+/* 되돌아갈 곳은 **로그아웃 상태로도 이어서 작업할 수 있는 화면**만이다.
+   자소서 코치에서 STAR 를 적다 로그인하러 갈 때, 실제 경로는
+   자소서(jd) → 스펙 관리(mypage, 로그인 필요) → 로그인 이라 중간에 mypage 를 거친다.
+   mypage·백오피스는 로그인이 있어야 들어가는 곳이라 '출발지'가 될 수 없으므로 후보에서
+   빼고, 마지막으로 머문 이어작업 화면(=자소서)을 기억한다. 그래서 로그인 후 자소서로
+   돌아온다(입력·고른 스펙·STAR 는 SPA DOM·localStorage 에 그대로 남아 있다). */
+const RESUMABLE_PAGES = ['jd', 'company', 'drafts', 'specup', 'insight'];
+let _lastResumableHash = '';
+
+/* 저장은 sessionStorage 지만 접근이 막히는 환경이 있다(사생활 모드·샌드박스 iframe 은
+   읽기만 해도 SecurityError 를 던진다). 던지면 로그인 이동 자체가 깨지므로 반드시
+   try/catch 로 감싸고, 막혔을 때는 모듈 변수로 대체한다 — 앱 안에서 로그인하는 흐름은
+   새로고침이 없어 대체 변수만으로도 되돌아온다(소셜 로그인의 전체 리로드만 못 살린다). */
+let _returnFallback = null;
+function setReturn(v) {
+  _returnFallback = v || null;
+  try { if (v) sessionStorage.setItem(RETURN_KEY, v); } catch {}
+}
+function getReturn() {
+  try { const v = sessionStorage.getItem(RETURN_KEY); if (v != null) return v; } catch {}
+  return _returnFallback;
+}
+function clearReturn() {
+  _returnFallback = null;
+  try { sessionStorage.removeItem(RETURN_KEY); } catch {}
+}
+
+function rememberReturn() {
+  if (_lastResumableHash) setReturn(_lastResumableHash);
+}
+
+function consumeReturn() {
+  const v = getReturn();
+  clearReturn();
+  const page = (v || '').split(/[/?]/)[0];
+  return (page && PAGES.includes(page) && !AUTH_PAGES.includes(page)) ? v : null;
+}
+
+/* 기억해 둔 곳으로 실제 이동한다 — 하위 경로(#mypage/spec 의 탭)까지 살린다.
+   navigate() 는 페이지 이름만 받으므로 여기서 해시를 직접 세팅하고 라우터를 부른다. */
+function goAfterLogin() {
+  const to = consumeReturn();
+  if (!to) { navigate('main'); return; }
+  const page = to.split(/[/?]/)[0];
+  history.pushState({ page }, '', '#' + to);
+  showPage(page);
+}
 
 /* 페이지 + 탭으로 한 번에 보낸다. 로드맵의 '스펙 채우기' 가지처럼 특정 탭이
    목적지인 이동이 있는데, navigate('mypage') 만 하면 initMypage() 가 직전에
@@ -321,7 +393,13 @@ window.addEventListener('DOMContentLoaded', async () => {
   /* 소셜 가입 직후 새로고침하면 역할이 없는 채로 다른 화면에 들어갈 수 있다.
      그 상태로는 스펙 폼도 통계도 성립하지 않으므로 추가입력으로 돌려보낸다. */
   const me = DB.currentUser();
-  showPage(me?.needsOnboarding ? 'onboarding' : target);
+  /* 소셜 로그인은 제공자 사이트를 거쳐 서버가 /#main 으로 되돌려보낸다. 로그인하러
+     가기 전 화면(sessionStorage)이 남아 있으면 홈에 세우지 말고 그리로 마저 돌린다. */
+  if (me && !me.needsOnboarding && target === 'main' && getReturn()) {
+    goAfterLogin();
+  } else {
+    showPage(me?.needsOnboarding ? 'onboarding' : target);
+  }
   updateNavAuth();
   paintSocialButtons();
   initVerify();            // 본인인증을 쓸 수 있는 환경인지 확인하고 칸을 노출/숨김
@@ -344,7 +422,7 @@ async function handleLogin() {
   }
   try {
     await DB.login(username, password);
-    navigate('main');
+    goAfterLogin();                 // 홈이 아니라 로그인하러 오기 전 화면으로 되돌린다
   } catch (e) {
     errorBox.textContent = e.message;
     errorBox.style.display = 'block';

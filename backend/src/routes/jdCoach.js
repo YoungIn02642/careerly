@@ -11,7 +11,7 @@
    활동(activities)은 프론트가 자기 스펙에서 보내온다 — 남의 데이터가 아니라
    본인 것을 본인 화면에 되돌려주는 용도라 서버 세션까지 뒤질 이유가 없다. */
 const express = require('express');
-const { callModel, modelLabel, PROVIDER } = require('../ai-provider');
+const { callModel, modelLabel, PROVIDER, callDraftModel, draftModel, draftProvider } = require('../ai-provider');
 const JD = require('../jd-competency');
 const TRENDS = require('../job-trends');
 const GUIDE = require('../cover-guide');
@@ -242,7 +242,7 @@ router.post('/draft', async (req, res) => {
     /* num_predict 를 넉넉히 준다 — 문단 + 빈칸 안내 + 검토까지 한 응답에 담기므로
        기본값(512)이면 JSON 이 중간에 잘려서 파싱이 통째로 실패한다. */
     const ask = async () => DRAFT.parseDraft(
-      await callModel(prompt, DRAFT.SYSTEM, { num_ctx: 8192, num_predict: 1100 }));
+      await callDraftModel(prompt, DRAFT.SYSTEM, { num_ctx: 8192, num_predict: 1100 }));
 
     let out = await ask();
     /* 한국어가 아닌 글자가 섞이면 한 번만 다시 부른다. 실측으로 8회 중 1회꼴이라
@@ -274,7 +274,7 @@ router.post('/draft', async (req, res) => {
         detail: `예시(${copied.key})와 겹침: ${copied.chunk}`,
       });
     }
-    res.json({ ...out, model: modelLabel(), provider: PROVIDER });
+    res.json({ ...out, model: draftModel(), provider: draftProvider() });
   } catch (e) {
     const status = e?.status || 502;
     res.status(status).json({
@@ -331,7 +331,7 @@ router.post('/motive', async (req, res) => {
 
   try {
     const ask = async () => DRAFT.parseDraft(
-      await callModel(prompt, DRAFT.SYSTEM, { num_ctx: 8192, num_predict: 1100 }));
+      await callDraftModel(prompt, DRAFT.SYSTEM, { num_ctx: 8192, num_predict: 1100 }));
 
     let out = await ask();
     /* 외국어 혼입은 /draft 와 같은 규칙으로 막는다 — 같은 모델·같은 출력 형식이라
@@ -344,7 +344,7 @@ router.post('/motive', async (req, res) => {
 
     /* 담아 온 근거를 그대로 돌려준다 — 화면이 "이 초안은 이 근거로 썼다" 를
        초안 옆에 적을 수 있어야 한다. 출처 없이 나온 문단은 검증할 방법이 없다. */
-    res.json({ ...out, usedEvidence: evidence, model: modelLabel(), provider: PROVIDER });
+    res.json({ ...out, usedEvidence: evidence, model: draftModel(), provider: draftProvider() });
   } catch (e) {
     const status = e?.status || 502;
     res.status(status).json({

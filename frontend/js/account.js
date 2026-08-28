@@ -241,6 +241,10 @@ window.Account = (() => {
       /* 네비의 '○○님' 이 별명을 쓴다. 갱신하지 않으면 저장했는데 헤더는
          옛 이름인 채로 남아 저장이 안 된 것처럼 보인다. */
       updateNavAuth();
+      /* 멘토 찾기 목록은 별명을 화면에 쓰는데(mentorNick), 그 목록은 한 번 받아
+         캐시된다. 여기서 비워 주지 않으면 별명을 바꿔도 멘토 찾기에는 옛 별명이
+         그대로 남는다(멘토 프로필 저장과 같은 규칙). */
+      if (typeof invalidateMentors === 'function') invalidateMentors();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e) {
       showErr('저장에 실패했어요. ' + e.message);

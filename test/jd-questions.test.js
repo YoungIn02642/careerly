@@ -76,5 +76,36 @@ ok('직무역량 문항에는 상위 역량을 최대 3개까지',
 ok('역량이 없으면 빈 배열 (죽지 않는다)',
    JD.competenciesFor(JD.classifyQuestion('직무 역량'), []).length === 0);
 
+console.log('\n── 7. STAR 가 얼마나 찼는가 ──');
+/* 사용자 지시(2026-08-28) — 정성스펙과 STAR 는 **막는 조건이 아니다.** 없어도 분석은
+   돌아가고, 있으면 AI 초안이 내 경험으로 채워진다. 그래서 이 규칙은 버튼을 잠그는 데
+   쓰이지 않고 **무엇이 비었는지 말하는 데**만 쓰인다(카드 배지 · 사이드바 한 줄).
+   한 곳에 두는 이유는 그 세 자리의 말이 갈리지 않게 하기 위해서다. */
+const FULL_STAR = { S: '3인 팀 캡스톤', T: '응답속도 절반', A: '캐시 도입', R: '820ms→300ms' };
+
+ok('한 칸도 안 적었으면 empty (아직 안 쓴 칸을 혼내지 않는다)',
+   JD.starGate({}).empty === true && JD.starGate({}).ok === false);
+ok('빈 칸을 이름으로 짚어 준다',
+   JD.starGate({ S: '있음', A: '있음' }).why.includes('T·R'),
+   `→ ${JD.starGate({ S: '있음', A: '있음' }).why}`);
+ok('빈 칸 목록을 그대로 준다 (화면이 개수를 센다)',
+   JD.starGate({ S: '있음' }).missing.join(',') === 'T,A,R');
+ok('공백만 적은 칸은 적은 것으로 보지 않는다',
+   JD.starGate({ ...FULL_STAR, R: '   ' }).ok === false);
+ok('넷 다 있으면 ok', JD.starGate(FULL_STAR).ok === true);
+ok('null 을 줘도 죽지 않는다', JD.starGate(null).ok === false);
+/* 일부만 적은 상태와 아예 안 적은 상태는 화면에서 다르게 보인다
+   ('STAR 2/4' 배지 vs 'STAR 없음'). 그래서 empty 를 따로 돌려준다. */
+ok('일부만 적었으면 empty 가 아니다', JD.starGate({ S: '있음' }).empty === false);
+
+console.log('\n── 8. 활동을 가리키는 키 ──');
+/* 활동은 화면으로 나올 때 id 를 안 싣는다(repo.toActivity). 순번을 키로 쓰면 활동
+   하나를 지웠을 때 문항의 소재가 조용히 옆 활동으로 바뀐다. */
+const A1 = { type: 'project', name: '캡스톤', org: '한국대', duration: '2025.03~06' };
+ok('유형·이름·기관·기간으로 키를 만든다', JD.actKeyOf(A1) === 'project|캡스톤|한국대|2025.03~06');
+ok('같은 내용이면 같은 키', JD.actKeyOf({ ...A1 }) === JD.actKeyOf(A1));
+ok('기간이 다르면 다른 키', JD.actKeyOf({ ...A1, duration: '2024.03~06' }) !== JD.actKeyOf(A1));
+ok('빈 활동도 죽지 않는다', typeof JD.actKeyOf({}) === 'string');
+
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
 process.exit(fail ? 1 : 0);

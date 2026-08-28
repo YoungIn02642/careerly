@@ -77,6 +77,10 @@ CREATE TABLE IF NOT EXISTS profiles (
   specialties    JSON         NULL,   -- 전문 분야 ["백엔드", "이직"]
   timeline       JSON         NULL,   -- 경력 타임라인 [{t 제목, d 기간, s 세부}]
   modes          JSON         NULL,   -- 멘토링 가능 형식 ["화상", "채팅"]
+  -- 멘토가 직접 정한 '멘토링 가능 분야'. 멘티가 멘토를 고를 때 이 목록에서 고른다.
+  -- KECO 1차 코드 배열이다(예: ["0","1"]) — 멘토 자신의 진출분야(user_specs.job_major)와
+  -- 별개다. 안 정한 멘토는 목록에서 '전체' 로만 잡힌다.
+  mentor_fields  JSON         NULL,   -- 멘토가 정한 멘토링 가능 분야 (KECO 1차 코드 배열)
   -- 멘토가 직접 고른 예약 가능 일정.
   --   [{ "date": "2026-08-10", "times": ["10:00", "14:00"] }, ...]
   -- 요일 반복이 아니라 **날짜를 콕 집는 방식**이다. 멘토는 매주 같은 시간이 비지 않고
@@ -114,6 +118,9 @@ CREATE TABLE IF NOT EXISTS user_specs (
   -- 1차는 하나, 2차(세부직무)는 여러 개 고를 수 있다.
   job_major   VARCHAR(8)   NULL,   -- KECO 1차 코드 (예: '0')
   job_middles JSON         NULL,   -- KECO 2차 코드 배열 (예: ["02","03"])
+  -- 직무찾기 3단계(개별 직업)까지 고른 값. 집계는 2차 분류 단위라 여기 값은
+  -- '내 선택' 저장·표시용이다(예: ["0212001","0212002"]).
+  job_codes   JSON         NULL,   -- KECO 개별 직업 코드 배열
   company     VARCHAR(190) NULL,
   corp_type   VARCHAR(16)  NULL,
   gpa         DECIMAL(4,2) NULL,
@@ -159,6 +166,8 @@ CREATE TABLE IF NOT EXISTS spec_activities (
   outcome      VARCHAR(64)  NULL,
   company_tier VARCHAR(16)  NULL,         -- 인턴십 기업규모 배수용
   company_name VARCHAR(190) NULL,
+  -- 활동 내용을 STAR(상황·과제·행동·결과)로 적은 것. { s, t, a, r } 문자열 4개.
+  star         JSON         NULL,
   CONSTRAINT fk_spec_acts_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   KEY idx_spec_acts_user (user_id),
   KEY idx_spec_acts_type (type)
@@ -301,4 +310,32 @@ CREATE TABLE IF NOT EXISTS insight_comments (
   CONSTRAINT fk_icmt_post FOREIGN KEY (post_id) REFERENCES insight_posts(id) ON DELETE CASCADE,
   CONSTRAINT fk_icmt_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   KEY idx_icmt_post (post_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ════════════════════════════════════════════════════════════
+--  자소서 기증 (동의 기반 합격 코퍼스 · A 참조군)
+--  합격한 사용자가 **본인 자소서를 직접, 동의 아래** 기증한다(남의 글을 긁지 않는다).
+--  저장 전에 개인정보를 규칙으로 익명화한다(frontend/js/anonymize.js) — 여기 들어오는
+--  본문은 이미 익명화된 것이다. 문장 복붙이 아니라 **직무·문항유형별 통계 참조군**으로만 쓴다.
+-- ════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS cover_donations (
+  id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+  -- 기증자. 탈퇴해도 코퍼스는 남되(익명이므로), 연결만 끊는다(SET NULL).
+  user_id       VARCHAR(32)  NULL,
+  job_field     VARCHAR(64)  NOT NULL,     -- 직무(대분류) — 통계 묶음 키
+  question_type VARCHAR(32)  NOT NULL,     -- 문항유형(motive/competency/collab/challenge/growth)
+  result        VARCHAR(16)  NOT NULL DEFAULT 'pass',
+  -- 익명화된 STAR 본문 { s, t, a, r }. 원문(개인정보 포함)은 저장하지 않는다.
+  star          JSON         NOT NULL,
+  char_count    INT          NOT NULL DEFAULT 0,
+  -- 결과(R)에 수치가 있는지 — "이 직무 합격 답의 N%는 R에 수치가 있다" 통계용.
+  has_number_result TINYINT(1) NOT NULL DEFAULT 0,
+  -- 무엇을 몇 개 가렸는지 [{type,count}] — 투명성(사용자·감사용).
+  masked        JSON         NULL,
+  -- 저장은 동의했을 때만 일어나므로 사실상 1이지만, 근거를 남긴다.
+  consent       TINYINT(1)   NOT NULL DEFAULT 1,
+  created_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_cover_don_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+  KEY idx_cover_don_job (job_field),
+  KEY idx_cover_don_qtype (question_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

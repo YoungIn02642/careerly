@@ -524,18 +524,22 @@ function newsKeywords(items, company) {
     .slice(0, 12);
 }
 
-/* ── 주간 대표 기사 ─────────────────────────────────────────
-   최근 5주를 한 주씩 끊어, 주마다 기사 한 건씩 최대 5건을 고른다.
+/* ── 3개월 주요 기사 ─────────────────────────────────────────
+   최근 3개월을 5구간(구간당 약 18일 ≈ 2~3주)으로 끊어, 구간마다 기사 한 건씩
+   최대 5건을 고른다(사용자 지시 2026-08-25). 예전에는 최근 5주(≈1개월)만 봐서
+   같은 시기 기사 5건이 몰렸다 — 3개월로 넓혀 흐름을 보여준다.
 
    왜 '많이 나온 기사' 인가 — 지원동기에 쓸 소재는 '최신 기사' 가 아니라 '그 회사에
    실제로 일어난 큰 일' 이다. 여러 언론사가 같이 다뤘다는 게 그 대리 지표다.
-   한 주에 한 건으로 묶으면 큰 사건 하나에 기사가 몰려도 다른 주가 밀리지 않아서,
-   한 달치 흐름(무엇을 하다가 무엇으로 옮겨갔는지)이 보인다.
+   한 구간에 한 건으로 묶으면 큰 사건 하나에 기사가 몰려도 다른 구간이 밀리지 않아서,
+   3개월 흐름(무엇을 하다가 무엇으로 옮겨갔는지)이 보인다.
 
-   직무트렌드 가산 — 같은 주에 후보가 여럿이면 채용·조직·기술처럼 취업 준비와
+   직무트렌드 가산 — 같은 구간에 후보가 여럿이면 채용·조직·기술처럼 취업 준비와
    맞닿은 기사를 올린다. 회사 홍보성 기사(신제품 출시, 사회공헌)보다 자소서에
    쓸 거리가 많다. 단어를 지어내지 않고 제목·요약에 실제로 있는 말만 본다. */
-const WEEKS = 5;
+const PERIOD_DAYS = 90;                       // 최근 3개월
+const PICKS = 5;                              // 5구간 = 대표 기사 5건
+const BUCKET_DAYS = PERIOD_DAYS / PICKS;      // 18일 ≈ 2~3주 간격
 const DAY = 24 * 60 * 60 * 1000;
 
 /* ── 5주치를 실제로 받아오는 방법 ───────────────────────────
@@ -567,15 +571,25 @@ function trendScore(item) {
   return TREND_TERMS.reduce((n, t) => n + (text.includes(t) ? 1 : 0), 0);
 }
 
-/* 기사 날짜 → 몇 주 전인가(0 = 이번 주). 범위 밖이면 null. */
-function weekIndex(dateStr, now) {
+/* 기사 날짜 → 3개월을 18일씩 끊은 몇 번째 구간인가(0 = 가장 최근 구간).
+   3개월(=PICKS 구간) 밖이면 null. */
+function bucketIndex(dateStr, now) {
   if (!dateStr) return null;
   const t = Date.parse(dateStr);
   if (Number.isNaN(t)) return null;
   const diff = now - t;
-  if (diff < 0) return 0;                       // 발행일이 미래로 찍힌 기사 — 이번 주로 본다
-  const w = Math.floor(diff / (7 * DAY));
-  return w < WEEKS ? w : null;
+  if (diff < 0) return 0;                       // 발행일이 미래로 찍힌 기사 — 가장 최근 구간으로 본다
+  const b = Math.floor(diff / (BUCKET_DAYS * DAY));
+  return b < PICKS ? b : null;
+}
+
+/* 기사 날짜 → '최근' / '약 N주 전'. 구간 번호가 아니라 실제 발행일에서 계산한다 —
+   화면에 나가는 값이라 지어내지 않고 사실(발행일)에 맞춘다. */
+function weeksAgoLabel(dateStr, now) {
+  const t = Date.parse(dateStr);
+  if (Number.isNaN(t)) return '';
+  const w = Math.max(0, Math.round((now - t) / (7 * DAY)));
+  return w === 0 ? '최근' : `약 ${w}주 전`;
 }
 
 /* 주별 대표 기사 목록. 날짜가 없는 항목(웹 폴백)은 주에 넣을 수 없으므로 제외한다.
@@ -593,33 +607,33 @@ function weeklyPicks(clustered, now = Date.now(), company = '') {
 
   const buckets = new Map();
   for (const it of clustered) {
-    const w = weekIndex(it.date, now);
-    if (w == null) continue;
-    if (!buckets.has(w)) buckets.set(w, []);
-    buckets.get(w).push(it);
+    const b = bucketIndex(it.date, now);
+    if (b == null) continue;
+    if (!buckets.has(b)) buckets.set(b, []);
+    buckets.get(b).push(it);
   }
 
   const picks = [];
-  for (let w = 0; w < WEEKS; w++) {
-    const all = buckets.get(w);
+  for (let b = 0; b < PICKS; b++) {
+    const all = buckets.get(b);
     if (!all || !all.length) continue;
 
     const titled = all.filter(inTitle);
     const cands = titled.length ? titled : all;
 
     /* 언론사 중복 수 → 직무트렌드 관련도 → 최신순.
-       중복 수가 1로 같은 주가 많은데, 그때 트렌드 점수가 실제 순위를 가른다. */
-    cands.sort((a, b) =>
-      b.count - a.count ||
-      trendScore(b) - trendScore(a) ||
-      String(b.date).localeCompare(String(a.date))
+       중복 수가 1로 같은 구간이 많은데, 그때 트렌드 점수가 실제 순위를 가른다. */
+    cands.sort((a, b2) =>
+      b2.count - a.count ||
+      trendScore(b2) - trendScore(a) ||
+      String(b2.date).localeCompare(String(a.date))
     );
     const top = cands[0];
     picks.push({
       ...top,
-      week: w,
-      weekLabel: w === 0 ? '이번 주' : `${w}주 전`,
-      outlets: top.count,          // 같은 사건을 다룬 기사 수 = 그 주의 화제성
+      week: b,
+      weekLabel: weeksAgoLabel(top.date, now),   // '최근' / '약 N주 전' — 실제 발행일 기준
+      outlets: top.count,          // 같은 사건을 다룬 기사 수 = 그 구간의 화제성
       trendHit: TREND_TERMS.filter(t => `${top.title} ${top.summary || ''}`.includes(t)).slice(0, 4),
       alsoInWeek: all.length - 1,
       /* 제목에 회사가 없으면 '스쳐 지나간 언급'일 수 있다. 화면에서 조심하라고 알린다. */
@@ -690,11 +704,11 @@ async function companyNews(companyName) {
     items,
     weekly,
     weeklyNote: weekly.length
-      ? '최근 5주를 한 주씩 끊어, 그 주에 여러 언론사가 함께 다룬 기사를 한 건씩 골랐어요. '
-        + '기사가 몰린 주 = 그 회사에 큰 일이 있었던 주입니다. 흐름을 보고 **한 건만** 골라 쓰세요.'
+      ? '최근 3개월을 2~3주 간격으로 끊어, 그 구간에 여러 언론사가 함께 다룬 기사를 한 건씩 골랐어요. '
+        + '기사가 몰린 시기 = 그 회사에 큰 일이 있었던 때입니다. 흐름을 보고 **한 건만** 골라 쓰세요.'
       : (finalProvider.startsWith('web')
-          ? '웹 검색 결과에는 발행일이 없어 주간 정리를 만들지 못했어요. 아래 목록에서 직접 골라 주세요.'
-          : '최근 5주 안에 발행된 기사를 찾지 못했어요.'),
+          ? '웹 검색 결과에는 발행일이 없어 시기별 정리를 만들지 못했어요. 아래 목록에서 직접 골라 주세요.'
+          : '최근 3개월 안에 발행된 기사를 찾지 못했어요.'),
     keywords,
     /* 키워드를 왜 쓰라는지까지 말해줘야 한다. 단어만 던지면 학생이 자소서에
        그냥 박아 넣고, 맥락 없는 단어는 오히려 감점이 된다. */
@@ -737,6 +751,6 @@ const MOTIVE_GUIDE = {
 module.exports = {
   companyNews, provider, newsKeywords, tokenize, MOTIVE_GUIDE, MAX_ITEMS,
   // 테스트용 — 주간 묶기·목록 중복 제거는 외부 호출 없이 검증할 수 있어야 한다
-  cluster, weeklyPicks, weekIndex, trendScore, WEEKS, onTopic,
+  cluster, weeklyPicks, bucketIndex, trendScore, PICKS, onTopic,
   dedupeStories, SAME_STORY_GRAM, SAME_STORY_WORD,
 };

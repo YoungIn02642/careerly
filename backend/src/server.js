@@ -28,6 +28,7 @@ const { router: mentoringRouter } = require("./routes/mentoring");
 const { router: paymentsRouter } = require("./routes/payments");
 const { router: insightRouter } = require("./routes/insight");
 const specupRouter = require("./routes/specup");
+const donationsRouter = require("./routes/donations");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -90,13 +91,16 @@ app.use("/api/company", companyAnalysisRouter);
 app.use("/api/specup", specupRouter);
 /* 멘토링·결제·인사이트는 라우터 안에서 req.user 를 보므로 세션을 먼저 붙여 준다
    (전역 requireAuth 는 아니다 — 가격표·게시판 읽기는 비로그인도 본다). */
-app.use(["/api/mentoring", "/api/payments", "/api/insights"], async (req, res, next) => {
+app.use(["/api/mentoring", "/api/payments", "/api/insights", "/api/donations"], async (req, res, next) => {
   try { req.user = await getCurrentUser(req); next(); }
   catch (e) { next(e); }
 });
 app.use("/api/mentoring", mentoringRouter);
 app.use("/api/payments", paymentsRouter);
 app.use("/api/insights", insightRouter);
+/* 자소서 기증 — 동의 기반 합격 코퍼스. 읽기(/meta·/stats)는 비로그인도 되고,
+   기증(POST)만 라우터 안에서 req.user 를 본다(insight 와 같은 방식). */
+app.use("/api/donations", donationsRouter);
 
 function publicUser(user) {
   return {
@@ -651,13 +655,29 @@ app.put('/api/profile', requireAuth, ah(async (req, res) => {
      성공했다고 나오는데 값이 조용히 사라진다. */
   const allowed = ['nickname', 'university', 'currentJob', 'tips',
                    'avatar', 'gender', 'birthdate', 'phone', 'address',
-                   'intro', 'specialties', 'timeline', 'modes', 'availability'];
+                   'intro', 'specialties', 'timeline', 'modes', 'availability',
+                   'mentorFields'];
   const patch = {};
   allowed.forEach(k => {
     if (Object.prototype.hasOwnProperty.call(req.body, k)) {
       patch[k] = typeof req.body[k] === 'string' ? req.body[k].trim() : req.body[k];
     }
   });
+
+  /* 멘토링 가능 분야 — 멘토가 정하고 멘티가 이 값으로 멘토를 고른다. 카탈로그의
+     KECO 1차 코드만 받는다. 오타·걸러낸 분류가 들어오면 멘티 필터에서 영영 안 잡힌다. */
+  if (patch.mentorFields != null) {
+    if (!Array.isArray(patch.mentorFields)) {
+      return res.status(400).json({ error: '멘토링 가능 분야는 목록이어야 합니다.' });
+    }
+    const tree = await catalog.jobCatalog();
+    const validMajors = new Set(tree.majors.map(M => M.code));
+    const bad = patch.mentorFields.filter(c => !validMajors.has(String(c)));
+    if (bad.length) {
+      return res.status(400).json({ error: `멘토링 가능 분야 값이 올바르지 않습니다: ${bad.join(', ')}` });
+    }
+    patch.mentorFields = [...new Set(patch.mentorFields.map(String))];
+  }
 
   /* 이름·이메일은 users 에 있고 여기로 안 받는다. 두 곳에 두면 어느 쪽이 맞는지
      알 수 없어진다 — 화면은 회원가입 때 받은 값을 그대로 보여 준다. */
@@ -774,9 +794,10 @@ app.put('/api/specs/me', requireAuth, ah(async (req, res) => {
        interestCompanies — 멘티의 관심 기업 (이름 배열)
        certMeta          — 직접 입력한 자격증의 발급기관·취득일 { 이름: {issuer,date} }
        jobMajor          — KECO 1차 코드(커리어 로드맵과 같은 분류). field/job 은 옛 값이라 둘 다 남는다
-       jobMiddles        — KECO 2차 코드 배열(세부직무 다중선택) */
+       jobMiddles        — KECO 2차 코드 배열(세부직무 다중선택)
+       jobCodes          — KECO 개별 직업 코드 배열(직무찾기 3단계). 집계는 2차 단위라 표시·저장용 */
   const allowed = [
-    'dept', 'major', 'field', 'job', 'jobMajor', 'jobMiddles',
+    'dept', 'major', 'field', 'job', 'jobMajor', 'jobMiddles', 'jobCodes',
     'company', 'corpType', 'gpa', 'gpaMax',
     'certs', 'certMeta', 'scores', 'qual', 'detail', 'activities',
     'careers', 'interestCompanies',
@@ -789,10 +810,12 @@ app.put('/api/specs/me', requireAuth, ah(async (req, res) => {
   /* 직무 코드는 카탈로그에 있는 것만 받는다. 걸러낸 분류(관리직·청소직 등)나
      오타가 들어오면 로드맵 집계에서 영영 안 잡히는 스펙이 되는데, 에러가 안 나서
      화면상으로는 저장에 성공한 것으로 보인다. */
-  if (patch.jobMajor != null || patch.jobMiddles != null) {
+  if (patch.jobMajor != null || patch.jobMiddles != null || patch.jobCodes != null) {
     const tree = await catalog.jobCatalog();
     const validMajors = new Set(tree.majors.map(M => M.code));
     const validMiddles = new Set(tree.majors.flatMap(M => M.middles.map(m => m.code)));
+    const validJobs = new Set(
+      tree.majors.flatMap(M => M.middles.flatMap(m => (m.jobs || []).map(j => j.code))));
 
     if (patch.jobMajor != null && patch.jobMajor !== '' && !validMajors.has(String(patch.jobMajor))) {
       return res.status(400).json({ error: '진출분야 값이 올바르지 않습니다.' });
@@ -807,10 +830,60 @@ app.put('/api/specs/me', requireAuth, ah(async (req, res) => {
       }
       patch.jobMiddles = [...new Set(patch.jobMiddles.map(String))];
     }
+    /* 개별 직업 코드도 카탈로그에 있는 것만 받는다. 걸러낸 직업이나 오타가 들어오면
+       '내 선택' 표시가 깨진다 — 저장은 성공한 것처럼 보이면서. */
+    if (patch.jobCodes != null) {
+      if (!Array.isArray(patch.jobCodes)) {
+        return res.status(400).json({ error: '세부 직업은 목록이어야 합니다.' });
+      }
+      const bad = patch.jobCodes.filter(c => !validJobs.has(String(c)));
+      if (bad.length) {
+        return res.status(400).json({ error: `세부 직업 값이 올바르지 않습니다: ${bad.join(', ')}` });
+      }
+      patch.jobCodes = [...new Set(patch.jobCodes.map(String))];
+    }
   }
 
   const spec = await repo.specs.upsert(req.user.id, patch);
   res.json({ message: '스펙이 저장되었습니다.', spec });
+}));
+
+/* ── 활동 하나의 STAR 만 저장 (사용자 지시 2026-08-28) ──────────────
+   왜 따로 두나 — 위 PUT /api/specs/me 는 **보낸 것으로 전체를 교체**한다(활동·자격증은
+   DELETE 후 INSERT). STAR 칸 옆의 작은 저장 버튼이 그걸 부르면, 손대지 않은 학점·
+   자격증까지 지금 화면의 값으로 덮어쓴다. 그래서 STAR 만 고치는 좁은 길을 낸다.
+
+   index 는 활동 목록의 순번이다(목록은 항상 ORDER BY id 라 화면과 순서가 같다).
+   type 을 같이 받아 그 자리 활동이 화면이 본 그 활동인지 확인한다 — 다른 탭에서
+   활동을 지웠다면 순번이 밀려 **엉뚱한 활동의 내용을 덮어쓸 수 있다.** */
+app.put('/api/specs/me/activities/:index/star', requireAuth, ah(async (req, res) => {
+  const index = Number(req.params.index);
+  if (!Number.isInteger(index) || index < 0) {
+    return res.status(400).json({ error: '활동 번호가 올바르지 않습니다.' });
+  }
+  const star = req.body?.star;
+  if (star != null && typeof star !== 'object') {
+    return res.status(400).json({ error: 'STAR 형식이 올바르지 않습니다.' });
+  }
+  /* 한 칸 4,000자면 자소서 한 문항보다 길다. 그 이상은 붙여넣기 사고로 본다. */
+  for (const k of ['s', 't', 'a', 'r']) {
+    if (star?.[k] != null && String(star[k]).length > 4000) {
+      return res.status(400).json({ error: 'STAR 한 칸은 4,000자까지 적을 수 있어요.' });
+    }
+  }
+  const r = await repo.specs.saveActivityStar(
+    req.user.id, index, star, typeof req.body?.type === 'string' ? req.body.type : null);
+  if (!r.ok) {
+    /* 순번이 밀렸거나 활동이 사라진 경우. 화면이 전체 저장으로 넘어갈 수 있게
+       이유를 구분해 준다 — '저장 실패' 한 줄만 주면 사용자가 할 수 있는 게 없다. */
+    return res.status(409).json({
+      error: r.reason === 'mismatch'
+        ? '활동 목록이 바뀌었어요. 아래 [저장]으로 전체를 저장해 주세요.'
+        : '아직 저장되지 않은 활동이에요. 아래 [저장]을 먼저 눌러주세요.',
+      reason: r.reason,
+    });
+  }
+  res.json({ message: 'STAR 를 저장했습니다.', spec: await repo.specs.byUser(req.user.id) });
 }));
 
 // 닉네임 등 회원 정보 수정

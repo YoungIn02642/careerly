@@ -86,6 +86,12 @@ window.DB = (() => {
     return _me && _me.username === username ? _mySpec : null;
   }
 
+  /* 내 정성스펙 활동 목록(스펙입력에서 적은 것). 자소서 코치가 STAR 를 가져올 때 쓴다.
+     로그인 안 했거나 스펙이 없으면 빈 배열. */
+  function myActivities() {
+    return _mySpec?.activities || [];
+  }
+
   /* 회사명 → 기업 규모 자동 판정. 서버가 로컬 캐시만 보므로 입력 중 호출해도 빠르다.
      실패해도 화면이 멈추면 안 되므로 null 을 돌려주고, 호출부는 회원이 직접
      고르는 흐름으로 넘어간다. */
@@ -467,6 +473,16 @@ window.DB = (() => {
     await refreshSpecs();
   }
 
+  /* 활동 하나의 STAR 만 저장한다(스펙 관리의 'STAR 저장' 버튼).
+     upsertSpec 을 쓰지 않는 이유 — 그쪽은 **보낸 것으로 전체를 교체**해서, 지금 화면에
+     안 들어 있는 값까지 덮는다. 저장 뒤 _mySpec 을 곧바로 갈아 끼운다: 자소서 코치가
+     이 값을 읽는데, 새로고침해야 보이면 "적었는데 안 뜬다"가 된다(실제 지적). */
+  async function saveActivityStar(index, star, type) {
+    const r = await api('PUT', `/api/specs/me/activities/${index}/star`, { star, type });
+    if (r?.spec) _mySpec = r.spec;
+    return r;
+  }
+
   /* 프로필(학교 등)은 스펙과 다른 테이블이다. 스펙 폼에서 함께 저장하지만
      통계에 쓰이는 값이 아니라 refreshSpecs 를 부르지 않는다. */
   async function getProfile() {
@@ -494,9 +510,9 @@ window.DB = (() => {
 
   return {
     hydrate, refreshSpecs, refreshUsers,
-    currentUser, getAllSpecs, getSpec, getUsers, countByRole, stats,
+    currentUser, getAllSpecs, getSpec, myActivities, getUsers, countByRole, stats,
     checkUsername, verifyStatus, verifyRequest,
-    createUser, login, logout, withdraw, changePassword, completeOnboarding, confirmPayment, updateUser, requestRoleChange, upsertSpec, getProfile, updateProfile,
+    createUser, login, logout, withdraw, changePassword, completeOnboarding, confirmPayment, updateUser, requestRoleChange, upsertSpec, saveActivityStar, getProfile, updateProfile,
     classifyCompany, suggestCompanies, suggestCerts, recommendCerts, suggestMajors, suggestUniversities, classifyMajor, jobCatalog,
     mentors,
     analyzeCas, casFit, specFingerprint, coachJd, draftJd, motiveJd, guideJd, companyAnalysis, companyBusiness, companyIndustryTree, jdPosting,
