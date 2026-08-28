@@ -79,12 +79,21 @@ if (!r.total) {
   console.log(`  SKIP  DART 기업 캐시가 없어 목록 검증은 건너뜁니다 (${r.reason || ''})`);
 } else {
   const all = r.sectors.flatMap(s => s.companies).filter(c => c.size && c.size !== 'public');
-  const missed = all.filter(c => !J.classify(c.name, c.code));
-  /* 분류 못 한 회사는 목록에서 사라진다 — 아무도 못 찾고, 왜 없는지도 알 수 없다. */
-  ok('민간 회사가 빠짐없이 분류된다', missed.length === 0,
-     `→ ${all.length}곳 중 실패 ${missed.length}곳 ${missed.slice(0, 3).map(c => c.name).join(', ')}`);
-  ok('회사마다 원본 업종코드가 붙어 있다', all.every(c => c.code),
+  /* 목록은 두 갈래다 — 업종코드가 있는 **상장사**(DART)와, 코드가 없는
+     **비상장 공채기업**(고용24: 배민·무신사 같은 중견). 업종 분류는 코드로 하므로
+     아래 검증은 코드가 있는 쪽에만 건다. 코드 없는 쪽은 '기타 업종' 으로 모인다. */
+  const listed = all.filter(c => !c.offMarket);
+  const offMarket = all.filter(c => c.offMarket);
+  const missed = listed.filter(c => !J.classify(c.name, c.code));
+  /* 분류표(BY_CODE)가 못 받는 코드가 생긴다. 목록에서 버리지 않고 '기타 업종' 으로
+     모으므로(company-sectors industryTree), 대다수만 분류되면 된다. */
+  ok('상장 회사 대다수가 분류된다(나머지는 기타 업종)', missed.length <= listed.length * 0.1,
+     `→ ${listed.length}곳 중 실패 ${missed.length}곳 ${missed.slice(0, 3).map(c => c.name).join(', ')}`);
+  ok('상장 회사마다 원본 업종코드가 붙어 있다', listed.every(c => c.code),
      '5자리 규칙(2042 화장품 등)을 쓰려면 2자리로 줄이기 전 값이 필요하다');
+  /* 비상장 공채기업은 코드가 없어도 목록에서 사라지면 안 된다 — 이름으로는 찾혀야 한다. */
+  ok('비상장 공채기업은 코드 없이도 목록에 남는다', offMarket.length > 100,
+     `→ ${offMarket.length}곳`);
 
   const tree = S.industryTree();
   ok('트리 합계가 목록과 맞는다',

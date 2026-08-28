@@ -26,6 +26,9 @@ const { config } = require('../src/mysql');
 const COLUMNS = [
   ['user_specs', 'job_major',   `VARCHAR(8) NULL COMMENT 'KECO 1차 코드'`],
   ['user_specs', 'job_middles', `JSON NULL COMMENT 'KECO 2차 코드 배열'`],
+  ['user_specs', 'job_codes',   `JSON NULL COMMENT 'KECO 개별 직업 코드 배열 (직무찾기 3단계)'`],
+  ['spec_activities', 'star',   `JSON NULL COMMENT 'STAR 활동내용 {s,t,a,r}'`],
+  ['profiles',   'mentor_fields', `JSON NULL COMMENT '멘토가 정한 멘토링 가능 분야 (KECO 1차 코드 배열)'`],
   ['users',      'ci',          `VARCHAR(88) NULL COMMENT '본인확인 CI'`],
   ['users',      'phone',       `VARCHAR(20) NULL`],
   ['users',      'verified_at', `DATETIME NULL`],

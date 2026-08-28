@@ -7,7 +7,8 @@
    프로바이더·모델·응답을 눈으로 확인하는 용도다. */
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
-const { callModel, modelLabel, PROVIDER, GROQ_MODEL } = require('../src/ai-provider');
+const { callModel, modelLabel, PROVIDER, GROQ_MODEL, draftProvider, draftModel } = require('../src/ai-provider');
+const GEMINI = require('../src/ai-gemini');
 
 (async () => {
   {
@@ -52,8 +53,35 @@ const { callModel, modelLabel, PROVIDER, GROQ_MODEL } = require('../src/ai-provi
   }
 
   console.log();
-  console.log('이제 스펙 입력의 "AI로 한 번에 입력", 자소서 코치 AI 보강·AI 초안이 동작합니다.');
+  console.log('이제 스펙 입력의 "AI로 한 번에 입력", 자소서 코치 AI 보강이 동작합니다.');
   if (secs > 10) {
     console.log('(Groq 치고 느립니다 — 네트워크나 쿼터 대기를 의심해 보세요.)');
+  }
+
+  /* ── 자소서 초안 라우팅 점검 ────────────────────────────────
+     초안(/api/jd/draft·/motive)은 GEMINI_API_KEY 가 있으면 Gemini 로 간다.
+     무엇으로 가는지, Gemini 라면 실제로 되는지까지 눈으로 확인한다. */
+  console.log();
+  console.log(`자소서 초안 라우팅 = ${draftProvider()} / ${draftModel()}`);
+  if (!GEMINI.isConfigured()) {
+    console.log('  GEMINI_API_KEY 가 없어 초안도 Groq 로 씁니다(정상). Gemini 로 바꾸려면');
+    console.log('  https://aistudio.google.com/apikey 에서 발급 후 .env 의 GEMINI_API_KEY= 에 넣으세요.');
+    return;
+  }
+  const gStart = Date.now();
+  try {
+    const graw = await GEMINI.callModel(
+      '데이터 분석 인턴 경험을 한 문단으로.',
+      '반드시 {"draft":"..."} 형태의 한국어 JSON 만 출력한다.',
+      { num_predict: 400 },
+    );
+    const gsecs = ((Date.now() - gStart) / 1000).toFixed(1);
+    JSON.parse(graw);
+    console.log(`✓ Gemini 응답·JSON 파싱 성공 — 모델 ${GEMINI.modelLabel()} · ${gsecs}초`);
+    console.log('  자소서 AI 초안이 Gemini 로 동작합니다.');
+  } catch (e) {
+    console.log(`✗ Gemini 호출 실패 (status ${e?.status || '-'})`);
+    console.log(`  ${e.message}`);
+    console.log('  (키 문제면 초안이 이 오류로 막힙니다 — 고치거나 GEMINI_API_KEY 를 비우면 Groq 로 돌아갑니다.)');
   }
 })();
