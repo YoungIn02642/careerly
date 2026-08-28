@@ -31,6 +31,10 @@
      escape 를 먼저 하고 나서 강조를 풀어야 XSS 가 되지 않는다. */
   const bold = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
 
+  /* 로그인 여부 — 역량 분석 게이트와 화면 안내가 같이 읽는다. DB 는 브라우저 전역이라
+     node 테스트(window 없음)에서는 부르지 않는다(run 은 화면에서만 돈다). */
+  const isLoggedIn = () => !!(root.DB && DB.currentUser && DB.currentUser());
+
   let _last = null;         // 마지막 결과 — 다시 그릴 때 재요청하지 않는다
   let _focused = 0;         // 지금 펼친 역량 index
   let _tab = 0;             // 지금 쓰고 있는 초안 탭 index
@@ -661,13 +665,20 @@
       bar.style.width = `${(done / STEPS.length) * 100}%`;
       bar.parentElement.classList.toggle('is-ready', canRun);
     }
+    /* 로그인 안 했으면 누르기 전에 알린다 — 눌러 보고 나서 로그인 화면을 만나면 늦다.
+       버튼은 잠그지 않는다(누르면 run 이 로그인으로 안내하고, 로그인 후 여기로 돌아온다). */
+    const loggedIn = isLoggedIn();
     const runBtn = $('#jd-run');
     if (runBtn) {
       runBtn.disabled = false;
-      runBtn.title = canRun ? '' : '채용공고나 회사 근거가 필요해요';
+      runBtn.title = !loggedIn ? '역량 분석은 로그인 후 이용할 수 있어요'
+        : canRun ? '' : '채용공고나 회사 근거가 필요해요';
     }
     const ready = $('#jd-ready');
-    if (ready) {
+    if (ready && !loggedIn) {
+      ready.innerHTML = '역량 분석은 <b>로그인 후</b> 이용할 수 있어요 — '
+        + '공고·문항은 지금 적어 두면 로그인 후 그대로 이어집니다.';
+    } else if (ready) {
       const qLine = picked.total
         ? (picked.ok
             ? `정성스펙 <b>${picked.total}개</b>를 골랐고 STAR 도 다 찼어요.`
@@ -1076,6 +1087,20 @@
     const statusEl = $('#jd-status');
     const resultEl = $('#jd-result');
     const text = analysisText();
+
+    /* ── 로그인해야 분석한다 (사용자 지시 2026-08-28) ─────────────────
+       로그인 없이도 돌던 것을 막는다. 로그인 화면으로 보내되, 이유를 그 화면에 적어
+       "왜 갑자기 로그인이지?"가 안 되게 한다. 로그인하면 app.js 의 복귀 기능이
+       작성 중이던 이 자소서로 그대로 돌려보낸다(입력·고른 스펙·STAR 는 남아 있다). */
+    if (!isLoggedIn()) {
+      if (typeof navigate === 'function') navigate('login');
+      const box = document.getElementById('login-error');
+      if (box) {
+        box.textContent = '역량 분석은 로그인 후 이용할 수 있어요. 로그인하면 작성 중이던 자소서로 돌아옵니다.';
+        box.style.display = 'block';
+      }
+      return;
+    }
 
     /* 정성스펙·STAR 는 **막지 않는다**(사용자 지시 2026-08-28, 같은 날 두 번째 지시).
        한 번은 없으면 못 돌리게 했었다. 그런데 공고를 막 붙여넣고 "무슨 역량을 요구하나"
@@ -1633,20 +1658,6 @@
     </div>`;
   }
 
-  /* STAR — 초안을 쓰는 내내 보고 있어야 하는 뼈대라 작업 화면 **위**에 둔다.
-     아래에 두면 문단을 쓰다가 골격을 확인하려고 매번 스크롤을 내려야 했다.
-
-     ── 칸을 누르면 그 칸을 쓰러 간다 (사용자 지시 2026-08-21) ──
-     예전에는 설명만 있는 읽기 전용 띠였다. 그런데 화면에서 가장 먼저 눈에 들어오는
-     것이 이 띠라, **여기를 누르면 쓸 수 있을 것으로 읽힌다.** 실제로는 아래 입력
-     아코디언까지 내려가야 했다.
-
-     입력칸을 여기에 하나 더 만들지는 않는다 — 같은 값을 두 곳에서 고치면 저장이
-     어긋난다. 누르면 **아래 입력의 그 칸을 열고 그리로 데려간다.** 저장은 여전히
-     한 곳(bindStarInput)에서만 일어난다.
-
-     겸사겸사 이 띠가 **내가 지금 뭘 적어 뒀는지**도 보여준다. 설명만 네 칸 떠 있는
-     것보다, 적은 것이 보이면 무엇이 비었는지 한눈에 안다. */
   /* 활동 유형 id → 짧은 이름. 스펙입력(CAS.ACTIVITY_TYPES)과 같은 말이되, 코치에서는
      CAS 를 안 불러도 되게 필요한 것만 둔다. 없으면 유형 id 를 그대로 쓴다. */
   const ACT_TYPE_LABEL = {
@@ -1658,229 +1669,21 @@
   const actHasStar = a => a?.star && ['s', 't', 'a', 'r'].some(k => (a.star[k] || '').trim());
   const actTitle = a => a.name || a.org || ACT_TYPE_LABEL[a.type] || a.type || '활동';
 
-  /* ── 이 문항의 정성스펙 (읽기 전용 요약) ──────────────────────
-     STAR 를 **고르고 적는 자리는 입력 4번 칸 하나**다(사용자 지시 2026-08-28).
-     예전에는 결과 화면에도 '가져오기' 패널이 있어서 같은 값을 두 곳에서 고쳤는데,
-     어느 쪽이 진짜인지 알 수 없었다. 여기서는 무엇을 골랐는지만 보여주고, 고치려면
-     그 자리로 데려간다. */
-  function qSpecBandHtml() {
-    const list = picks();
-    if (!list.length) {
-      return `<div class="jd-star-import jd-star-import--empty">
-        <i class="ti ti-info-circle"></i>
-        고른 정성스펙이 없어요 — 아래 STAR 는 이 자소서에만 저장됩니다.
-        <button type="button" class="jd-star-import-go" data-q-goto>정성스펙 고르러 가기</button>
-      </div>`;
-    }
-    const lead = actByKey(list[0].actKey);
-    if (!lead) {
-      return `<div class="jd-star-import jd-star-import--empty">
-        <i class="ti ti-info-circle"></i>
-        골라 둔 활동을 스펙 관리에서 찾지 못했어요.
-        <button type="button" class="jd-star-import-go" data-q-goto>다시 고르기</button>
-      </div>`;
-    }
-    return `<div class="jd-star-import">
-      <span class="jd-star-import-type">${esc(ACT_TYPE_LABEL[lead.type] || lead.type || '활동')}</span>
-      <b>${esc(actTitle(lead))}</b>
-      ${lead.duration ? `<span class="jd-star-import-dur">${esc(lead.duration)}</span>` : ''}
-      <span class="jd-star-import-mode">${list[0].mode === 'edited' ? '여기서 고쳐 씀' : '스펙 관리 그대로'}</span>
-      ${list.length > 1 ? `<span class="jd-star-import-dur">외 ${list.length - 1}개 고름</span>` : ''}
-      <button type="button" class="jd-star-import-go" data-q-goto>바꾸기</button>
-    </div>`;
-  }
+  /* 결과 화면에서 STAR 를 고치러 가는 자리 — 고르고 적는 곳은 입력부의 정성스펙 카드
+     하나뿐이다. 결과 화면의 STAR 띠·입력은 없앴다(사용자 지시 2026-08-28): 같은 네 칸이
+     화면에 두 번(입력부 카드 + 결과 화면 띠) 떠서 어디에 적는지 헷갈렸다. 초안 되짚기가
+     "이 칸을 더 적어라" 할 때는 그 카드로 데려간다.
 
-  /* 결과 화면의 STAR 띠는 **고른 정성스펙 중 대표** 의 STAR 를 보여주고 고친다.
-     문항키로 따로 저장하던 것을 활동키 하나로 모았다(2026-08-28) — 같은 경험을 두
-     문항에 쓰면서 STAR 를 두 벌 적게 하는 것은 같은 글을 두 번 쓰게 하는 일이다. */
-  function starHtml(r) {
-    if (!r.star?.length) return '';
-    const saved = leadStar();
-    const filled = STAR_KEYS.filter(k => (saved[k] || '').trim()).length;
-    return `<div class="jd-star-band">
-      <div class="co-sec-h"><h2>모든 문항의 뼈대 — STAR</h2>
-        <span class="co-src">${filled}/4 칸 작성 · 칸을 누르면 바로 아래에서 씁니다 ·
-          이 브라우저에만 저장됩니다 · <b>AI 초안 넣기</b>가 이 내용을 읽습니다</span></div>
-      ${qSpecBandHtml()}
-      <div class="jd-star-grid">
-        ${r.star.map(s => {
-          const val = (saved[s.key] || '').trim();
-          const on = _starOpen === s.key;
-          return `<button type="button" class="jd-star-cell ${val ? 'is-filled' : ''} ${on ? 'is-open' : ''}"
-            data-star-go="${esc(s.key)}" aria-expanded="${on}">
-          <div class="jd-star-key">${esc(s.key)}<span>${esc(s.label)}</span>
-            ${_starCoach[s.key]
-              ? `<span class="jd-star-mark is-todo" title="${esc(_starCoach[s.key])}">더 적을 것</span>`
-              : `<span class="jd-star-mark">${val ? `${val.length}자` : '미작성'}</span>`}
-          </div>
-          <div class="jd-star-what">${esc(s.what)}</div>
-          <div class="jd-star-check">${esc(s.check)}</div>
-          <div class="jd-star-mine">${val
-            ? esc(val.length > 90 ? `${val.slice(0, 90)}…` : val)
-            : `<span>${on ? '아래에 적으세요' : '누르면 여기에 적습니다'}</span>`}</div>
-        </button>`;
-        }).join('')}
-      </div>
-    </div>`;
-  }
-
-  /* 띠는 저장된 값을 보여주므로 글자가 바뀌면 같이 다시 그린다.
-     **입력칸은 건드리지 않는다** — 타이핑 중에 다시 그리면 커서를 잃는다. */
-  function repaintStarBand(box) {
-    const host = box.querySelector('.jd-star-band');
-    if (!host || !_last) return;
-    host.replaceWith(document.createRange().createContextualFragment(starHtml(_last)));
-    bindStarBand(box);
-  }
-
-  function bindStarBand(box) {
-    box.querySelectorAll('[data-star-go]').forEach(el => {
-      el.addEventListener('click', () => {
-        const k = el.dataset.starGo;
-        /* 열린 칸을 다시 누르면 접는다. 좁힌 것을 푸는 길이 같은 자리에 있어야
-           '닫기' 버튼을 따로 찾지 않는다. */
-        _starOpen = _starOpen === k ? null : k;
-        repaintStarInput(box);
-      });
-    });
-
-    /* 정성스펙을 바꾸러 간다 — 고르는 자리는 입력부의 카드 칸 하나뿐이다.
-       여기서 또 고르게 하면 같은 값을 두 곳에서 고치게 된다. */
-    box.querySelectorAll('[data-q-goto]').forEach(el => {
-      el.addEventListener('click', () => {
-        const host = $('#jd-spec-star');
-        host?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        host?.querySelector('[data-sc-pick]')?.focus({ preventScroll: true });
-      });
-    });
-  }
-
-  /* 지금 열려 있는 STAR 칸. null 이면 아무 칸도 안 열린 상태다.
-     기본으로 S 를 열어 둔다 — 띠만 네 칸 떠 있으면 '어디에 적나' 를 한 번 더 찾는다. */
-  let _starOpen = 'S';
-  /* 마지막 AI 되짚기 — STAR 머리줄의 '더 적을 것' 배지가 읽는다.
-     칸을 고치고 다시 돌리면 새 결과로 통째로 갈린다. */
-  let _starCoach = {};
-
-  /* ── 고른 칸을 쓰는 자리 ────────────────────────────────────
-     예전에는 위 띠(설명)와 아래 아코디언(입력)이 따로 있었다. 같은 네 칸이 화면에
-     두 번 나오는 셈이라, 어디에 적는 것인지 한 번 더 찾아야 했다(사용자 지시).
-
-     이제 **띠가 곧 입력**이다. 칸을 누르면 바로 아래에 그 칸의 쓰는 자리가 열린다.
-     한 번에 하나만 연다 — 네 칸을 한꺼번에 열면 S 를 대충 쓰고 A 로 건너뛴다.
-     STAR 는 앞 칸이 뒤 칸의 전제라(문제를 안 적으면 행동이 왜 필요했는지 못 쓴다)
-     순서대로 하나씩 가는 편이 맞다.
-
-     ── 칸마다 나쁜 예/고친 예를 같이 보여준다 ──
-     "구체적으로 쓰세요" 는 무엇을 고쳐야 하는지 알려주지 않는다. 틀린 문장과 고친
-     문장을 나란히 두는 편이 훨씬 빠르다. 문구는 서버(cover-guide.STAR_WRITE)가 주고,
-     **AI 프롬프트도 같은 표를 읽는다** — 따로 두면 화면이 시킨 것과 AI 가 쓴 것이 갈린다.
-
-     아무 칸도 안 열렸을 때도 **빈 껍데기는 남긴다.** 다시 그릴 때 붙일 자리가 필요하다. */
-  function starInputHtml(r) {
-    const write = r.starWrite;
-    const tab = (_lastTabs || [])[_tab];
-    if (!write?.length || !tab || !_starOpen) return '<div class="jd-starin"></div>';
-
-    const w = write.find(x => x.key === _starOpen);
-    if (!w) return '<div class="jd-starin"></div>';
-    const meta = (r.star || []).find(s => s.key === w.key) || {};
-    const val = leadStar()[w.key] || '';
-    const next = nextStarKey(w.key);
-
-    return `<div class="jd-starin">
-      <div class="jd-si is-open" data-si="${esc(w.key)}">
-        <div class="jd-si-body">
-          <div class="jd-si-open-h">
-            <span class="jd-si-key">${esc(w.key)}</span>
-            <span class="jd-si-t">
-              <b>${esc(meta.label || '')}</b>
-              <span class="jd-si-ask">${esc(w.ask)}</span>
-            </span>
-            <span class="jd-si-scope">${esc(tab.label)}</span>
-            <button type="button" class="jd-si-close" data-si-close aria-label="접기">
-              <i class="ti ti-x"></i>
-            </button>
-          </div>
-          ${_starCoach[w.key]
-            ? `<p class="jd-si-coach"><b>더 적을 것</b> ${esc(_starCoach[w.key])}</p>`
-            : ''}
-          <p class="jd-si-hint">${bold(w.hint)}</p>
-          <div class="jd-si-ex">
-            <div class="jd-si-ex-row jd-si-ex--bad">
-              <span class="jd-si-ex-tag">이렇게 쓰면 탈락</span>
-              <p>${esc(w.bad)}</p>
-            </div>
-            <div class="jd-si-ex-row jd-si-ex--good">
-              <span class="jd-si-ex-tag">이렇게</span>
-              <p>${esc(w.good)}</p>
-            </div>
-          </div>
-          <textarea class="jd-si-ta" data-si-key="${esc(w.key)}" rows="6"
-            placeholder="${esc(w.ask)}">${esc(val)}</textarea>
-          <div class="jd-si-foot">
-            <span class="jd-si-saved" data-si-saved="${esc(w.key)}"></span>
-            ${next
-              ? `<button type="button" class="wf-btn wf-btn--sm" data-si-next="${esc(next)}">
-                   저장하고 ${esc(next)} 쓰기 <i class="ti ti-arrow-right"></i>
-                 </button>`
-              : `<span class="jd-si-done">네 칸을 다 채웠으면 아래 <b>AI 초안 넣기</b>를 누르세요</span>`}
-          </div>
-        </div>
-      </div>
-    </div>`;
-  }
-
-  const nextStarKey = k => STAR_KEYS[STAR_KEYS.indexOf(k) + 1] || null;
-
-  /* 아코디언·자동저장. 초안 칸과 같은 규약으로 600ms 묶어 쓴다 — 글자마다
-     localStorage 를 때리면 긴 문장에서 눈에 띄게 버벅인다. */
-  function bindStarInput(box) {
-    const tab = (_lastTabs || [])[_tab];
-    if (!tab) return;
-
-    /* 칸을 여닫는 것은 위 띠(bindStarBand)가 한다 — 아코디언 머리줄은 없앴다. */
-    const close = box.querySelector('[data-si-close]');
-    if (close) close.addEventListener('click', () => { _starOpen = null; repaintStarInput(box); });
-
-    box.querySelectorAll('[data-si-next]').forEach(el => {
-      el.addEventListener('click', () => {
-        _starOpen = el.dataset.siNext;
-        repaintStarInput(box);
-      });
-    });
-
-    box.querySelectorAll('[data-si-key]').forEach(ta => {
-      let timer = null;
-      const key = ta.dataset.siKey;
-      const state = box.querySelector(`[data-si-saved="${key}"]`);
-      ta.addEventListener('input', () => {
-        if (state) state.textContent = '입력 중…';
-        clearTimeout(timer);
-        timer = setTimeout(() => {
-          const lead = picks()[0];
-          if (lead) saveStar(starKeyOf(lead.actKey), key, ta.value);
-          if (state) state.textContent = `저장됨 · ${ta.value.trim().length}자`;
-          /* 위 띠의 '미작성/N자' 와 미리보기를 같이 고친다. 한쪽만 고치면 같은 화면에
-             '미작성' 과 '120자' 가 동시에 떠서 어느 쪽이 맞는지 알 수 없다.
-             **입력칸은 다시 그리지 않는다** — 타이핑 중에 갈면 커서를 잃는다. */
-          repaintStarBand(box);
-        }, 600);
-      });
-    });
-  }
-
-  /* 펼침만 바꾸는 다시 그리기. 통째로 render(r) 를 부르면 오른쪽 초안 칸의 커서와
-     스크롤까지 날아간다 — STAR 를 쓰는 중에 그러면 쓰던 자리를 잃는다. */
-  function repaintStarInput(box) {
-    const host = box.querySelector('.jd-starin');
-    if (!host || !_last) return;
-    host.replaceWith(document.createRange().createContextualFragment(starInputHtml(_last)));
-    bindStarInput(box);
-    /* 띠의 '열림' 표시도 같이 갈아야 한다 — 안 그러면 방금 접은 칸이 열린 채로 보인다. */
-    repaintStarBand(box);
-    const open = box.querySelector('.jd-si.is-open .jd-si-ta');
-    if (open) open.focus();
+     ── 왜 STAR 를 결과에서 없애도 되나 ──
+     AI 초안은 STAR 를 currentStar()(정성스펙 카드 저장소)에서 읽는다. 결과 화면 띠는
+     같은 저장소를 다른 자리에서 보여줬을 뿐이라, 없애도 초안 재료는 그대로다. */
+  function goSpecStar() {
+    const host = document.querySelector('#jd-spec-star');
+    if (!host) return;
+    host.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    /* 이미 고른 카드가 있으면 그 STAR 첫 칸으로, 없으면 고르는 버튼으로 커서를 둔다. */
+    (host.querySelector('.jd-q-star-in') || host.querySelector('[data-sc-pick]'))
+      ?.focus({ preventScroll: true });
   }
 
   function checklistHtml(r) {
@@ -1947,9 +1750,6 @@
           </span>
         </div>
 
-        ${starHtml(r)}
-        ${starInputHtml(r)}
-
         <div class="jd-split">
           <div class="jd-comp-pane">
             ${r.items.length ? keysHtml(r) : ''}
@@ -2014,8 +1814,6 @@
       $('#jd-doc')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
 
-    bindStarInput(box);
-    bindStarBand(box);
     bindDraft(box);
   }
 
@@ -2092,14 +1890,10 @@
         /* STAR 없이 만든 문단이 뻔하다는 것을 **결과를 보여준 뒤에** 말한다.
            만들기 전에 말하면 경고이고, 만든 뒤에 말하면 다음에 할 일이 된다. */
         stateEl.innerHTML = star ? blanks
-          : `${blanks} · 위 <b>STAR</b> 를 채우면 더 구체적으로 나와요 `
+          : `${blanks} · <b>정성스펙 카드</b>에서 STAR 를 채우면 더 구체적으로 나와요 `
             + '<button type="button" class="jd-inline-link" data-open-star>채우러 가기</button>';
         const goStar = stateEl.querySelector('[data-open-star]');
-        if (goStar) goStar.addEventListener('click', () => {
-          _starOpen = 'S';
-          repaintStarInput(document.getElementById('jd-result'));
-          document.querySelector('.jd-starin')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        });
+        if (goStar) goStar.addEventListener('click', () => goSpecStar());
       }
       paintAiNotes(i, out);
     } catch (e) {
@@ -2212,25 +2006,16 @@
                </span>
                <i class="ti ti-arrow-up-right"></i>
              </button>`).join('')}</div>
-           <p class="jd-hint">누르면 그 칸이 열립니다. 채운 뒤 <b>AI 초안 넣기</b>를 다시 누르면
+           <p class="jd-hint">누르면 <b>정성스펙 카드</b>로 이동합니다. 채운 뒤 <b>AI 초안 넣기</b>를 다시 누르면
              그 내용으로 다시 씁니다.</p>
          </div>`
       : '';
 
     host.innerHTML = coach + list(out.blanks, '채워야 할 빈칸') + list(out.review, '채용담당자가 볼 약한 지점');
 
-    host.querySelectorAll('[data-coach]').forEach(el => el.addEventListener('click', () => {
-      _starOpen = el.dataset.coach;
-      const box = document.getElementById('jd-result');
-      repaintStarInput(box);
-      box.querySelector('.jd-starin')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }));
-
-    /* 어느 칸이 모자란지 STAR 머리줄에도 표시해 둔다. 초안 카드를 닫으면
-       되짚기가 안 보이는데, 고쳐야 할 칸은 계속 보여야 한다. */
-    _starCoach = {};
-    (out.coach || []).forEach(c => { _starCoach[c.key] = c.missing || c.ask || ''; });
-    repaintStarInput(document.getElementById('jd-result'));
+    /* 되짚기 행을 누르면 STAR 를 고치는 자리(입력부 정성스펙 카드)로 데려간다.
+       결과 화면 STAR 를 없앴으므로(사용자 지시 2026-08-28) 여기서 칸을 여는 대신 그리 보낸다. */
+    host.querySelectorAll('[data-coach]').forEach(el => el.addEventListener('click', () => goSpecStar()));
   }
 
 
