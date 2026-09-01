@@ -1591,8 +1591,22 @@ window.SpecForm = (() => {
      아직 없는 줄이면 전체 저장으로 넘긴다(그래야 활동 자체가 만들어진다). */
   async function saveStarAt(i) {
     const a = actState[i];
+    const btn = document.querySelector(`[data-star-save="${i}"]`);
     const msg = document.querySelector(`[data-star-msg="${i}"]`);
     const say = (text, cls = '') => { if (msg) { msg.textContent = text; msg.className = `sf-star-msg ${cls}`; } };
+    /* 성공은 글로 알리지 않고 버튼으로 보여준다(사용자 지시) — 체크로 바뀌고 잠시 뒤 원래대로.
+       실패는 이유를 읽어야 하므로 여전히 글로 남긴다. */
+    const flashSaved = () => {
+      say('');
+      if (!btn) return;
+      btn.classList.add('is-saved');
+      btn.innerHTML = '<i class="ti ti-check"></i> 저장됨';
+      clearTimeout(btn._savedT);
+      btn._savedT = setTimeout(() => {
+        btn.classList.remove('is-saved');
+        btn.innerHTML = '<i class="ti ti-device-floppy"></i> STAR 저장';
+      }, 1800);
+    };
 
     if (!a || !a.type) { say('활동 유형을 먼저 고르세요', 'is-bad'); return; }
     const star = {};
@@ -1607,14 +1621,15 @@ window.SpecForm = (() => {
     if (i >= savedActCount) {
       say('활동을 먼저 저장하는 중…');
       const ok = await handleSave();
-      say(ok ? 'STAR 를 저장했어요' : '저장하지 못했어요 — 위 안내를 확인해 주세요', ok ? 'is-ok' : 'is-bad');
+      if (ok) flashSaved();
+      else say('저장하지 못했어요 — 위 안내를 확인해 주세요', 'is-bad');
       return;
     }
 
     say('저장 중…');
     try {
       await DB.saveActivityStar(i, star, a.type);
-      say('STAR 를 저장했어요 · 자소서 코치에서 바로 쓸 수 있어요', 'is-ok');
+      flashSaved();
     } catch (e) {
       /* 순번이 밀린 경우(다른 탭에서 활동을 지웠다) 서버가 409 로 알려준다.
          그때는 전체 저장이 답이라 그 말을 그대로 보여준다. */

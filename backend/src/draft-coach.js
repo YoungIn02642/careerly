@@ -30,6 +30,9 @@
    긋는 일이 생긴다. 한 곳에서 읽는다.
    ════════════════════════════════════════════════════════════ */
 const GUIDE = require('./cover-guide');
+/* 자소서 빈출 문항의 유형별 특화 프레임·규칙(단일 출처). 서버가 문항 문구를 분류해
+   그 유형에 맞는 골격을 초안 프롬프트에 끼운다(사용자 지시 2026-08-31). */
+const QF = require('../../frontend/js/question-frames.js');
 
 /* 모델에 넘기는 활동 요약. 있는 필드만 붙인다 — 빈 값을 '없음'으로 채워 보내면
    모델이 그 '없음'을 문장에 그대로 쓴다(실측).
@@ -147,10 +150,34 @@ function starLines(star) {
 }
 
 /* ── 프롬프트 조립 (P.C.R.O) ──────────────────────────────── */
-function buildPrompt({ company, jobTitle, competency, quotes, reads, frame, activities, question, limit, star }) {
+function buildPrompt({ company, jobTitle, competency, quotes, reads, frame, activities, question, limit, star, picks }) {
   const acts = (activities || []).map(activityLine).filter(Boolean);
   const names = (activities || []).map(a => a?.name).filter(Boolean);
-  const mine = starLines(star);
+
+  /* ── 문항마다 고른 정성스펙(0~3개)로 STAR 를 쓸지 정한다 (사용자 지시 2026-08-31) ──
+     예전에는 모든 문항을 STAR 골격으로 밀어붙여서, 지원동기·포부에 "~한 일을 했고 ~문제가
+     있었고 ~해결했다 ~배웠다" 식 성취담이 나왔다(사용자 지적). 이제 **고른 경험이 있을 때만**
+     STAR 를 재료로 쓰고, 하나도 안 골랐으면(0개) 문항 골격만으로 쓴다.
+       0개 → STAR 강요 안 함(지원동기 등)
+       1개 → 그 경험의 STAR 가 본문
+       2~3개 → **공통점으로 묶어** 한 번에 소개한다(따로따로 풀지 않는다).
+     picks 가 없으면 옛 단일 star 를 한 개 고른 것으로 본다(하위호환). */
+  let picked = (Array.isArray(picks) ? picks : [])
+    .filter(p => p && p.star && starLines(p.star).length)
+    .slice(0, 3);
+  if (!picked.length && starLines(star).length) picked = [{ name: '', star }];
+  const starCount = picked.length;
+  const hasStar = starCount > 0;
+  const multi = starCount >= 2;
+
+  /* ── 빈출 문항이면 그 유형의 골격을 쓴다 (사용자 지시 2026-08-31) ──────────
+     문항을 유형으로 분류해(question-frames.js), 걸리면 역량 골격 대신 **그 문항 유형의
+     골격**을 쓰고 유형 전용 규칙을 덧붙인다. 성격 장단점처럼 STAR 로 안 풀리는 문항을
+     STAR 골격으로 밀어붙이지 않기 위해서다. 안 걸리면(공고 특수 문항 등) 예전처럼
+     역량 골격(frame)을 쓴다. */
+  const qType = QF.classify(question);
+  const useFrame = qType ? qType.frame : frame;
+  const frameLabel = qType ? `이 문항(${qType.label})을 쓰는 순서` : '이 역량을 쓰는 순서';
 
   const context = [
     `지원 회사: ${company || '(미지정)'}`,
@@ -159,26 +186,31 @@ function buildPrompt({ company, jobTitle, competency, quotes, reads, frame, acti
     `이번에 쓸 요구 역량: ${competency}`,
     reads ? `이 역량으로 기업이 보는 것: ${reads}` : null,
     quotes?.length ? `공고 원문 근거:\n${quotes.map(q => `  - ${q}`).join('\n')}` : null,
-    frame ? `이 역량을 쓰는 순서: ${frame}` : null,
+    useFrame ? `${frameLabel}: ${useFrame}` : null,
 
-    /* ── STAR 입력이 있으면 그것이 본문이다 ──────────────────────
-       예전에는 활동 이름·기간·역할만 넘겼다. 그 정보로는 "무슨 일이 있었는지" 를
-       모르니 모델이 빈 곳을 관용구로 메웠고, 그래서 "소통하려 노력했고 잘 마무리
-       했습니다" 같은 문단이 나왔다(사용자 지적). 사용자가 STAR 칸에 적은 문장이
-       있으면 **그것이 유일한 사실 출처**이고, 모델이 할 일은 지어내기가 아니라
-       그 사실을 자소서 문장으로 다듬는 것뿐이다. */
-    mine.length
-      ? `지원자가 직접 적은 경험(STAR). **이것이 유일한 사실이다. 여기 없는 사건을 만들지 마라:**\n`
-        + `${mine.map(l => `  ${l}`).join('\n')}`
-      : null,
+    /* ── 고른 경험(STAR)이 본문 재료다 ────────────────────────────
+       고른 게 있으면 그 STAR 가 유일한 사실 출처다(지어내기 금지). 하나도 안 골랐으면
+       STAR 를 강요하지 않고 골격만으로 쓴다. 2~3개면 공통점으로 묶으라고 못박는다. */
+    !hasStar
+      ? `지원자가 이 문항에 쓸 특정 경험(STAR)을 고르지 않았다. 위 골격에 맞춰 쓰고, `
+        + `구체적 경험·수치·상황은 대괄호로 비운다. 없는 경험을 지어내거나 억지 성취담으로 만들지 마라.`
+      : (starCount === 1
+        ? `지원자가 직접 적은 경험(STAR). **이것이 유일한 사실이다. 여기 없는 사건을 만들지 마라:**\n`
+          + starLines(picked[0].star).map(l => `  ${l}`).join('\n')
+        : `지원자가 이 문항에 고른 경험 ${starCount}개(STAR). **이것이 유일한 사실이다. 여기 없는 사건을 만들지 마라.**\n`
+          + `**각각을 따로 풀지 말고 공통점으로 묶어** 소개한다:\n`
+          + picked.map((p, i) => `  [경험 ${i + 1}${p.name ? ': ' + p.name : ''}]\n`
+              + starLines(p.star).map(l => `    ${l}`).join('\n')).join('\n')),
 
-    acts.length
+    /* ── 활동 목록은 '고른 경험이 있을 때만' 넣는다 (사용자 지적 2026-09-01) ──────
+       예전에는 정성스펙을 하나도 안 골라도 내 활동 전체를 프롬프트에 실었다. 그러면
+       모델이 그 활동들을 끌어다 [과제명]·[개선 기간] 같은 빈칸을 지어내 성취담을
+       만들었다(지원동기·포부에 안 고른 스펙이 섞여 나옴). 안 골랐으면 활동을 아예
+       주지 않고, 구체적 경험 자리는 골격에 맞춰 대괄호로 비우게 한다. */
+    hasStar && acts.length
       ? `지원자가 실제로 한 활동(분류 정보):\n${acts.map(a => `  - ${a}`).join('\n')}\n`
-        + (mine.length
-          ? `  ※ 위 STAR 가 본문이고 이 목록은 활동 이름을 정확히 쓰기 위한 참고다.`
-          : `  ※ 이 중 하나를 골라 **'이름:' 값을 문장에 그대로 넣고** 그 경험으로 문단을 써라.`
-            + ` 활동 이름이 문단에 없으면 틀린 답이다.`)
-      : (mine.length ? null : '지원자의 활동 정보가 없다. 활동 자리도 전부 대괄호로 남겨라.'),
+        + `  ※ 위 고른 경험(STAR)이 본문이고 이 목록은 활동 이름을 정확히 쓰기 위한 참고다.`
+      : (hasStar ? null : '지원자가 이 문항에 쓸 특정 경험(정성스펙)을 고르지 않았다. 위 골격에 맞춰 쓰고, 구체적 경험·활동은 지어내지 말고 대괄호로 비운다.'),
   ].filter(Boolean).join('\n');
 
   const restriction = [
@@ -191,7 +223,7 @@ function buildPrompt({ company, jobTitle, competency, quotes, reads, frame, acti
     `1-1. 대괄호는 한 문단에 **최대 4개**까지만 쓴다. 그보다 많으면 문장이 아니라 서식이다.`,
     `2. 아래 표현은 쓰지 마라(변별력이 없다): ${banned().join(', ')}`,
     `3. 아래 연결어를 반복하지 마라(AI 초안 티가 난다): ${tells().join(', ')}`,
-    `4. STAR 순서를 지키되, 칸마다 아래를 반드시 지킨다:\n${starRules()}`,
+    hasStar ? `4. STAR 순서를 지키되, 칸마다 아래를 반드시 지킨다:\n${starRules()}` : null,
     `5. 역량 이름("${competency}")을 문장에 그대로 쓰지 마라. 그 역량을 쓴 상황으로 보여라.`,
     `6. 전체 ${limit}자 안팎. 소감·다짐·포부로 끝내지 말고 결과와 배운 점으로 닫는다.`,
     `7. 존댓말 서술체(~했습니다)로 쓴다.`,
@@ -199,7 +231,7 @@ function buildPrompt({ company, jobTitle, competency, quotes, reads, frame, acti
        한국어 자소서에 외국어가 한 글자라도 섞이면 그대로 제출되어 사고가 된다. */
     `8. 대괄호 안까지 포함해 **한국어로만** 쓴다. 영어·일본어·중국어·베트남어를 섞지 마라`
       + '(고유명사와 널리 쓰는 약어는 예외).',
-    acts.length
+    hasStar && acts.length
       ? `9. 다음 활동 이름 중 하나를 문단에 **그대로** 써라: ${names.map(n => `"${n}"`).join(', ')}.`
         + ` '대외활동'·'3개월' 같은 분류나 기간이 아니라 **이름**이다. 일반론을 쓰지 마라.`
       : null,
@@ -214,15 +246,15 @@ function buildPrompt({ company, jobTitle, competency, quotes, reads, frame, acti
        **없는 실패를 지어내 [첫 번째 시도]·[실패 이유] 빈칸으로 만들고** 정작 진짜
        해결 단계는 한 줄로 뭉갰다. 목표는 '실패담'이 아니라 '행동의 구체성' 이므로,
        실패 대신 **단계의 촘촘함**을 요구한다. 시행착오는 STAR 에 있을 때만 살린다. */
-    `10. **행동(A)은 '무엇을·누구에게·어떤 기준으로·어떤 순서로' 했는지 구체적 단계로 쓴다.**`
+    hasStar ? `10. **행동(A)은 '무엇을·누구에게·어떤 기준으로·어떤 순서로' 했는지 구체적 단계로 쓴다.**`
       + ` 방법 이름만 대지 말고 각 단계에서 실제로 한 일을 쓴다`
       + ` (예: 몇 명에게 무엇을 물어 무엇을 추렸고, 누구에게 확인받아 어떻게 배포했는지).`
       + ` **시행착오·방법을 바꾼 대목은 STAR 에 있을 때만 쓰고, 없으면 지어내지 마라** —`
-      + ` 한 번에 깔끔히 해낸 일은 그 단계를 촘촘히 쓰는 것이 강한 행동이다.`,
-    `11. **문제를 "왜 문제인지" 까지 적는다.** 어긋난 지점 하나를 짚고, 그 때문에 일정·품질·결과가`
-      + ` 어떻게 됐는지를 같이 쓴다. "문제가 있었습니다" 로 끝나면 틀린 답이다.`,
-    `12. **결과는 성공이 아니어도 된다.** 목표에 못 미쳤으면 못 미친 대로 적고, 그때 건진 것`
-      + `(작은 성과·다음에 바꿀 것)을 한 줄 붙인다. 없는 성공을 만들어 붙이지 마라.`,
+      + ` 한 번에 깔끔히 해낸 일은 그 단계를 촘촘히 쓰는 것이 강한 행동이다.` : null,
+    hasStar ? `11. **문제를 "왜 문제인지" 까지 적는다.** 어긋난 지점 하나를 짚고, 그 때문에 일정·품질·결과가`
+      + ` 어떻게 됐는지를 같이 쓴다. "문제가 있었습니다" 로 끝나면 틀린 답이다.` : null,
+    hasStar ? `12. **결과는 성공이 아니어도 된다.** 목표에 못 미쳤으면 못 미친 대로 적고, 그때 건진 것`
+      + `(작은 성과·다음에 바꿀 것)을 한 줄 붙인다. 없는 성공을 만들어 붙이지 마라.` : null,
     `13. 아래 말은 **행동도 결과도 아니므로 쓰지 마라**: "노력했습니다", "최선을 다했습니다",`
       + ` "소통했습니다", "합을 맞췄습니다", "잘 마무리했습니다", "원활하게 진행했습니다",`
       + ` "많은 것을 배웠습니다". 무엇을 어떻게 했는지로 바꿔 쓴다.`,
@@ -235,7 +267,7 @@ function buildPrompt({ company, jobTitle, competency, quotes, reads, frame, acti
        '추가적인 교육 제공' 이 나왔다). 사용자가 겪지 않은 일을 자소서에 적는 것이라
        두루뭉술한 문단보다 나쁘다. 규칙과 규칙이 부딪히는 자리이므로 어느 쪽이
        이기는지를 못 박아 둔다. */
-    mine.length
+    hasStar
       ? `13-1. **위 STAR 에 없는 사건·행동·수치를 새로 만들지 마라.** 규칙을 지키려고`
         + ` **없는 시도·실패를 지어내면 안 된다.** STAR 에 적힌 것보다 더 구체적인 수치·규모가`
         + ` 필요한 자리만 [문의 건수], [담당자 수] 처럼 **대괄호로 비우고**, 무엇을 물어야`
@@ -244,12 +276,32 @@ function buildPrompt({ company, jobTitle, competency, quotes, reads, frame, acti
     `13-2. coach 에는 S·T·A·R 중 **모자란 칸만** 담는다. 그 칸이 왜 모자란지(missing)와`
       + ` 사용자가 무엇을 더 적어야 하는지(ask)를 각각 한 문장으로. 충분한 칸은 넣지 마라.`,
 
-    `14. 아래는 **절대로 내놓으면 안 되는 답의 예**다. 문법과 STAR 순서는 맞지만 정보가 없다.\n`
+    hasStar ? `14. 아래는 **절대로 내놓으면 안 되는 답의 예**다. 문법과 STAR 순서는 맞지만 정보가 없다.\n`
       + `   "3개월 프로젝트에서 팀원과 소통에 다툼이 있었습니다. 저는 소통을 하려고 노력했고,\n`
       + `    노력한 결과 팀원과 합을 맞추며 프로젝트를 잘 마무리 할 수 있었습니다."\n`
       + `   빠진 것: 무엇이 어긋났는지 · 그래서 무엇이 안 됐는지 · 무엇을 어떤 순서로 했는지(구체적 단계)\n`
       + `   · 결과가 숫자나 사실로 확인되는지. 이것들을 **STAR 에 있는 사실로** 채워라`
-      + ` (없는 것은 지어내지 말고 비운다. 시행착오는 STAR 에 있을 때만).`,
+      + ` (없는 것은 지어내지 말고 비운다. 시행착오는 STAR 에 있을 때만).` : null,
+
+    /* ── 모드·유형별 규칙 (번호는 15부터 이어 붙인다) ──────────────────
+       ① STAR 를 안 고른 문항(0개)이면 성취담 강요를 끊는다(사용자 지시 2026-08-31).
+       ② 2~3개 골랐으면 공통점으로 묶으라고 못박는다.
+       ③ 빈출 문항 유형이 걸렸으면 그 유형 전용 규칙(question-frames.js). */
+    ...(() => {
+      const extra = [];
+      if (!hasStar) {
+        extra.push('이 문항에는 특정 경험(STAR)을 고르지 않았다. 위 "이 문항을 쓰는 순서" 골격에 맞춰 쓰고, '
+          + '구체적 경험·수치는 대괄호로 비운다. "~한 경험을 통해 ~를 배웠습니다" 식 성취담으로 억지로 만들지 마라 '
+          + '— 지원동기·포부라면 왜 이 회사·직무인지와 앞으로의 계획을 쓴다.');
+      }
+      if (multi) {
+        extra.push(`고른 경험 ${starCount}개를 **각각 따로 STAR 로 풀지 말고 공통점으로 묶어 한 번에 소개한다** `
+          + `(예: "OO와 OO 활동을 통해 협업을 경험했습니다"). 그 공통 역량을 축으로 두 경험을 근거로 든다. `
+          + `문단이 경험별로 쪼개지면 틀린 답이다.`);
+      }
+      if (qType) extra.push(...qType.rules);
+      return extra.map((r, i) => `${15 + i}. ${r}`);
+    })(),
   ].filter(Boolean).join('\n');
 
   const output = [
@@ -291,7 +343,7 @@ function buildPrompt({ company, jobTitle, competency, quotes, reads, frame, acti
    화면(jd-coach.js insertAiDraft)이 draft·blanks·review 를 이미 그리고 있다.
    지원동기라고 다른 모양을 내보내면 그리는 코드가 한 벌 더 생긴다.
    coach 만 비운다 — STAR 칸이 없는 문항이라 붙을 자리가 없다. */
-function buildMotivePrompt({ company, jobTitle, question, evidence, activities, limit }) {
+function buildMotivePrompt({ company, jobTitle, question, evidence, picks, limit }) {
   const facts = (evidence || [])
     .map(e => {
       const text = String(e?.text || '').trim();
@@ -306,7 +358,15 @@ function buildMotivePrompt({ company, jobTitle, question, evidence, activities, 
     })
     .filter(Boolean);
 
-  const acts = (activities || []).map(activityLine).filter(Boolean);
+  /* ── 지원자 경험은 '고른 정성스펙이 있을 때만' 재료로 쓴다 (사용자 지적 2026-09-01) ──
+     예전에는 활동 전체를 실어서, 정성스펙을 고르지 않은 지원동기·포부에도 안 고른 활동이
+     [과제명]·[개선 기간] 빈칸과 함께 성취담으로 섞여 나왔다. 안 골랐으면 회사 근거만으로
+     쓰고, 경험이 필요한 자리는 지어내지 말고 대괄호로 비운다. STAR 초안(buildPrompt)의
+     picks 규칙과 같은 축이다. */
+  const picked = (Array.isArray(picks) ? picks : [])
+    .filter(p => p && p.star && starLines(p.star).length)
+    .slice(0, 3);
+  const hasPick = picked.length > 0;
 
   const context = [
     `지원 회사: ${company || '(미지정)'}`,
@@ -316,9 +376,12 @@ function buildMotivePrompt({ company, jobTitle, question, evidence, activities, 
       ? `지원자가 회사 리포트에서 담아 온 근거. **이것이 이 회사에 대한 유일한 사실이다.**\n`
         + `여기 없는 회사 사실(제품·전략·수치·인물)을 한 줄도 만들지 마라:\n${facts.join('\n')}`
       : '회사 근거가 없다. 회사에 대한 구체적 사실은 전부 대괄호로 비워라.',
-    acts.length
-      ? `지원자가 실제로 한 활동:\n${acts.map(a => `  - ${a}`).join('\n')}`
-      : '지원자의 활동 정보가 없다. 지원자 경험 자리도 전부 대괄호로 남겨라.',
+    hasPick
+      ? `지원자가 이 문항에 고른 경험(STAR). 지원동기의 '내 경험' 자리는 이것으로만 쓰고, 여기 없는 사건을 지어내지 마라:\n`
+        + picked.map((p, i) => `  [경험 ${i + 1}${p.name ? ': ' + p.name : ''}]\n`
+            + starLines(p.star).map(l => `    ${l}`).join('\n')).join('\n')
+      : '지원자가 이 문항에 쓸 경험(정성스펙)을 고르지 않았다. **회사 근거를 중심으로 쓰고, '
+        + '지원자 경험이나 활동 이름을 지어내지 마라** — 경험이 필요한 자리는 [관련 경험]으로 비운다.',
   ].filter(Boolean).join('\n');
 
   const restriction = [
@@ -331,10 +394,16 @@ function buildMotivePrompt({ company, jobTitle, question, evidence, activities, 
     /* 위 실측의 재발 방지. 규칙으로도 한 번 더 못 박는다. */
     `2-1. 위 근거에 **적혀 있는 내용은 대괄호로 비우지 말고 그대로 문장에 녹여라.**`
       + ` 근거를 '사업 내용'·'회사 숫자' 같은 분류 이름으로 가리키지 말고, 그 내용을 써라.`,
-    `3. 순서: ① 고른 근거(회사가 지금 하는 일) → ② 그것이 왜 어려운 일인지`
-      + ` → ③ 내 경험 중 맞닿는 지점 → ④ 입사 후 맡고 싶은 일. 네 덩이를 다 쓴다.`,
-    `4. 지원자 활동에 적혀 있는 값(이름·기간·역할·성과)은 대괄호로 비우지 말고 그대로 써라.`
-      + ` 거기 없는 수치·상황만 비운다. 대괄호는 한 문단에 **최대 4개**.`,
+    hasPick
+      ? `3. 순서: ① 고른 근거(회사가 지금 하는 일) → ② 그것이 왜 어려운 일인지`
+        + ` → ③ 위 내 경험(STAR) 중 맞닿는 지점 → ④ 입사 후 맡고 싶은 일. 네 덩이를 다 쓴다.`
+      : `3. 순서: ① 고른 근거(회사가 지금 하는 일) → ② 그것이 왜 어려운 일인지`
+        + ` → ③ 그 일에 필요한 역량과 내가 맞닿는 지점(구체적 경험은 지어내지 말고 [관련 경험]으로 비운다)`
+        + ` → ④ 입사 후 맡고 싶은 일. 네 덩이를 다 쓴다.`,
+    hasPick
+      ? `4. 위 경험(STAR)에 적혀 있는 값은 대괄호로 비우지 말고 그대로 녹여라.`
+        + ` 거기 없는 수치·상황만 비운다. 대괄호는 한 문단에 **최대 4개**.`
+      : `4. 대괄호는 한 문단에 **최대 4개**. 근거에 있는 회사 사실은 대괄호로 비우지 말고 그대로 쓴다.`,
     /* ── 최소 한 개는 반드시 비운다 (실측) ────────────────────────
        최대만 걸어 뒀더니 빈칸이 **0개**인 문단이 나왔다. 그건 그대로 제출할 수 있는
        완성문이고, 이 프로젝트가 하지 않기로 한 대필이다(16-2). 모델이 스스로

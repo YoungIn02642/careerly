@@ -6,7 +6,9 @@ const PAGES = [
   'dashboard', 'search', 'profile', 'mentoring',   // ← 구 mentoring.html
   'specup',                                        // 스펙 채우기 (js/specup.js) — 로드맵 2단계의 곁가지
   'jd',                                            // 자소서 코치 (js/jd-coach.js)
-  'drafts',                                        // 내 자소서 보관함 (js/drafts.js) — 코치의 하위 화면
+  'write',                                          // 자소서 작성 (js/jd-coach.js renderWrite) — 역량 분석 뒤 전용 작성 화면
+  // 보관함(#drafts)은 페이지에서 **모달**로 바뀌었다(2026-09-01) — PAGES 에서 뺀다. Drafts.open()
+  'donate',                                        // 내 합격 자소서 기증 (js/donate.js) — 동의 기반 코퍼스
   'company',                                       // 회사 검색 (js/company-cover.js) — 자소서 코치의 앞 단계
   'mentor-profile',                                // 멘토 소개 입력 (js/mentor-profile.js)
   'insight',                                       // 커리어 인사이트 — 커뮤니티 게시판 (js/insight.js)
@@ -48,7 +50,7 @@ function showPage(page) {
   /* 회사 검색·보관함은 '자소서 코치' 의 하위 화면이라 같은 메뉴를 강조한다 —
      눌러서 들어왔는데 아무 메뉴에도 불이 없으면 어디에 있는지 알 수 없다. */
   const navKey = page === 'profile' ? 'search'
-    : (page === 'company' || page === 'drafts') ? 'jd' : page;
+    : (page === 'company' || page === 'write') ? 'jd' : page;
   updateNavActive(NAV_HIGHLIGHT.includes(navKey) ? navKey : '');
 
   if (page === 'mypage')     initMypage();
@@ -68,8 +70,9 @@ function showPage(page) {
   else if (window.leaveHome) leaveHome();   // 홈을 떠났으니 다음 진입 때 등장 효과를 다시 재생
   if (page === 'specup')     SpecUp.onEnter();
   if (page === 'jd')         JdCoach.onEnter();
+  if (page === 'write')      JdCoach.onEnterWrite();
   if (page === 'company')    CompanyCover.onEnter();
-  if (page === 'drafts')     Drafts.onEnter();
+  if (page === 'donate')     Donate.onEnter();
   if (page === 'insight')    Insight.onEnter();
   if (MENTORING_PAGES.includes(page)) Mentoring.onEnter(page);
 
@@ -79,6 +82,7 @@ function showPage(page) {
 
 function navigate(page) {
   closeNavDrawer();
+  toggleUserMenu(false);
   /* 로그인·가입 화면으로 떠나기 직전의 위치를 기억해 둔다 — 로그인에 성공하면
      그리로 되돌린다(goAfterLogin). SPA 라 페이지 DOM 은 숨겨질 뿐 살아 있어서,
      되돌아가기만 하면 자소서 입력·고른 스펙·STAR 가 그대로다. */
@@ -105,7 +109,7 @@ const AUTH_PAGES = ['login', 'signup', 'onboarding'];
    mypage·백오피스는 로그인이 있어야 들어가는 곳이라 '출발지'가 될 수 없으므로 후보에서
    빼고, 마지막으로 머문 이어작업 화면(=자소서)을 기억한다. 그래서 로그인 후 자소서로
    돌아온다(입력·고른 스펙·STAR 는 SPA DOM·localStorage 에 그대로 남아 있다). */
-const RESUMABLE_PAGES = ['jd', 'company', 'drafts', 'specup', 'insight'];
+const RESUMABLE_PAGES = ['jd', 'write', 'company', 'donate', 'specup', 'insight'];
 let _lastResumableHash = '';
 
 /* 저장은 sessionStorage 지만 접근이 막히는 환경이 있다(사생활 모드·샌드박스 iframe 은
@@ -179,7 +183,7 @@ window.closeNavDrawer  = closeNavDrawer;
 window.toggleNavDrawer = toggleNavDrawer;
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeNavDrawer();
+  if (e.key === 'Escape') { closeNavDrawer(); toggleUserMenu(false); }
 });
 // 데스크톱 폭으로 넓히면 드로어가 숨겨지므로 상태도 함께 초기화한다.
 window.addEventListener('resize', () => {
@@ -366,12 +370,40 @@ function cleanPaymentQuery() {
 }
 
 async function handleLogout() {
+  toggleUserMenu(false);
   try { await DB.logout(); }
   catch (e) { console.error('로그아웃 실패', e); }
   updateNavAuth();
   navigate('main');
 }
 window.handleLogout = handleLogout;
+
+/* ── 사용자 아이콘 드롭다운 (닉네임 옆) ─────────────────────────
+   로그아웃 버튼을 아이콘 하나로 바꾸고, 누르면 마이페이지·계정관리·로그아웃을 연다
+   (사용자 지시 2026-09-01). 밖을 누르거나 Esc·이동하면 닫힌다. */
+function toggleUserMenu(force) {
+  const menu = document.getElementById('nav-user-menu');
+  const btn = document.getElementById('nav-user-btn');
+  if (!menu) return;
+  const open = force !== undefined ? force : menu.hidden;
+  menu.hidden = !open;
+  if (btn) btn.setAttribute('aria-expanded', String(open));
+}
+window.toggleUserMenu = toggleUserMenu;
+
+function userMenuGo(page, tab) {
+  toggleUserMenu(false);
+  if (tab && typeof navigateTo === 'function') navigateTo(page, tab);
+  else navigate(page);
+}
+window.userMenuGo = userMenuGo;
+
+/* 메뉴 밖을 누르면 닫는다(아이콘·메뉴 안쪽 클릭은 제외). */
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('nav-user');
+  const menu = document.getElementById('nav-user-menu');
+  if (menu && !menu.hidden && wrap && !wrap.contains(e.target)) toggleUserMenu(false);
+});
 
 // ── Boot ─────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async () => {

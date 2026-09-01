@@ -29,7 +29,10 @@ const base = {
 };
 
 /* ── P.C.R.O 네 조각이 다 들어가야 한다 ─────────────────────── */
+/* p 는 정성스펙을 안 고른(0개) 프롬프트다 — 이제 STAR 를 강요하지 않는다(2026-08-31).
+   STAR 규칙(4·10~14·starRules)은 경험을 고른 pS 에서만 검사한다. */
 const p = DRAFT.buildPrompt(base);
+const pS = DRAFT.buildPrompt({ ...base, star: { S: '상황을 적음', T: '과제를 적음', A: '행동을 적음', R: '결과 수치를 적음' } });
 ok('Context / Restriction / Output 세 구획을 만든다',
    p.includes('# Context') && p.includes('# Restriction') && p.includes('# Output'));
 ok('Persona 는 시스템 프롬프트가 맡는다 (인사담당자 + 현업)',
@@ -59,17 +62,21 @@ ok('시스템 프롬프트도 지어내기를 막는다',
 ok('상투어 금지 목록을 cover-guide 사전에서 가져온다',
    p.includes(GUIDE.CLICHES[0].term) && p.includes(GUIDE.CLICHES[1].term));
 ok('AI 흔적 표현도 같은 사전에서 가져온다', p.includes(GUIDE.AI_TELLS[0].term));
-ok('STAR 네 단계를 제약으로 넣는다',
-   GUIDE.STAR.every(s => p.includes(s.label)));
+ok('STAR 네 단계를 제약으로 넣는다 (경험을 고른 경우)',
+   GUIDE.STAR.every(s => pS.includes(s.label)));
 ok('역량 이름을 문장에 그대로 쓰지 말라고 막는다', /역량 이름/.test(p));
 ok('글자수 제한을 넘긴다', p.includes('700자'));
 /* 실측으로 대괄호 안에 일본어가 섞여 나온 적이 있다(‘[どこ에서]’). 그대로 제출되면 사고다. */
 ok('한국어로만 쓰라는 제약이 있다', /한국어로만/.test(p));
 
-/* 활동이 없으면 '없음'을 지어내는 대신 전부 빈칸으로 돌린다 */
-const noAct = DRAFT.buildPrompt({ ...base, activities: [] });
-ok('활동이 없으면 활동 자리까지 대괄호로 남기라고 한다',
-   /활동 정보가 없다/.test(noAct) && /전부 대괄호/.test(noAct));
+/* ── 정성스펙을 안 고르면(0개) 활동을 끌어들이지 않는다 (사용자 지적 2026-09-01) ──
+   예전에는 안 골라도 활동 전체를 프롬프트에 실어, 모델이 그 활동으로 [과제명]·[개선 기간]
+   빈칸을 지어내 성취담을 만들었다(지원동기·포부에 안 고른 스펙이 섞임). 안 골랐으면 활동을
+   아예 주지 않고 골격으로 쓴다. base 는 picks·star 가 없으므로 p 가 곧 '안 고른' 경우다. */
+ok('정성스펙을 안 고르면 활동 목록을 넣지 않는다',
+   !p.includes('교내 마케팅 공모전') && !p.includes('지원자가 실제로 한 활동'));
+ok('정성스펙을 안 고르면 골격에 맞춰 쓰고 비우라고 한다',
+   /정성스펙\)을 고르지 않았다/.test(p) && /지어내지 말고 대괄호로 비운다/.test(p));
 
 ok('빈 필드는 아예 넣지 않는다 (모델이 "없음"을 문장에 쓰지 않게)',
    !DRAFT.buildPrompt({ ...base, jobTitle: '', question: '' }).includes('지원 직무:'));
@@ -82,7 +89,8 @@ ok('활동은 항목 이름을 붙여 넘긴다',
    `→ ${DRAFT.activityLine(base.activities[0])}`);
 ok('결과물이 비어 있는 활동은 그 항목만 빠진다',
    DRAFT.activityLine(base.activities[1]) === '이름: 학생회 회계 / 종류: 교내활동 / 기간: 6개월 / 역할: 회계');
-ok('활동 이름을 문단에 그대로 쓰라고 못 박는다', /"교내 마케팅 공모전"/.test(p));
+/* 경험을 고르면(pS 는 star 가 있어 hasStar) 그 활동 이름을 문단에 그대로 쓰라고 못 박는다. */
+ok('고른 경험이 있으면 활동 이름을 그대로 쓰라고 못 박는다', /"교내 마케팅 공모전"/.test(pS));
 
 /* ── 응답 정리 ──────────────────────────────────────────────── */
 const good = DRAFT.parseDraft(`설명입니다.
@@ -152,19 +160,21 @@ ok('STAR 가 있으면 활동 목록은 참고로 내린다',
 const pEmpty = DRAFT.buildPrompt({ ...base, star: { S: '   ', T: '', A: '', R: '' } });
 ok('빈 칸만 있는 STAR 는 없는 것으로 본다', !pEmpty.includes('유일한 사실'));
 
-ok('STAR 없이도 예전처럼 동작한다',
-   DRAFT.buildPrompt(base).includes('이 중 하나를 골라'));
+/* 정성스펙을 안 고른(0개) 문항은 STAR 를 강요하지 않는다(사용자 지시 2026-08-31) —
+   지원동기·포부에 성취담 STAR 가 나오던 문제를 여기서 끊는다. */
+ok('정성스펙을 안 고르면 STAR 를 강요하지 않는다',
+   p.includes('특정 경험(STAR)을 고르지 않았다') && p.includes('성취담으로 억지로 만들지 마라'));
 
 console.log('\n── 두루뭉술한 문단을 막는 규칙 ──');
 /* 사용자 지적: "노력했고 잘 마무리했습니다" 류가 나왔다. 막으려는 것은 문체가 아니라
    정보의 부재라, 셀 수 있는 조건으로 적어야 모델이 지켰는지 스스로 판정할 수 있다. */
-ok('행동에 시도를 두 가지 이상 쓰라고 못 박는다', p.includes('시도를 두 가지 이상'));
-ok('첫 시도가 왜 막혔는지를 요구한다', p.includes('통하지 않았는지'));
-ok('문제의 "왜" 까지 요구한다', p.includes('어떻게 됐는지'));
-ok('결과가 성공이 아니어도 된다고 알려준다', p.includes('성공이 아니어도'));
+ok('행동에 시도를 두 가지 이상 쓰라고 못 박는다', pS.includes('시도를 두 가지 이상'));
+ok('첫 시도가 왜 막혔는지를 요구한다', pS.includes('통하지 않았는지'));
+ok('문제의 "왜" 까지 요구한다', pS.includes('어떻게 됐는지'));
+ok('결과가 성공이 아니어도 된다고 알려준다', pS.includes('성공이 아니어도'));
 ok('"노력했습니다" 류를 금지한다',
    p.includes('노력했습니다') && p.includes('잘 마무리했습니다'));
-ok('실제로 나왔던 나쁜 문단을 예로 박아 둔다', p.includes('소통을 하려고 노력했고'));
+ok('실제로 나왔던 나쁜 문단을 예로 박아 둔다', pS.includes('소통을 하려고 노력했고'));
 
 console.log('\n── 고친 예(good)는 프롬프트에 넣지 않는다 ──');
 /* 실측: good 을 넣었더니 모델이 그것을 양식이 아니라 내용으로 읽고 통째로 베꼈다.
@@ -172,8 +182,8 @@ console.log('\n── 고친 예(good)는 프롬프트에 넣지 않는다 ─�
 const goodS = GUIDE.starWrite('S').good;
 ok('good 문장이 프롬프트에 없다', !p.includes(goodS),
    '넣으면 모델이 베껴서 없는 사건을 지어낸다');
-ok('대신 bad 는 넣는다 (베껴도 다른 규칙에 걸린다)', p.includes(GUIDE.starWrite('S').bad));
-ok('must(갖춰야 할 조건)를 넣는다', p.includes(GUIDE.starWrite('A').must[0]));
+ok('대신 bad 는 넣는다 (베껴도 다른 규칙에 걸린다)', pS.includes(GUIDE.starWrite('S').bad));
+ok('must(갖춰야 할 조건)를 넣는다', pS.includes(GUIDE.starWrite('A').must[0]));
 
 console.log('\n── 예시를 베꼈는지 검사 ──');
 ok('예시를 그대로 베끼면 잡는다', DRAFT.copiedFromExample(goodS) !== null);
@@ -238,11 +248,12 @@ const EV = [
   { kind: 'fact', text: '매출액 5,986억원 · 전년비 −6.9%', source: '2025년 사업보고서' },
   { kind: 'news', text: '항균 도료 신제품 출시', source: '2026-05-12 · example.com' },
 ];
-const ACTS = [{ name: '커머스 데이터 인턴', typeLabel: '인턴십', duration: '3개월', role: '데이터 분석' }];
+/* 지원동기도 '고른 정성스펙(0~3개)' 을 재료로 받는다(2026-09-01). 안 고르면 회사 근거만으로 쓴다. */
+const PICKS = [{ name: '커머스 데이터 인턴', star: { S: '상황을 적음', T: '과제를 적음', A: '행동을 적음', R: '결과 수치를 적음' } }];
 const pM = DRAFT.buildMotivePrompt({
   company: '강남제비스코', jobTitle: '백엔드 개발자',
   question: '지원 동기와 입사 후 포부를 기술해 주십시오.',
-  evidence: EV, activities: ACTS, limit: 600,
+  evidence: EV, picks: PICKS, limit: 600,
 });
 
 ok('회사와 문항이 들어간다', pM.includes('강남제비스코') && pM.includes('입사 후 포부'));
@@ -264,7 +275,7 @@ ok('근거를 그대로 녹이라고 못 박는다', pM.includes('대괄호로 �
 ok('빈칸 최소 한 개를 요구한다', pM.includes('최소 한 곳을 반드시 대괄호로 비운다'));
 ok('빈칸 상한도 그대로 있다', pM.includes('최대 4개'));
 ok('근거 밖의 회사 사실을 금지한다', pM.includes('유일한 사실') && pM.includes('한 줄도 만들지 마라'));
-ok('내 활동도 같이 넣는다', pM.includes('커머스 데이터 인턴'));
+ok('고른 경험(STAR)을 재료로 넣는다', pM.includes('커머스 데이터 인턴') && pM.includes('결과 수치를 적음'));
 
 /* 지원동기가 무너지는 자리는 늘 같다 — 어느 회사에나 붙는 문장이다. */
 ok('일반론으로 시작하지 말라고 적는다', pM.includes('어느 회사에나'));
@@ -281,9 +292,16 @@ ok('규칙 번호가 1부터 이어진다',
 
 /* 근거가 없으면 프롬프트 안에서도 '지어내지 말라' 가 유지돼야 한다. 라우트가
    400 으로 막지만, 프롬프트 자체가 안전한 편이 낫다. */
-const pMEmpty = DRAFT.buildMotivePrompt({ company: '카카오', evidence: [], activities: [], limit: 600 });
+const pMEmpty = DRAFT.buildMotivePrompt({ company: '카카오', evidence: [], picks: [], limit: 600 });
 ok('근거가 없으면 전부 비우라고 한다', pMEmpty.includes('전부 대괄호로 비워라'));
-ok('활동도 없으면 그것도 비우라고 한다', pMEmpty.includes('지원자 경험 자리도 전부 대괄호'));
+/* 정성스펙을 안 고르면 활동 이름을 지어내지 말고 [관련 경험]으로 비우라고 한다. */
+ok('정성스펙을 안 고르면 경험을 지어내지 말라고 한다',
+   pMEmpty.includes('지어내지 마라') && pMEmpty.includes('[관련 경험]'));
+/* 안 고른 활동이 지원동기에 섞여 나오던 문제 — 고른 경험 블록이 없어야 한다. */
+const pMNoPick = DRAFT.buildMotivePrompt({
+  company: '강남제비스코', evidence: EV, picks: [], limit: 600,
+});
+ok('안 골랐으면 고른 경험 블록을 넣지 않는다', !pMNoPick.includes('고른 경험(STAR)'));
 
 /* 사업보고서 문단은 수천 자다. 프롬프트가 길어지면 뒤쪽 Restriction 이 밀려서
    지어내기 금지 규칙이 잘린다 — 자르는 것은 라우트의 일이지만, 잘린 값이 들어와도

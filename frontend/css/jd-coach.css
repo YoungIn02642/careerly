@@ -20,7 +20,11 @@
    → 라이선스 폰트가 들어오면 이 두 줄만 바꾸면 된다.
    ════════════════════════════════════════════════════════════ */
 
-#page-company, #page-jd {
+/* 자소서 코치 팔레트. 작성 화면(#page-write)·보관함 모달 카드(#drafts-modal .modal)도
+   같은 토큰을 쓰므로 여기에 함께 건다 — 이 둘은 #page-jd 밖이라, 안 걸면 var(--wf-*) 가
+   전부 미정의(테두리는 검게, 빨강은 투명)로 깨진다. 모달은 **카드(.modal)** 에만 걸어
+   오버레이의 반투명 어둠 배경을 덮지 않는다. */
+#page-company, #page-jd, #page-write, #drafts-modal .modal {
   /* ── 잉크 ── */
   --wf-ink:        #080808;
   --wf-ink-strong: #222222;
@@ -232,6 +236,33 @@ a.wf-btn { text-decoration: none; }
 .co-tile-h b { font-size: 16px; font-weight: 500; color: var(--wf-ink); }
 .co-tile-sub { font-size: 13px; color: var(--wf-mute); }
 .co-tile-foot { display: flex; align-items: center; gap: 8px; margin-top: auto; }
+/* 회사 카드의 기업 규모 배지 — 이름만으로는 고를 근거가 없어 최소 정보로 규모를 단다. */
+.co-tile-tag {
+  padding: 1px 7px; border-radius: 5px; font-size: 11px; font-weight: 600; line-height: 1.7;
+  background: var(--wf-fill); color: var(--wf-mute);
+}
+.co-tile-tag--large { background: color-mix(in srgb, var(--wf-purple, #7a3dff) 12%, transparent); color: var(--wf-purple, #7a3dff); }
+.co-tile-tag--public { background: color-mix(in srgb, var(--wf-blue, #3b89ff) 12%, transparent); color: var(--wf-blue, #3b89ff); }
+.co-tile-tag--mid {
+  background: color-mix(in srgb, var(--wf-orange, #ff6b00) 12%, transparent);
+  color: color-mix(in srgb, var(--wf-orange, #ff6b00) 78%, #000);
+}
+.co-tile-tag--small, .co-tile-tag--unknown { background: var(--wf-fill); color: var(--wf-mute); }
+
+/* '고른 업종 회사' 페이지 넘김 */
+.co-pager { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 16px; flex-wrap: wrap; }
+.co-pager-nums { display: inline-flex; align-items: center; gap: 4px; }
+.co-page {
+  min-width: 32px; height: 32px; padding: 0 8px; border-radius: 8px;
+  border: 1px solid var(--wf-hairline); background: var(--wf-canvas);
+  font: inherit; font-size: 13px; color: var(--wf-body); cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.co-page:hover:not(:disabled) { border-color: var(--wf-ink); color: var(--wf-ink); }
+.co-page.is-on { background: var(--wf-ink); border-color: var(--wf-ink); color: var(--wf-canvas); font-weight: 600; }
+.co-page:disabled { opacity: .4; cursor: default; }
+.co-page--nav { color: var(--wf-mute); }
+.co-page-gap { padding: 0 2px; color: var(--wf-mute); }
 
 /* ── 상태 2 · 기업 리포트 ────────────────────────────────── */
 .co-report { display: grid; grid-template-columns: 248px minmax(0, 1fr); align-items: start; }
@@ -1096,6 +1127,53 @@ a.wf-btn { text-decoration: none; }
 .jd-ss-empty { margin: 10px 0 0; font-size: 13px; color: var(--wf-mute); }
 .jd-ss-ready { margin: 8px 0 0; font-size: 13px; color: var(--wf-ok, #00a83a); }
 .jd-ss-ready b { font-weight: 700; }
+
+/* ── 정성스펙 STAR 카드 — 역량 분석 전에 활동마다 STAR 를 적는다 (2026-09-01) ─────── */
+.jd-ss-h p { margin: 4px 0 0; font-size: 13px; line-height: 1.6; color: var(--wf-body-mid); }
+.jd-ss-h p .co-src { display: block; margin-top: 2px; }
+.jd-ss-cards { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
+.jd-ss-card { border: 1px solid var(--wf-hairline); border-radius: 10px; overflow: hidden; }
+.jd-ss-card-h {
+  display: flex; align-items: center; gap: 10px; padding: 11px 14px; width: 100%;
+  background: var(--wf-fill); border: none; border-radius: 10px;
+  font: inherit; text-align: left; cursor: pointer;
+  transition: background .15s;
+}
+.jd-ss-card-h:hover { background: var(--wf-fill-strong, var(--wf-fill)); }
+.jd-ss-card.is-open .jd-ss-card-h { border-bottom: 1px solid var(--wf-hairline); border-radius: 10px 10px 0 0; }
+.jd-ss-caret {
+  flex: none; font-size: 16px; color: var(--wf-mute);
+  transition: transform .18s ease;
+}
+.jd-ss-card.is-open .jd-ss-caret { transform: rotate(180deg); }
+.jd-ss-card-t { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.jd-ss-card-t b { font-size: 14px; font-weight: 600; color: var(--wf-ink); }
+.jd-ss-card-t small { font-size: 12px; color: var(--wf-mute); }
+.jd-ss-count {
+  margin-left: auto; flex: none; font-family: var(--font-code); font-size: 11.5px;
+  padding: 2px 8px; border-radius: 999px; background: var(--wf-canvas);
+  border: 1px solid var(--wf-hairline); color: var(--wf-mute);
+}
+.jd-ss-count.is-part { color: var(--wf-warn); border-color: var(--wf-warn); }
+.jd-ss-count.is-ok { color: var(--wf-ok); border-color: var(--wf-ok); }
+.jd-ss-star { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 14px; }
+.jd-ss-cell { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.jd-ss-tag { font-size: 11.5px; font-weight: 700; color: var(--wf-body-mid); }
+.jd-ss-in {
+  width: 100%; padding: 9px 11px; box-sizing: border-box; resize: none; overflow: hidden;
+  border: 1px solid var(--wf-hairline); border-radius: 8px; background: var(--wf-canvas);
+  font: inherit; font-size: 13px; line-height: 1.55; color: var(--wf-ink); min-height: 40px;
+}
+.jd-ss-in:focus { outline: none; border-color: var(--wf-ink); }
+.jd-ss-in::placeholder { color: var(--wf-mute-soft); }
+.jd-ss-foot {
+  display: flex; align-items: center; gap: 10px; padding: 0 14px 14px;
+  justify-content: flex-end;
+}
+.jd-ss-state { margin-right: auto; font-size: 12.5px; color: var(--wf-mute); }
+@media (max-width: 560px) {
+  .jd-ss-star { grid-template-columns: 1fr; }
+}
 /* ── 정성스펙 카드 (하나 또는 여럿 고른다) ─────────────────────────
    안 고른 카드는 한 줄, 고른 카드만 STAR 칸이 펼쳐진다. 전부 펼쳐 두면 활동 수만큼
    화면이 길어져서 '무엇을 골랐는지' 가 안 보인다. */
@@ -1772,20 +1850,21 @@ a.wf-btn { text-decoration: none; }
 }
 .dr-company b { font-size: 15px; font-weight: 500; color: var(--wf-ink); }
 .dr-company .wf-btn { margin-left: auto; }
+/* 즐겨찾기는 **자소서(회사) 단위**라 별을 회사 머리에 둔다(2026-09-01). */
+.dr-fav {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border: 0; border-radius: 8px; background: transparent;
+  cursor: pointer; color: var(--wf-mute-soft); font-size: 17px;
+  transition: color .15s;
+}
+.dr-fav:hover { color: var(--wf-warn, #ffae13); }
+.dr-company.is-fav .dr-fav { color: var(--wf-warn, #ffae13); }
 
 .dr-item { border-bottom: 1px solid var(--wf-hairline); }
 .dr-item:last-child { border-bottom: 0; }
 .dr-item-h { display: flex; align-items: stretch; }
-/* 즐겨찾기는 글을 여는 것과 **다른 일**이라 버튼을 따로 둔다 — 한 버튼 안에 넣으면
-   별을 누르려다 글이 열린다. */
-.dr-fav {
-  flex: none; width: 42px; border: 0; background: transparent; cursor: pointer;
-  color: var(--wf-mute-soft); font-size: 16px;
-}
-.dr-fav:hover { color: var(--wf-warn, #ffae13); }
-.dr-item.is-fav .dr-fav { color: var(--wf-warn, #ffae13); }
 .dr-open {
-  display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; padding: 11px 14px 11px 0;
+  display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; padding: 11px 14px;
   border: 0; background: transparent; font: inherit; text-align: left; cursor: pointer;
 }
 .dr-open:hover { background: var(--wf-fill); }
@@ -1793,7 +1872,7 @@ a.wf-btn { text-decoration: none; }
 .dr-meta { margin-left: auto; font-family: var(--font-code); font-size: 11px; color: var(--wf-mute); }
 .dr-chev { transition: transform .15s ease; color: var(--wf-mute); }
 .dr-item.is-open .dr-chev { transform: rotate(180deg); }
-.dr-body { padding: 0 14px 14px 42px; }
+.dr-body { padding: 0 14px 14px; }
 .dr-text {
   margin: 0; padding: 13px 15px; border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-md);
   background: var(--wf-canvas); font-family: inherit; font-size: 14px; line-height: 1.9;
@@ -1815,4 +1894,246 @@ a.wf-btn { text-decoration: none; }
 @media (max-width: 560px) {
   .dr-body { padding-left: 14px; }
   .dr-meta { margin-left: 0; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   레퍼런스 A 적용 — 요구역량(좁은 목록+상세) · 초안 영역(큰 탭·큰 제목·정성스펙 칩)
+   (사용자 선택 2026-09-01)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── 왼쪽: 요구 역량 (압축 목록) ── */
+.jd-reqs { display: flex; flex-direction: column; padding: 16px 14px; }
+.jd-reqs-h { display: flex; align-items: baseline; gap: 8px; margin-bottom: 3px; }
+.jd-reqs-h b { font-size: 16px; font-weight: 700; color: var(--wf-ink); }
+.jd-reqs-n { font-family: var(--font-num, var(--font)); font-size: 15px; font-weight: 800; color: #6d3aff; }
+.jd-reqs-sub { margin-left: auto; font-size: 11.5px; color: var(--wf-mute); }
+.jd-reqs-list { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; }
+.jd-req {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 9px 10px; border: 0; border-radius: 8px; background: transparent;
+  font-family: var(--font); cursor: pointer; text-align: left;
+}
+.jd-req:hover { background: var(--wf-fill, #f6f6f4); }
+.jd-req.is-on { background: #f0ebff; }
+.jd-req-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.jd-req-dot.is-ok { background: #22a06b; }
+.jd-req-dot.is-gap { background: #e2564d; }
+.jd-req-name { flex: 1; font-size: 13.5px; font-weight: 600; color: var(--wf-ink); }
+.jd-req.is-on .jd-req-name { font-weight: 700; }
+.jd-req-q { font-size: 10.5px; color: var(--wf-mute); background: var(--wf-fill, #f0f0f2); border-radius: 5px; padding: 1px 6px; }
+.jd-req-n { font-family: var(--font-num, var(--font)); font-size: 11px; font-weight: 800; color: #6d3aff; }
+
+/* 고른 역량 상세 */
+.jd-req-detail { margin-top: 12px; padding: 14px; border: 1px solid var(--wf-hairline); border-radius: 10px; background: var(--wf-canvas); }
+.jd-req-detail-h { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
+.jd-req-detail-h b { font-size: 15px; font-weight: 700; }
+.jd-req-detail-n { margin-left: auto; font-family: var(--font-num, var(--font)); font-size: 11px; font-weight: 800; color: #6d3aff; }
+.jd-req-quote { font-size: 12.5px; line-height: 1.55; color: var(--wf-body-mid); background: var(--wf-fill, #f6f6f4); border-radius: 7px; padding: 8px 10px; margin-bottom: 9px; }
+.jd-req-reads { font-size: 12.5px; line-height: 1.6; color: var(--wf-body-mid); margin: 0 0 11px; }
+.jd-req-frame .wf-eyebrow { display: block; margin-bottom: 6px; }
+
+/* ── 오른쪽: 초안 영역 (레퍼런스 A) ── */
+/* 큰 문항 탭 */
+.jd-qtabs { gap: 7px; padding: 16px 20px 0; border-bottom: 0; }
+.jd-qtab {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 9px 15px; border: 0; border-radius: 9px; background: var(--wf-fill, #f4f5f7);
+  font-family: var(--font); font-size: 14px; font-weight: 700; color: var(--wf-body-mid); cursor: pointer;
+}
+.jd-qtab:hover { color: var(--wf-ink); }
+.jd-qtab.is-on { background: #080808; color: #fff; border-bottom: 0; }
+.jd-qtab .jd-qtab-n { font-family: var(--font-num, var(--font)); font-size: 11px; font-weight: 800; opacity: .7; margin: 0; }
+
+/* 문항 머리(큰 제목) */
+.jd-qhead { padding: 18px 20px 14px; border-bottom: 1px solid var(--wf-hairline); background: var(--wf-canvas); }
+.jd-qhead .jd-qprompt-q { font-size: 21px; line-height: 1.4; font-weight: 800; color: var(--wf-ink); }
+.jd-qhead .jd-qprompt-how { margin-top: 6px; font-size: 12.5px; color: var(--wf-mute); }
+
+/* 정성스펙 칩 한 줄 */
+.jd-dspec { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-top: 14px; }
+.jd-dspec-lab { font-size: 12px; font-weight: 700; color: var(--wf-mute); }
+.jd-dspec-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 11px; border-radius: 999px; border: 1px dashed #d0d0d8; background: transparent;
+  font-family: var(--font); font-size: 12.5px; font-weight: 700; color: var(--wf-mute); cursor: pointer;
+}
+.jd-dspec-chip:hover { border-color: #b9b9c2; color: var(--wf-body-mid); }
+.jd-dspec-chip.is-on { border-style: solid; border-color: #6d3aff; background: #f0ebff; color: #5a26e8; }
+.jd-dspec-chip[disabled] { opacity: .45; cursor: default; }
+.jd-dspec-chip i { font-size: 13px; }
+.jd-dspec-note { font-size: 11px; color: #b3b3bd; }
+
+/* 맥락 줄(AI 초안 기준 역량) */
+.jd-qctx { margin-top: 12px; font-size: 12.5px; color: var(--wf-body-mid); }
+.jd-qctx b { color: var(--wf-ink); font-weight: 800; }
+.jd-qctx-sub { color: var(--wf-mute); }
+.jd-qctx-warn { color: #a15c00; font-weight: 600; display: inline-flex; align-items: center; gap: 5px; }
+.jd-motive-btn { margin-top: 12px; }
+
+/* 초안 에디터 — 크게, 여백 최소 */
+.jd-draft-editor { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.jd-draft-editor .jd-draft-h { padding: 12px 20px; border-bottom: 1px solid var(--wf-hairline); }
+.jd-draft-editor .jd-draft-h b { font-size: 15px; font-weight: 800; color: var(--wf-ink); }
+.jd-draft-editor .jd-draft-wrap { flex: 1; }
+.jd-draft-editor .jd-draft-text { padding: 18px 20px; font-size: 14.5px; line-height: 1.9; min-height: 300px; }
+.jd-draft-editor .jd-draft-foot { padding: 10px 20px; }
+
+/* ══ 자소서 불러오기 모달 (내 자소서 보관함) — 2026-09-01 ═══════════════
+   페이지(#drafts)를 모달로 바꿨다. 목록·검색·이어쓰기가 한눈에 들어오게 넓게 두고,
+   본문은 스크롤. 안쪽 .dr-* 목록 스타일은 main.css 것을 그대로 쓴다. */
+#drafts-modal .modal { max-width: 720px; }
+#drafts-modal .modal-body { max-height: min(70vh, 640px); overflow-y: auto; }
+.modal--wide { max-width: 720px; }
+
+/* 모달 안에서는 회사마다 **또렷한 카드**로 나눈다(사용자 지시 2026-09-01) — 목록이 한 판에
+   흐르면 어디까지가 한 회사인지 안 보인다. 카드 사이 간격·그림자·머리 띠로 경계를 세운다. */
+#drafts-modal .dr-list { gap: 16px; }
+#drafts-modal .dr-group {
+  border: 1px solid var(--wf-hairline); border-radius: 14px; overflow: hidden;
+  background: var(--wf-canvas); box-shadow: 0 1px 3px rgba(26, 24, 20, .06);
+}
+#drafts-modal .dr-company { padding: 13px 16px; background: var(--wf-fill); }
+#drafts-modal .dr-company b { font-size: 15px; font-weight: 700; }
+/* 회사 안의 문항은 옅은 줄로 나눈다(카드 테두리와 굵기를 달리해 층위를 만든다). */
+#drafts-modal .dr-item { border-bottom-color: var(--wf-hairline-soft); }
+#drafts-modal .dr-open { padding-top: 13px; padding-bottom: 13px; }
+
+/* 문항 미리보기(펼침) — 50자까지 한 줄로. 이어쓰기·복사 버튼과 같이 뜬다. */
+#drafts-modal .dr-preview {
+  margin: 0 0 10px; font-size: 13px; line-height: 1.6; color: var(--wf-body-mid);
+  white-space: normal; word-break: break-word;
+}
+#drafts-modal .dr-empty-in { color: var(--wf-mute); font-style: italic; }
+
+/* ── 삭제(선택) 모드 — 자소서(회사) 통째 선택 (2026-09-01) ────────────────
+   '삭제'를 켜면 **회사 머리**가 체크박스가 되어 그 자소서를 통째로 고른다.
+   문항은 어떤 글인지 알아볼 수 있게 라벨만 읽기전용으로 남는다. */
+#drafts-modal .dr-selbtn.is-on { border-color: var(--wf-error); color: var(--wf-error); }
+#drafts-modal .dr-selhint { margin: 12px 2px 0; font-size: 12.8px; color: var(--wf-mute); }
+#drafts-modal .dr-selhint b { color: var(--wf-ink); font-weight: 700; }
+
+#drafts-modal .dr-group.is-checked {
+  border-color: var(--wf-error);
+  box-shadow: 0 0 0 1px var(--wf-error), 0 1px 3px rgba(26, 24, 20, .06);
+}
+#drafts-modal .dr-company--pick {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 13px 16px; border: 0; background: var(--wf-fill);
+  font: inherit; text-align: left; cursor: pointer;
+}
+#drafts-modal .dr-company--pick:hover { background: color-mix(in srgb, var(--wf-error) 6%, var(--wf-fill)); }
+#drafts-modal .dr-company--pick b { font-size: 15px; font-weight: 700; color: var(--wf-ink); }
+#drafts-modal .dr-check {
+  flex: none; width: 22px; display: flex; align-items: center; justify-content: center;
+  font-size: 19px; color: var(--wf-mute-soft);
+}
+#drafts-modal .dr-group.is-checked .dr-check { color: var(--wf-error); }
+#drafts-modal .dr-group.is-checked .dr-company--pick { background: color-mix(in srgb, var(--wf-error) 7%, transparent); }
+
+/* 삭제 모드의 문항 — 읽기전용 라벨 줄 */
+#drafts-modal .dr-item--ro .dr-open--static {
+  display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;
+  padding: 11px 16px;
+}
+#drafts-modal .dr-item--ro b { font-size: 13.5px; font-weight: 500; color: var(--wf-body); }
+#drafts-modal .dr-item--ro .dr-meta { margin-left: auto; }
+
+#drafts-modal .dr-selbar {
+  position: sticky; bottom: -24px; z-index: 2; display: flex; align-items: center; gap: 8px;
+  margin: 16px -24px -24px; padding: 14px 24px; background: var(--wf-canvas);
+  border-top: 1px solid var(--wf-hairline);
+}
+#drafts-modal .dr-selbar-sp { flex: 1; }
+#drafts-modal .dr-selbar .dr-del {
+  background: var(--wf-error); border-color: var(--wf-error); color: #fff;
+}
+#drafts-modal .dr-selbar .dr-del:hover { filter: brightness(.93); color: #fff; border-color: var(--wf-error); }
+#drafts-modal .dr-selbar .dr-del[disabled] { opacity: .45; cursor: not-allowed; filter: none; }
+
+/* ══ 자소서 작성 화면 (#write) — 왼쪽 관리 · 가운데 에디터 · 오른쪽 역량 참고 ══════
+   에디터(.jd-draft-pane)·역량 목록(.jd-reqs)은 분석 화면과 같은 부품을 재사용한다.
+   여기서는 3단 틀과 왼쪽 관리 사이드바만 새로 그린다. */
+.write-shell {
+  max-width: 1400px; margin: 0 auto; padding: 20px clamp(16px, 2.6vw, 28px) 72px;
+  display: grid; grid-template-columns: 216px minmax(0, 1fr) minmax(0, 380px);
+  gap: 18px; align-items: start;
+}
+
+/* 왼쪽: 자소서 관리 */
+.write-side {
+  position: sticky; top: 64px; align-self: start;
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 16px; border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-md);
+  background: var(--wf-canvas);
+}
+.write-back {
+  display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
+  padding: 6px 10px; border: 1px solid var(--wf-hairline); border-radius: 999px;
+  background: #fff; font: inherit; font-size: 12.8px; font-weight: 600; color: var(--wf-body);
+  cursor: pointer;
+}
+.write-back:hover { border-color: var(--wf-ink); color: var(--wf-ink); }
+.write-side-doc { display: flex; flex-direction: column; gap: 3px; padding: 2px 0; }
+.write-side-doc .wf-eyebrow { margin: 0; }
+.write-side-doc b { font-size: 16px; font-weight: 700; color: var(--wf-ink); word-break: break-all; }
+.write-side-acts { display: flex; flex-direction: column; gap: 4px; }
+.write-side-b {
+  display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+  padding: 10px 11px; border: 0; border-radius: 9px; background: transparent;
+  font: inherit; font-size: 13.5px; font-weight: 600; color: var(--wf-body); cursor: pointer;
+}
+.write-side-b i { font-size: 16px; color: var(--wf-mute); }
+.write-side-b:hover { background: var(--wf-fill); color: var(--wf-ink); }
+.write-side-b:hover i { color: var(--wf-ink); }
+.write-side-note { margin: 4px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--wf-mute); }
+
+/* 가운데: 에디터. draftHtml 이 그린 .jd-draft-pane 을 카드로 감싼다. */
+.write-main {
+  border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-md);
+  background: #fff; overflow: hidden; min-width: 0;
+}
+.write-main .jd-draft-pane { position: static; max-height: none; }
+
+/* 오른쪽: 요구 역량 참고 */
+.write-ref {
+  position: sticky; top: 64px; align-self: start; min-width: 0;
+  border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-md);
+  background: var(--wf-canvas); overflow: hidden;
+  max-height: calc(100vh - 84px); overflow-y: auto;
+}
+.write-ref-empty {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  gap: 8px; padding: 32px 20px;
+}
+.write-ref-empty i { font-size: 28px; color: var(--wf-mute-soft); }
+.write-ref-empty b { font-size: 14.5px; font-weight: 700; color: var(--wf-ink); }
+.write-ref-empty p { font-size: 12.8px; line-height: 1.6; color: var(--wf-mute); }
+.write-ref-empty .wf-btn { margin-top: 4px; }
+
+/* 분석 결과 오른쪽 '작성하러 가기' 안내 (writeCtaHtml) */
+.jd-wcta { justify-content: center; }
+.jd-wcta-in { display: flex; flex-direction: column; gap: 12px; padding: 24px 22px; }
+.jd-wcta-in .wf-eyebrow { margin: 0; }
+.jd-wcta-in h3 { font-size: 18px; font-weight: 700; color: var(--wf-ink); }
+.jd-wcta-in > p { font-size: 13px; line-height: 1.65; color: var(--wf-body-mid); }
+.jd-wcta-list {
+  display: flex; flex-direction: column; gap: 2px; margin: 2px 0 4px;
+  border: 1px solid var(--wf-hairline); border-radius: 10px; overflow: hidden;
+}
+.jd-wcta-row {
+  display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+  background: var(--wf-canvas); font-size: 12.8px;
+}
+.jd-wcta-row + .jd-wcta-row { border-top: 1px solid var(--wf-hairline); }
+.jd-wcta-row-t { flex: 1; min-width: 0; color: var(--wf-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jd-wcta-row-n { flex: none; font-family: var(--font-code); font-size: 11.5px; color: var(--wf-mute); }
+
+@media (max-width: 1080px) {
+  .write-shell { grid-template-columns: 1fr; }
+  .write-side, .write-ref { position: static; max-height: none; }
+  .write-side-acts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .write-side-b { justify-content: center; }
+}
+@media (max-width: 560px) {
+  .write-side-acts { grid-template-columns: 1fr; }
 }

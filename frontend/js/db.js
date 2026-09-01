@@ -282,10 +282,19 @@ window.DB = (() => {
   /* star 는 사용자가 STAR 입력칸에 직접 쓴 { S, T, A, R } 이다. 활동 목록은 분류일 뿐
      '무슨 일이 있었는지' 를 담지 못해서, 그게 없으면 모델이 빈자리를 관용구로 메운다. */
   async function draftJd({ competency, company = '', jobTitle = '', question = '',
-                           quotes = [], reads = '', frame = '', limit = 600, star = null } = {}) {
+                           quotes = [], reads = '', frame = '', limit = 600, star = null, picks = null } = {}) {
+    /* 활동 목록은 고른 경험이 있을 때만 함께 보낸다 — 안 골랐는데 보내면 서버 프롬프트가
+       그 활동을 끌어다 성취담을 지어냈다(사용자 지적 2026-09-01). 서버도 hasStar 로 한 번
+       더 거르지만, 안 보내면 프롬프트가 짧아지고 의도도 분명해진다. */
+    const hasExp = (Array.isArray(picks) && picks.length > 0)
+      || (star && Object.keys(star).length > 0);
     return api('POST', '/api/jd/draft', {
-      competency, company, jobTitle, question, quotes, reads, frame, limit, star,
-      activities: _mySpec?.activities || [],
+      competency, company, jobTitle, question, quotes, reads, frame, limit,
+      /* 문항마다 고른 정성스펙(0~3개)의 {name, star}. 0개면 서버가 STAR 없이 쓴다.
+         star(단일)는 옛 호환용으로 남긴다(picks 가 있으면 서버가 그쪽을 쓴다). */
+      picks: Array.isArray(picks) ? picks : undefined,
+      star,
+      activities: hasExp ? (_mySpec?.activities || []) : [],
     });
   }
 
@@ -299,10 +308,12 @@ window.DB = (() => {
      draftJd 와 나눠 둔 이유는 서버와 같다(routes/jdCoach.js /motive 주석):
      증명 대상이 내 경험이 아니라 "왜 이 회사인가" 라 프롬프트가 통째로 다르다. */
   async function motiveJd({ company = '', jobTitle = '', question = '',
-                            evidence = [], limit = 600 } = {}) {
+                            evidence = [], limit = 600, picks = null } = {}) {
     return api('POST', '/api/jd/motive', {
       company, jobTitle, question, evidence, limit,
-      activities: _mySpec?.activities || [],
+      /* 이 문항에 고른 정성스펙(0~3개)의 {name, star}. 0개면 서버가 회사 근거만으로 쓰고
+         지원자 경험은 지어내지 않는다(안 고른 활동이 섞여 나오던 문제 — 사용자 지적). */
+      picks: Array.isArray(picks) ? picks : undefined,
     });
   }
 
@@ -313,6 +324,19 @@ window.DB = (() => {
   async function jdPosting(url) {
     return api('POST', '/api/jd/posting', { url });
   }
+
+  /* ── 자소서 기증(동의 기반 합격 코퍼스) ────────────────────────
+     저장되는 본문은 서버가 다시 익명화한 것이다(routes/donations.js). 화면은 보내기
+     전에 같은 규칙(anonymize.js)으로 미리 보여줄 뿐이다. */
+  async function donationMeta() { return api('GET', '/api/donations/meta'); }
+  async function donate(payload) { return api('POST', '/api/donations', payload); }
+  async function donationStats({ job = '', qtype = '' } = {}) {
+    const q = new URLSearchParams();
+    if (job) q.set('job', job);
+    if (qtype) q.set('qtype', qtype);
+    return api('GET', '/api/donations/stats' + (q.toString() ? `?${q}` : ''));
+  }
+  async function donationsMine() { return api('GET', '/api/donations/mine'); }
 
   /* 취업 업종 트리 — 회사 찾기 첫 화면이 쓰는 목록.
      계열(company-sectors.js sectors())과 축이 다르다: 저건 KSIC 를 묶은 '계열' 이고
@@ -516,6 +540,7 @@ window.DB = (() => {
     classifyCompany, suggestCompanies, suggestCerts, recommendCerts, suggestMajors, suggestUniversities, classifyMajor, jobCatalog,
     mentors,
     analyzeCas, casFit, specFingerprint, coachJd, draftJd, motiveJd, guideJd, companyAnalysis, companyBusiness, companyIndustryTree, jdPosting,
+    donationMeta, donate, donationStats, donationsMine,
     specupExams, specupActivities,
     insightCategories, insightFeatured, listInsights, getInsight, createInsight, updateInsight, deleteInsight,
     addInsightComment, deleteInsightComment,
