@@ -36,9 +36,14 @@
   const isLoggedIn = () => !!(root.DB && DB.currentUser && DB.currentUser());
 
   let _last = null;         // 마지막 결과 — 다시 그릴 때 재요청하지 않는다
+  let _lastCompany = '';    // _last 를 뽑은 회사 — 작성 화면(#write)에서 회사가 바뀌면 역량 참고를 끈다
   let _focused = 0;         // 지금 펼친 역량 index
   let _tab = 0;             // 지금 쓰고 있는 초안 탭 index
   let _lastTabs = [];       // 지금 그려진 초안 탭 — AI 초안이 문항 문구를 같이 보낸다
+  /* 지금 작업 화면이 어디에 그려졌나 — 분석(#jd-result)이냐 작성(#write-root)이냐.
+     focusItem 이 역량 상세를 다시 그릴 때 그 화면 안에서만 찾게 한다(둘 다 DOM 에 살아 있어서
+     document 전체로 찾으면 숨은 화면의 요소를 건드린다). */
+  let _wsHost = null;
 
   /* ── 내가 쓴 자소서 초안 보관 ────────────────────────────────
      가이드를 보면서 바로 쓰고, 다음에 같은 회사로 들어오면 이어 쓰게 하는 게 목적.
@@ -243,6 +248,50 @@
 
   const starOfPick = key => getStar(starKeyOf(key));
 
+  /* ── 문항마다 고른 정성스펙 (0~3개) (사용자 지시 2026-08-31) ──────────────
+     모든 문항을 STAR 로 쓰지 않는다. 문항마다 이 자소서에 쓸 경험을 **0~3개** 고르고,
+     고른 게 있을 때만 그 STAR 를 초안 재료로 쓴다(2개↑면 서버가 공통점으로 묶는다).
+     0개면 STAR 없이 문항 골격만으로 쓴다 — 지원동기·포부가 성취담이 되던 문제를 끊는다.
+     저장은 회사(scope)별·문항키별 활동키 목록이다. */
+  const LS_QPICK = 'careerly_jd_qpick_v1';
+  const Q_PICK_MAX = 3;
+  function loadQPicks() {
+    try { return JSON.parse(localStorage.getItem(LS_QPICK)) || {}; } catch { return {}; }
+  }
+  function qPicks(qKey) {
+    const v = loadQPicks()[draftScope()]?.[qKey];
+    return Array.isArray(v) ? v.filter(Boolean).slice(0, Q_PICK_MAX) : [];
+  }
+  /* 고르거나 뺀다. 상한(3개)에 걸리면 false 를 돌려 화면이 알린다. */
+  function toggleQPick(qKey, actKey) {
+    const all = loadQPicks();
+    const scope = draftScope();
+    const byQ = all[scope] || (all[scope] = {});
+    const cur = Array.isArray(byQ[qKey]) ? byQ[qKey] : [];
+    const at = cur.indexOf(actKey);
+    if (at >= 0) cur.splice(at, 1);
+    else { if (cur.length >= Q_PICK_MAX) return false; cur.push(actKey); }
+    if (cur.length) byQ[qKey] = cur; else delete byQ[qKey];
+    if (!Object.keys(byQ).length) delete all[scope];
+    localStorage.setItem(LS_QPICK, JSON.stringify(all));
+    return true;
+  }
+  /* 고른 활동의 STAR — 코치에서 적은 것(starOfPick) 우선, 없으면 스펙 관리 원본(a.star). */
+  function starForAct(actKey) {
+    const s = starOfPick(actKey);
+    if (STAR_KEYS.some(K => (s[K] || '').trim())) return s;
+    const a = actByKey(actKey);
+    if (a?.star) return { S: a.star.s || '', T: a.star.t || '', A: a.star.a || '', R: a.star.r || '' };
+    return {};
+  }
+  /* 서버로 보낼 재료 — 고른 활동들의 {name, star}. STAR 가 빈 것은 뺀다. */
+  function qPickList(qKey) {
+    return qPicks(qKey).map(k => {
+      const a = actByKey(k);
+      return { name: a ? actTitle(a) : '', star: starForAct(k) };
+    }).filter(p => STAR_KEYS.some(K => (p.star[K] || '').trim()));
+  }
+
   /* 고른 정성스펙의 준비 상태 — 사이드바 한 줄과 카드 머리가 같이 읽는다. */
   function picksReady() {
     const list = picks();
@@ -274,8 +323,10 @@
     { k: 'R', lab: '결과', hint: '결과는 어땠나요? 되도록 수치로.' },
   ];
 
-  /* 문항 칸 — 문항 내용만 받는다. 정성스펙·STAR 는 아래 카드 칸에서 따로 고른다
-     (사용자 지시 2026-08-28). */
+  /* 문항 칸 — 문항 내용만 받는다. 예전에는 문항마다 정성스펙(0~3개)·STAR 를 여기서
+     골랐는데, **정성스펙 선택은 초안 작성 화면으로 옮겼다**(사용자 지시 2026-09-01).
+     역량 분석 전에는 문항과 STAR(아래 정성스펙 STAR 자리)만 적고, 어떤 경험을 어느 문항에
+     쓸지는 초안을 쓰면서 고른다. */
   function renderQBoxes() {
     const host = $('#jd-q-boxes');
     if (!host) return;
@@ -368,51 +419,139 @@
      고른 순서에서 **맨 앞이 대표**다. AI 초안이 그 STAR 를 재료로 쓴다(서버 초안 API 가
      STAR 를 하나만 받는다). 여러 개를 골랐을 때 무엇이 쓰이는지 화면에 적어 둔다 —
      안 적으면 "두 개 골랐는데 왜 하나만 반영되지" 가 된다. */
+  /* ── 정성스펙 선택은 문항마다로 옮겼다 (사용자 지시 2026-08-31 · 두 번째) ──────
+     예전에는 여기(별도 카드 칸)에서 자소서 한 벌에 쓸 경험을 고르고 '대표'를 정했다.
+     이제는 **각 문항 칸 아래에서** 그 문항에 쓸 경험(0~3개)과 STAR 를 바로 고른다.
+     '대표' 개념도 없앴다. 이 자리는 그 사실을 알리는 안내 한 줄만 남긴다. */
+  /* ── 정성스펙 STAR — 역량 분석 **전에** 여기서 적는다 (사용자 지시 2026-09-01) ──────
+     문항마다 고르던 것을 없애고, 내 활동(정성스펙)마다 STAR 를 이 자리에서 적는다.
+     여기 적은 STAR 는 초안 작성 화면에서 문항마다 경험을 고를 때 AI 초안 재료로 쓰인다.
+     '스펙에 저장하기'를 누르면 이 STAR 를 **내 스펙 관리에도** 저장할지 스스로 정한다 —
+     안 누르면 이 자소서 작성에만(브라우저) 남고, 누르면 스펙 관리의 활동 STAR 가 된다. */
+  function actMeta(a) {
+    return [ACT_TYPE_LABEL[a.type] || a.type || '활동',
+      a.org && a.org !== a.name ? a.org : '', a.duration || ''].filter(Boolean).join(' · ');
+  }
+
+  function specStarCardHtml(a) {
+    const key = actKeyOf(a);
+    const star = starForAct(key);                        // 코치에 적은 것 우선, 없으면 스펙 관리 원본
+    const filled = STAR_KEYS.filter(K => (star[K] || '').trim()).length;
+    /* 처음엔 제목만 보이고, 눌러야 STAR 칸이 펼쳐진다(사용자 지시 2026-09-01). 활동마다
+       네 칸씩 열려 있으면 화면이 길어져 '무엇을 적어야 하는지'가 안 보였다. */
+    return `<div class="jd-ss-card" data-ss-card="${esc(key)}">
+      <button type="button" class="jd-ss-card-h" data-ss-toggle="${esc(key)}" aria-expanded="false">
+        <span class="jd-ss-card-t"><b>${esc(actTitle(a))}</b><small>${esc(actMeta(a))}</small></span>
+        <span class="jd-ss-count ${filled === 4 ? 'is-ok' : filled ? 'is-part' : ''}" data-ss-count="${esc(key)}">STAR ${filled}/4</span>
+        <i class="ti ti-chevron-down jd-ss-caret"></i>
+      </button>
+      <div class="jd-ss-body" hidden>
+        <div class="jd-ss-star">
+          ${STAR_FIELDS.map(f => `<label class="jd-ss-cell">
+            <span class="jd-ss-tag">${f.k} · ${f.lab}</span>
+            <textarea class="jd-ss-in" data-ss-star="${esc(key)}" data-star-key="${f.k}" rows="2"
+              placeholder="${esc(f.hint)}">${esc(star[f.k] || '')}</textarea>
+          </label>`).join('')}
+        </div>
+        <div class="jd-ss-foot">
+          <span class="jd-ss-state" data-ss-state="${esc(key)}"></span>
+          <button type="button" class="wf-btn wf-btn--sm" data-ss-save="${esc(key)}">
+            <i class="ti ti-device-floppy"></i> 스펙에 저장하기</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
   function renderSpecStar() {
     const host = $('#jd-spec-star');
     if (!host) return;
     const acts = myActs();
-
     if (!acts.length) {
-      host.innerHTML = `
-        <div class="jd-ss-h">
-          <h2>정성스펙 · STAR <span class="wf-badge wf-badge--mute">선택</span></h2>
-          <span class="co-src">이 자소서에 쓸 경험을 고르고 STAR 로 적습니다</span>
-        </div>
-        <p class="jd-ss-empty"><i class="ti ti-info-circle"></i>
-          스펙 관리에 <b>정성 스펙 활동</b>이 없어요.
-          <button type="button" class="jd-q-link" data-q-spec-go>스펙 관리에서 활동 추가하기</button></p>`;
-      bindSpecStar(host);
+      host.innerHTML = `<div class="jd-ss-empty"><i class="ti ti-info-circle"></i>
+        쓸 <b>정성스펙</b>(인턴·공모전 등)이 없어요.
+        <button type="button" class="jd-q-link" data-ss-go>스펙 관리에서 추가하기</button>
+        <span class="co-src">STAR 는 안 적어도 분석은 됩니다 — 적어 두면 초안이 내 경험으로 나와요.</span></div>`;
+      host.querySelectorAll('[data-ss-go]').forEach(el => el.addEventListener('click', () => {
+        if (typeof navigateTo === 'function') navigateTo('mypage', 'spec');
+        else if (typeof navigate === 'function') navigate('mypage');
+      }));
       return;
     }
-
-    /* 고른 순서대로 앞에 놓는다 — 대표가 맨 위에 보여야 '무엇이 쓰이는지' 가 눈에 온다. */
-    const order = picks().map(x => x.actKey);
-    const sorted = [...acts].sort((x, y) => {
-      const ix = order.indexOf(actKeyOf(x)), iy = order.indexOf(actKeyOf(y));
-      if (ix < 0 && iy < 0) return 0;
-      if (ix < 0) return 1;
-      if (iy < 0) return -1;
-      return ix - iy;
-    });
-    const r = picksReady();
-    const lead = order.length ? actByKey(order[0]) : null;
-
     host.innerHTML = `
       <div class="jd-ss-h">
-        <h2>정성스펙 · STAR <span class="wf-badge wf-badge--mute">선택</span></h2>
-        <span class="co-src">이 자소서에 쓸 경험을 <b>하나 또는 여러 개</b> 고르고 STAR 로 적습니다 ·
-          <b>비워 둬도 분석은 됩니다</b> — 채우면 AI 초안이 내 경험으로 쓰입니다 ·
-          이 브라우저에만 저장돼요</span>
+        <span class="wf-eyebrow">정성스펙 STAR</span>
+        <p>인턴·공모전 등 경험을 <b>STAR</b> 로 적어 두면, 초안 작성에서 문항마다 골라 <b>AI 초안 재료</b>로 씁니다.</p>
       </div>
-      ${r.total ? `<p class="jd-ss-ready"><i class="ti ti-check"></i>
-        <b>${r.total}개</b> 골랐고 그중 <b>${r.done}개</b>가 STAR 4칸을 채웠어요${
-          lead ? ` · AI 초안은 대표인 <b>${esc(actTitle(lead))}</b> 의 STAR 를 씁니다` : ''}.</p>`
-        : '<p class="jd-ss-empty">카드를 눌러 이 자소서에 쓸 경험을 고르세요. 여러 개 골라도 됩니다.</p>'}
-      <div class="jd-sc-list">
-        ${sorted.map(act => specCardHtml(act, order.indexOf(actKeyOf(act)))).join('')}
-      </div>`;
-    bindSpecStar(host);
+      <div class="jd-ss-cards">${acts.map(specStarCardHtml).join('')}</div>`;
+    bindSpecStarSection(host);
+  }
+
+  function bindSpecStarSection(host) {
+    /* 제목 줄을 누르면 STAR 칸이 펼쳐진다. 접힌 동안 textarea 는 높이를 못 재므로
+       펼치는 순간 autoGrow 로 다시 맞춘다. */
+    host.querySelectorAll('[data-ss-toggle]').forEach(el =>
+      el.addEventListener('click', () => {
+        const card = el.closest('.jd-ss-card');
+        const body = card?.querySelector('.jd-ss-body');
+        if (!body) return;
+        const open = body.hidden;
+        body.hidden = !open;
+        card.classList.toggle('is-open', open);
+        el.setAttribute('aria-expanded', String(open));
+        if (open) body.querySelectorAll('.jd-ss-in').forEach(autoGrow);
+      }));
+    /* STAR 입력 — 활동키로 저장한다. 타이핑 중 다시 그리지 않는다(커서를 잃는다):
+       저장만 하고 칸 크기·개수 배지만 갱신한다. */
+    host.querySelectorAll('[data-ss-star]').forEach(el => {
+      autoGrow(el);
+      el.addEventListener('input', () => {
+        saveStar(starKeyOf(el.dataset.ssStar), el.dataset.starKey, el.value);
+        autoGrow(el);
+        paintSsCount(el.dataset.ssStar);
+      });
+    });
+    host.querySelectorAll('[data-ss-save]').forEach(el =>
+      el.addEventListener('click', () => saveStarToSpec(el.dataset.ssSave)));
+  }
+
+  /* 개수 배지만 다시 칠한다(카드를 통째로 다시 그리지 않는다). */
+  function paintSsCount(key) {
+    const badge = $(`[data-ss-count="${CSS.escape(key)}"]`);
+    if (!badge) return;
+    const star = getStar(starKeyOf(key));
+    const filled = STAR_KEYS.filter(K => (star[K] || '').trim()).length;
+    badge.className = `jd-ss-count ${filled === 4 ? 'is-ok' : filled ? 'is-part' : ''}`;
+    badge.textContent = `STAR ${filled}/4`;
+    badge.dataset.ssCount = key;
+  }
+
+  /* '스펙에 저장하기' — 코치에 적은 STAR 를 **내 스펙 관리의 활동 STAR** 로 저장한다.
+     저장 위치는 스펙입력의 'STAR 저장' 과 같은 API(saveActivityStar). 로그인 필요. */
+  async function saveStarToSpec(key) {
+    const stateEl = $(`[data-ss-state="${CSS.escape(key)}"]`);
+    const btn = $(`[data-ss-save="${CSS.escape(key)}"]`);
+    if (!isLoggedIn()) { if (stateEl) stateEl.textContent = '로그인 후 저장할 수 있어요'; return; }
+
+    const idx = myActs().findIndex(a => actKeyOf(a) === key);
+    const a = myActs()[idx];
+    if (idx < 0 || !a) { if (stateEl) stateEl.textContent = '활동을 찾지 못했어요'; return; }
+
+    const coach = getStar(starKeyOf(key));                       // { S,T,A,R }
+    if (!STAR_KEYS.some(K => (coach[K] || '').trim())) {
+      if (stateEl) stateEl.textContent = 'STAR 를 한 칸이라도 적어주세요'; return;
+    }
+    const star = { s: coach.S || '', t: coach.T || '', a: coach.A || '', r: coach.R || '' };
+
+    if (btn) btn.disabled = true;
+    if (stateEl) stateEl.textContent = '스펙 관리에 저장 중…';
+    try {
+      await DB.saveActivityStar(idx, star, a.type);
+      if (stateEl) stateEl.textContent = '스펙 관리에 저장했어요';
+    } catch (e) {
+      if (stateEl) stateEl.textContent = e.message || '저장하지 못했어요';
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
   /* 카드 칸의 손잡이들. 문항 칸(bindQBoxes)과 나눠 둔다 — 두 칸이 서로 다른 때에
@@ -658,7 +797,6 @@
        말하되 버튼은 잠그지 않는다 — 공고를 붙여넣고 요구 역량부터 보는 것이 이 화면의
        첫 용도다. */
     const canRun = hasSource;
-    const picked = picksReady();
 
     const bar = $('#jd-ready-fill');
     if (bar) {
@@ -679,16 +817,11 @@
       ready.innerHTML = '역량 분석은 <b>로그인 후</b> 이용할 수 있어요 — '
         + '공고·문항은 지금 적어 두면 로그인 후 그대로 이어집니다.';
     } else if (ready) {
-      const qLine = picked.total
-        ? (picked.ok
-            ? `정성스펙 <b>${picked.total}개</b>를 골랐고 STAR 도 다 찼어요.`
-            : `정성스펙 <b>${picked.total}개</b> 중 STAR 를 다 채운 건 <b>${picked.done}개</b>예요 —
-               <span class="jd-ready-opt">없어도 분석은 되고,</span> 채우면 초안이 내 경험으로 쓰여요.`)
-        : `아래 <b>정성스펙 카드</b>에서 이 자소서에 쓸 경험을 고르면 초안이 정확해져요.`;
+      /* 채울 게 다 채워졌으면(분석 가능) 버튼 위 안내는 지운다(사용자 지시 2026-09-01) —
+         '몇 개 입력됨·정성스펙' 설명이 버튼 바로 위에서 화면을 어지럽혔다. 아직 근거가
+         없을 때만 무엇을 넣어야 하는지 한 줄로 남긴다. */
       ready.innerHTML = hasSource
-        ? `${hasPosting
-              ? `${STEPS.length}개 중 <b>${done}개</b> 입력됨.`
-              : `담아 온 회사 근거 <b>${evCount}건</b>으로 씁니다.`} ${qLine}`
+        ? ''
         : `<b>채용공고</b>를 넣거나, 회사 리포트에서 <b>근거를 담아</b> 오세요.`;
     }
   }
@@ -1017,6 +1150,8 @@
     /* 결과 화면만 비우고 _last 를 남겨 두면 입력 칸 아래 역량 칩(paintStepComps)이
        지난 회사의 결과를 계속 보여준다 — 지우는 김에 같이 지운다. */
     _last = null;
+    _lastCompany = '';
+    _wsHost = null;
     _stepOpen.clear();
     const status = $('#jd-status');
     if (status) status.textContent = '';
@@ -1132,16 +1267,14 @@
 
     try {
       _last = await DB.coachJd(text, { useAi: true, company: valueOf('#jd-company') });
+      _lastCompany = valueOf('#jd-company');
       statusEl.textContent = '';
       _focused = 0; _tab = 0;
-      render(_last);
-      /* 결과가 나오면 입력칸을 접는다 — 다 쓴 입력이 화면을 차지하고 있으면
-         결과를 보려고 매번 그만큼을 스크롤해서 지나가야 한다. */
+      /* 분석이 끝나면 **바로 작성 화면(#write)** 으로 넘어간다(사용자 지시 2026-09-01).
+         예전에는 여기서 '이제 자소서를 씁니다' 안내 화면을 한 번 더 거쳤는데, 한 단계
+         군더더기였다. 요구 역량은 작성 화면 오른쪽에 그대로 붙어 있다. */
       STEPS.forEach(s => blockOf(s)?.classList.remove('is-open'));
-      STEPS.forEach(paintBlock);
-      paintProgress();
-      paintStepComps();      // 칸마다 '여기서 뽑힌 역량' 을 붙인다
-      resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      navigate('write');
     } catch (e) {
       statusEl.textContent = '';
       resultEl.hidden = false;
@@ -1173,6 +1306,7 @@
 
     try {
       _last = await DB.guideJd(company);
+      _lastCompany = company;
       statusEl.textContent = '';
       _focused = 0; _tab = 0;
       /* 문항 칸이 비어 있으면 기본 문항을 실제로 **써 넣는다**. 화면에만 띄우고
@@ -1181,12 +1315,9 @@
         setQBoxes([DEFAULT_MOTIVE_Q]);
         paintBlock(STEPS[3]);
       }
-      render(_last);
+      /* 공고 없이 시작한 경우도 바로 작성 화면으로 — 지원동기부터 쓰면 된다. */
       STEPS.forEach(s => blockOf(s)?.classList.remove('is-open'));
-      STEPS.forEach(paintBlock);
-      paintProgress();
-      paintStepComps();      // 칸마다 '여기서 뽑힌 역량' 을 붙인다
-      resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      navigate('write');
     } catch (e) {
       statusEl.textContent = '';
       resultEl.hidden = false;
@@ -1228,6 +1359,11 @@
     { id: 'growth', label: '성장과정·가치관', match: /성장\s*과정|가치관|영향을\s*준|좌우명|인생/,
       pick: 'soft',
       how: '사건 하나만 씁니다. 그 사건이 지금 지원 직무의 어떤 태도로 이어졌는지로 닫습니다.' },
+    /* 성격 장단점 — STAR 가 아니라 '단점→불편→개선→변화' 골격이라 따로 둔다(빈출 문항 표 ⑥).
+       직무역량(강점)보다 앞에 둬야 "강점과 약점" 문항이 직무역량으로 새지 않는다. */
+    { id: 'trait', label: '성격의 장단점', match: /성격|장단점|장점\s*과\s*단점|단점|약점|보완할\s*점/,
+      pick: 'soft',
+      how: '단점 → 그로 인한 불편 → 개선 노력 → 변화 순서로 씁니다. 단점은 관리 가능한 것으로, 개선의 결과까지 씁니다.' },
     /* 가장 넓은 규칙이라 맨 뒤에 둔다 — 위에서 안 걸린 문항의 기본값 역할을 겸한다. */
     { id: 'competency', label: '직무역량',
       match: /역량|직무|전문성|준비\s*과정|노력한\s*경험|강점|스킬|전문\s*지식|기술\s*(스택|력|적\s*역량)/,
@@ -1312,6 +1448,73 @@
   const keysLegendHtml = () => `<p class="jd-hint jd-keys-legend">점이 <b>초록</b>이면 내 활동에
     쓸 소재가 있고, <b>빨강</b>이면 아직 없습니다. 옆 숫자는 같은 직군 공고 중
     이 역량을 요구한 비율이에요.</p>`;
+
+  /* ── 요구 역량 — 좁은 목록 + 고른 것 상세 (레퍼런스 A, 사용자 선택 2026-09-01) ──────
+     예전에는 7개 역량이 통째로 큰 카드로 세로로 쌓여 스크롤이 길고 무엇을 보는지 어려웠다.
+     이제 **점+이름+비율만 한 줄씩** 압축해 목록으로 두고, 누른 역량 하나만 아래에 상세
+     (공고 근거·작성 순서·내 소재)를 펼친다. AI 초안 버튼은 오른쪽 초안 영역으로 옮겼다. */
+  function reqListHtml(r, qMap) {
+    const ok = r.items.filter(hasMine).length;
+    const f = r.items[_focused];
+    return `<div class="jd-reqs">
+      <div class="jd-reqs-h">
+        <b>요구 역량</b><span class="jd-reqs-n">${r.items.length}</span>
+        <span class="jd-reqs-sub">근거 ${ok} · 없음 ${r.items.length - ok}</span>
+      </div>
+      <div class="jd-reqs-list">
+        ${r.items.map((it, i) => `
+          <button type="button" class="jd-req ${i === _focused ? 'is-on' : ''}" data-key="${i}">
+            <span class="jd-req-dot ${hasMine(it) ? 'is-ok' : 'is-gap'}"></span>
+            <span class="jd-req-name">${esc(it.label)}</span>
+            ${(qMap[i] || []).length ? `<span class="jd-req-q">문항 ${(qMap[i]).join('·')}</span>` : ''}
+            ${it.market ? `<span class="jd-req-n">${it.market.pct}%</span>` : ''}
+          </button>`).join('')}
+      </div>
+      ${f ? reqDetailHtml(f) : ''}
+    </div>`;
+  }
+
+  /* 고른 역량 하나의 상세 — 공고 근거 한 줄, 기업이 보는 것, 작성 순서, 내 소재/공백. */
+  function reqDetailHtml(item) {
+    return `<div class="jd-req-detail">
+      <div class="jd-req-detail-h">
+        <b>${esc(item.label)}</b>
+        ${hasMine(item)
+          ? `<span class="wf-badge wf-badge--ok">내 소재 ${item.mine.length}</span>`
+          : `<span class="wf-badge wf-badge--error">소재 없음</span>`}
+        ${item.market ? `<span class="jd-req-detail-n">${item.market.pct}% 요구</span>` : ''}
+      </div>
+      ${item.quotes?.length ? `<div class="jd-req-quote">“${esc(item.quotes[0])}”</div>` : ''}
+      <p class="jd-req-reads">${esc(item.reads)}</p>
+      <div class="jd-req-frame">
+        <span class="wf-eyebrow">이 순서로 쓰세요</span>
+        ${frameHtml(item.frame)}
+      </div>
+      ${item.gap
+        ? `<div class="jd-gap"><i class="ti ti-alert-triangle"></i> ${esc(item.gap)}</div>`
+        : mineHtml(item)}
+    </div>`;
+  }
+
+  /* 초안 영역의 정성스펙 칩 한 줄 — 이 문항에 고른 경험(0~3)을 압축해 보이고, 눌러 바꾼다.
+     STAR 편집은 위 문항 칸에서(레퍼런스 A: 초안 옆엔 칩만). */
+  function qSpecChipsHtml(qKey) {
+    const acts = myActs();
+    if (!acts.length) return '';
+    const picked = qPicks(qKey);
+    return `<div class="jd-dspec">
+      <span class="jd-dspec-lab">이 문항 경험</span>
+      ${acts.map(a => {
+        const k = actKeyOf(a);
+        const on = picked.includes(k);
+        const full = !on && picked.length >= Q_PICK_MAX;
+        return `<button type="button" class="jd-dspec-chip ${on ? 'is-on' : ''}"
+          data-dqpick="${esc(k)}" data-dqkey="${esc(qKey)}" ${full ? 'disabled' : ''}>
+          <i class="ti ti-${on ? 'check' : 'plus'}"></i>${esc(actTitle(a))}</button>`;
+      }).join('')}
+      <span class="jd-dspec-note">STAR는 역량 분석 전 ‘정성스펙 STAR’에서 적어요</span>
+    </div>`;
+  }
 
   function frameHtml(frame) {
     const raw = String(frame || '').trim();
@@ -1569,6 +1772,75 @@
   }
 
   /* 오른쪽 초안 칸. 지금 고른 탭 하나만 그린다. */
+  /* ── 문항별 정성스펙 피커 (0~3개) + 인라인 STAR ────────────────────
+     **역량 분석 전, 문항을 적을 때 한 자리에서** 이 문항에 쓸 경험을 고르고 STAR 를 적는다
+     (사용자 지시 2026-08-31 · 두 번째). 고른 게 있으면 그 STAR 로 초안을 쓰고(2개↑면 공통점으로
+     묶는다), 안 고르면 STAR 없이 문항 골격으로 쓴다. '대표' 개념은 없앴다 — 순서에 뜻이 없다.
+
+     STAR 는 **활동 하나당 하나**로 저장한다(starKeyOf). 같은 활동을 두 문항에 골라도 STAR 는
+     한 벌이라 한 곳에서 고치면 양쪽이 같이 바뀐다 — 같은 글을 두 번 쓰게 하지 않는다. */
+  function qPickerHtml(qKey) {
+    const acts = myActs();
+    const picked = qPicks(qKey);
+    if (!acts.length) {
+      return `<div class="jd-qpick jd-qpick--empty"><i class="ti ti-info-circle"></i>
+        쓸 <b>정성스펙</b>(인턴·공모전 등)이 없어요.
+        <button type="button" class="jd-q-link" data-q-spec-go>스펙 관리에서 추가하기</button>
+        <span class="co-src">안 골라도 문항 골격으로 초안은 나옵니다.</span></div>`;
+    }
+    return `<div class="jd-qpick" data-qkey="${esc(qKey)}">
+      <div class="jd-qpick-h">이 문항에 쓸 정성스펙 <b>${picked.length}/${Q_PICK_MAX}</b>
+        <span class="co-src">고르면 그 경험(STAR)으로 · 여러 개면 공통점으로 묶어서 · 안 고르면 문항 골격으로</span></div>
+      <div class="jd-qpick-list">
+        ${acts.map(a => {
+          const k = actKeyOf(a);
+          const on = picked.includes(k);
+          const full = !on && picked.length >= Q_PICK_MAX;
+          const star = on ? starForAct(k) : {};
+          return `<div class="jd-qpick-item ${on ? 'is-on' : ''}">
+            <button type="button" class="jd-qpick-chip ${on ? 'is-on' : ''}"
+              data-qpick="${esc(k)}" ${full ? 'disabled title="3개까지 고를 수 있어요"' : ''} aria-pressed="${on}">
+              <i class="ti ti-${on ? 'check' : 'plus'}"></i> ${esc(actLabel(a))}</button>
+            ${on ? `<div class="jd-qpick-star">
+              ${STAR_FIELDS.map(f => `<label class="jd-qpick-star-cell">
+                <span class="jd-qpick-star-tag">${f.k} · ${f.lab}</span>
+                <textarea class="jd-qpick-star-in" data-qstar="${esc(k)}" data-star-key="${f.k}" rows="2"
+                  placeholder="${esc(f.hint)}">${esc(star[f.k] || '')}</textarea>
+              </label>`).join('')}
+            </div>` : ''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
+
+  function bindQPicks(host, qKey) {
+    /* 칩을 눌러 고르거나 뺀다(0~3개). 누르면 그 자리만 다시 그린다. */
+    host.querySelectorAll('[data-qpick]').forEach(el => el.addEventListener('click', () => {
+      toggleQPick(qKey, el.dataset.qpick);
+      repaintQPicker(host, qKey);
+    }));
+    /* STAR 입력 — 활동키로 저장한다(문항이 아니라 활동 단위). 타이핑 중에는 다시 그리지
+       않는다(커서를 잃는다) — 저장만 하고 칸 크기만 맞춘다. */
+    host.querySelectorAll('[data-qstar]').forEach(el => {
+      autoGrow(el);
+      el.addEventListener('input', () => {
+        saveStar(starKeyOf(el.dataset.qstar), el.dataset.starKey, el.value);
+        autoGrow(el);
+      });
+    });
+    host.querySelectorAll('[data-q-spec-go]').forEach(el => el.addEventListener('click', () => {
+      if (typeof navigateTo === 'function') navigateTo('mypage', 'spec');
+      else if (typeof navigate === 'function') navigate('mypage');
+    }));
+  }
+
+  /* 한 문항의 피커만 다시 그린다 — 다른 문항 칸/작성칸의 커서를 건드리지 않는다. */
+  function repaintQPicker(host, qKey) {
+    host.innerHTML = qPickerHtml(qKey);
+    bindQPicks(host, qKey);
+  }
+
   function draftHtml(r, tabs) {
     const tab = tabs[_tab] || tabs[0];
     if (!tab) {
@@ -1584,76 +1856,65 @@
     const isMotive = tab.type?.pick === 'news';
     const ev = tab.type ? Roadmap.evidenceFor(company, tab.type.label) : [];
 
-    const source = isMotive
-      ? `<div class="jd-qprompt-comps">
-           ${ev.length
-             ? ev.slice(0, 4).map(e => `<span class="wf-badge wf-badge--soft" title="${esc(e.source || '')}">${esc(e.text.slice(0, 28))}${e.text.length > 28 ? '…' : ''}</span>`).join('')
-             : `<span class="wf-badge wf-badge--warn">회사 리포트에서 근거를 먼저 담으세요</span>`}
-         </div>
-         <!-- ── 지원동기 AI 초안 (사용자 결정) ────────────────────
-              역량 문항의 AI 초안은 왼쪽 역량 카드마다 붙어 있는데, 지원동기 문항은
-              왼쪽에 붙을 카드가 없다(역량이 아니라 회사 근거가 재료라서). 그래서
-              문항 프롬프트 바로 아래에 둔다.
+    const focused = r.items[_focused] || tab.comps?.[0] || r.items[0];
 
-              **근거가 없으면 버튼을 만들지 않는다.** 근거 없이 부르면 모델이 회사
-              이야기를 통째로 지어내는데, 그건 '대괄호로 비운다' 규칙으로도 못 막는다 —
-              지어낼 재료가 프롬프트 밖(모델의 사전지식)에 있기 때문이다. -->
-         ${ev.length ? `<div class="jd-motive-ai">
-           <button type="button" class="wf-btn wf-btn--sm wf-btn--primary" data-motive>
-             <i class="ti ti-sparkles"></i> 담은 근거로 지원동기 초안 쓰기
-           </button>
-           <span class="jd-draft-state" data-motive-state></span>
-           <p class="jd-hint">담아 온 <b>${ev.length}건</b>만 사실로 씁니다 —
-             그 밖의 회사 이야기는 대괄호로 비워서 직접 확인하게 해요.</p>
-           <div data-motive-notes></div>
-         </div>` : ''}`
-      : `<div class="jd-qprompt-comps">
-           ${tab.comps.map(c => {
-             const i = r.items.indexOf(c);
-             return `<button type="button" class="jd-key" data-key="${i}">
-               <span class="jd-key-dot ${hasMine(c) ? 'jd-key-dot--ok' : 'jd-key-dot--gap'}"></span>
-               ${esc(c.label)}</button>`;
-           }).join('')}
-           ${tab.comps.length > 2
-             ? `<span class="wf-badge wf-badge--mute">한 문항에 역량 2개까지가 안전해요</span>` : ''}
-         </div>`;
+    /* 문항 아래 맥락 한 줄. 지원동기는 담아 온 회사 근거로, 그 밖은 왼쪽에서 고른 역량으로
+       초안을 쓴다는 것을 알린다(레퍼런스 A: 초안 버튼은 아래 에디터 머리에 있다). */
+    const ctx = isMotive
+      ? `<div class="jd-qctx">${ev.length
+           ? `담아 온 회사 근거 <b>${ev.length}건</b>으로 지원동기를 씁니다`
+           : `<span class="jd-qctx-warn"><i class="ti ti-info-circle"></i> 회사 리포트에서 근거를 담으면 지원동기가 정확해져요</span>`}</div>`
+      : (focused ? `<div class="jd-qctx">AI 초안 기준 역량 <b>${esc(focused.label)}</b>
+           <span class="jd-qctx-sub">— 왼쪽 목록에서 다른 역량을 누르면 바뀝니다</span></div>` : '');
 
     const draft = getDraft(tab.key);
 
     return `<div class="jd-draft-pane">
-      <div class="jd-draft-h">
-        <b>내 자소서 초안</b>
-        <span class="jd-draft-end">
-          <span class="jd-draft-state" id="jd-draft-state"></span>
-        </span>
-      </div>
-
+      <!-- 문항 큰 탭 -->
       <div class="jd-qtabs">
         ${tabs.map((t, i) => {
           const len = getDraft(t.key).length;
           return `<button type="button" class="jd-qtab ${i === _tab ? 'is-on' : ''}" data-tab="${i}">
-            ${esc(t.label)}<span>${len ? len.toLocaleString() : '0'}</span>
+            <span class="jd-qtab-lab">${esc(t.label)}</span>
+            <span class="jd-qtab-n">${len ? len.toLocaleString() : '0'}</span>
           </button>`;
         }).join('')}
       </div>
 
-      <div class="jd-qprompt">
+      <!-- 문항 제목(크게) + how + 정성스펙 칩 + 맥락 -->
+      <div class="jd-qhead">
         <div class="jd-qprompt-q">${esc(tab.text)}</div>
         ${tab.kind === 'question' ? `<p class="jd-qprompt-how">${tab.type
           ? esc(tab.type.how)
           : '문항 유형을 알아보지 못했어요. 왼쪽 역량 중 이 문항과 가까운 것을 직접 고르세요.'}</p>` : ''}
-        ${source}
+        ${qSpecChipsHtml(tab.key)}
+        ${isMotive ? '<div data-motive-notes></div>' : ''}
+        ${ctx}
       </div>
 
-      <div class="jd-draft-wrap">
-        <textarea class="jd-draft-text" id="jd-draft" data-key="${esc(tab.key)}"
-          placeholder="왼쪽 역량의 '이 순서로 쓰세요'를 보면서 여기에 쓰세요. 적는 대로 저장돼요.">${esc(draft)}</textarea>
-      </div>
-
-      <div class="jd-draft-foot">
-        <span class="jd-draft-count" id="jd-draft-count"></span>
-        <span>이 브라우저에만 저장됩니다${company ? ` · ${esc(company)} 기준` : ''}</span>
-        <span class="jd-chk-row" id="jd-chk"></span>
+      <!-- 초안 에디터 · AI 초안 넣기 + 저장하기는 여기 머리에(사용자 지시 2026-09-01).
+           AI 버튼은 문항 종류와 무관하게 늘 보인다 — 지원동기는 담은 근거로, 그 밖은
+           고른 역량으로 쓴다(분기는 bind 의 data-ai-draft 핸들러). -->
+      <div class="jd-draft-editor">
+        <div class="jd-draft-h">
+          <b>내 초안</b>
+          <span class="jd-draft-end">
+            <span class="jd-draft-state" id="jd-draft-state"></span>
+            <button type="button" class="wf-btn wf-btn--sm" data-ai-draft>
+              <i class="ti ti-sparkles"></i> AI 초안 넣기</button>
+            <button type="button" class="wf-btn wf-btn--sm wf-btn--primary" data-save-draft>
+              <i class="ti ti-device-floppy"></i> 저장하기</button>
+          </span>
+        </div>
+        <div class="jd-draft-wrap">
+          <textarea class="jd-draft-text" id="jd-draft" data-key="${esc(tab.key)}"
+            placeholder="여기에 씁니다 — 적는 대로 저장돼요. 위 ‘AI 초안 넣기’로 시작해도 좋아요.">${esc(draft)}</textarea>
+        </div>
+        <div class="jd-draft-foot">
+          <span class="jd-draft-count" id="jd-draft-count"></span>
+          <span>이 브라우저에만 저장${company ? ` · ${esc(company)} 기준` : ''}</span>
+          <span class="jd-chk-row" id="jd-chk"></span>
+        </div>
       </div>
     </div>`;
   }
@@ -1677,12 +1938,11 @@
      ── 왜 STAR 를 결과에서 없애도 되나 ──
      AI 초안은 STAR 를 currentStar()(정성스펙 카드 저장소)에서 읽는다. 결과 화면 띠는
      같은 저장소를 다른 자리에서 보여줬을 뿐이라, 없애도 초안 재료는 그대로다. */
+  /* 정성스펙·STAR 를 고치러 가는 자리 — 이제 각 문항 칸 아래다(2026-08-31 · 두 번째).
+     자소서 문항 칸을 열고 그리로 데려간다. */
   function goSpecStar() {
-    const host = document.querySelector('#jd-spec-star');
-    if (!host) return;
-    host.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    /* 이미 고른 카드가 있으면 그 STAR 첫 칸으로, 없으면 고르는 버튼으로 커서를 둔다. */
-    (host.querySelector('.jd-q-star-in') || host.querySelector('[data-sc-pick]'))
+    openStep(3, true);
+    document.querySelector('#jd-q-boxes .jd-qpick-star-in, #jd-q-boxes .jd-qpick-chip')
       ?.focus({ preventScroll: true });
   }
 
@@ -1752,21 +2012,17 @@
 
         <div class="jd-split">
           <div class="jd-comp-pane">
-            ${r.items.length ? keysHtml(r) : ''}
-            <div class="jd-comp-list">
-              ${r.items.length ? keysLegendHtml() : ''}
-              ${r.items.length
-                ? r.items.map((it, i) => compHtml(it, i, qMap)).join('')
-                : `<div class="jd-empty jd-empty--soft">
-                     <b>요구 역량은 공고에서 나옵니다.</b>
-                     <p>지금은 담아 온 회사 근거로 <b>지원동기</b>를 쓰는 중이에요.
-                        위 <b>채용공고</b> 칸에 공고 본문을 붙여넣고 다시 누르면
-                        이 자리에 요구 역량과 내 경험 배정이 나옵니다.</p>
-                     <button type="button" class="wf-btn wf-btn--sm" data-reopen>공고 넣으러 가기</button>
-                   </div>`}
-            </div>
+            ${r.items.length
+              ? reqListHtml(r, qMap)
+              : `<div class="jd-empty jd-empty--soft">
+                   <b>요구 역량은 공고에서 나옵니다.</b>
+                   <p>지금은 담아 온 회사 근거로 <b>지원동기</b>를 쓰는 중이에요.
+                      위 <b>채용공고</b> 칸에 공고 본문을 붙여넣고 다시 누르면
+                      이 자리에 요구 역량과 내 경험 배정이 나옵니다.</p>
+                   <button type="button" class="wf-btn wf-btn--sm" data-reopen>공고 넣으러 가기</button>
+                 </div>`}
           </div>
-          ${draftHtml(r, tabs)}
+          ${writeCtaHtml(r, tabs)}
         </div>
 
         ${r.market ? `<p class="jd-hint" style="margin-top:10px">시장 비율은 워크넷
@@ -1781,7 +2037,160 @@
         ${checklistHtml(r)}
       </div>`;
 
+    _wsHost = box;                      // 지금 작업 화면은 분석(#jd-result)
     bind(box, r, tabs);
+  }
+
+  /* ── 분석 결과 오른쪽: 작성 화면으로 넘어가는 자리 (2026-09-01) ──────────────
+     예전에는 이 자리에 초안 에디터(draftHtml)가 바로 붙어 있었다. 링커리어처럼 작성을
+     **별도 페이지(#write)** 로 뗐으므로(사용자 지시), 여기서는 "이제 쓴다" 는 안내와
+     문항별 진척(글자수)만 보이고, 실제 작성은 버튼으로 #write 로 넘어간다. */
+  function writeCtaHtml(r, tabs) {
+    const rows = (tabs || []).map(t => {
+      const len = getDraft(t.key).length;
+      return `<div class="jd-wcta-row">
+        <span class="jd-wcta-row-t">${esc(t.text || t.label)}</span>
+        <span class="jd-wcta-row-n">${len ? len.toLocaleString() + '자' : '0자'}</span>
+      </div>`;
+    }).join('');
+    return `<div class="jd-draft-pane jd-wcta">
+      <div class="jd-wcta-in">
+        <span class="wf-eyebrow">다음 단계</span>
+        <h3>이제 자소서를 씁니다</h3>
+        <p>요구 역량·공고 근거를 옆에 두고 문항마다 초안을 쓰는 <b>전용 작성 화면</b>으로 넘어갑니다.
+          AI 초안·정성스펙·맞춤법 검사도 그 화면에 있어요.</p>
+        ${rows ? `<div class="jd-wcta-list">${rows}</div>` : ''}
+        <button type="button" class="wf-btn wf-btn--primary wf-btn--block" data-go-write>
+          <i class="ti ti-pencil"></i> 자소서 작성하기</button>
+        <button type="button" class="wf-btn wf-btn--sm wf-btn--block" data-open-lib>
+          <i class="ti ti-folder"></i> 저장된 자소서 불러오기</button>
+      </div>
+    </div>`;
+  }
+
+  /* 탭 전환·정성스펙 토글 뒤 다시 그리기 — 지금 보이는 화면 쪽만 다시 그린다.
+     bind() 은 분석·작성 두 화면이 공유하므로, 여기서 화면을 갈라 준다(안 그러면
+     작성 화면에서 탭을 눌러도 숨은 #jd-result 만 다시 그려진다). */
+  function rerender(r) {
+    if (_wsHost && _wsHost.id === 'write-root') renderWrite();
+    else render(r);
+  }
+
+  /* 역량 → 그 역량이 배정된 문항 번호. 분석 화면(render)·작성 화면(renderWrite)이 같이 쓴다. */
+  function qMapOf(r, tabs) {
+    const qMap = {};
+    (tabs || []).forEach((t, ti) => {
+      if (t.kind !== 'question') return;
+      t.comps.forEach(c => {
+        const i = r.items.indexOf(c);
+        if (i < 0) return;
+        (qMap[i] = qMap[i] || []).push(ti + 1);
+      });
+    });
+    return qMap;
+  }
+
+  /* ══ 작성 화면(#write) — 역량 분석 뒤 전용 작성 페이지 (2026-09-01) ═══════════
+     왼쪽=자소서 관리·불러오기, 가운데=문항 탭+에디터(draftHtml 그대로 재사용),
+     오른쪽=요구 역량 참고(reqListHtml). 에디터·AI 초안·정성스펙·자동저장은 분석 화면과
+     **같은 함수·같은 bind** 를 쓴다 — 두 곳에서 다른 코드로 그리면 한쪽만 고쳐진다. */
+  function onEnterWrite() {
+    /* 보관함 '이어쓰기'로 넘어왔으면 그 회사로 화면을 세운다 — 코치(onEnter)와 같은 키. */
+    const picked = localStorage.getItem('careerly_selected_company');
+    if (picked && $('#jd-company')) {
+      $('#jd-company').value = picked;
+      localStorage.removeItem('careerly_selected_company');
+    }
+    renderWrite();
+  }
+
+  function renderWrite() {
+    const host = $('#write-root');
+    if (!host) return;
+    const company = valueOf('#jd-company');
+    /* 오른쪽 역량 참고는 **지금 회사로 분석한 결과**가 있을 때만 보인다. 회사가 다르면
+       남의 회사 역량을 보여주게 되므로 끈다(에디터는 회사별 저장이라 그대로 쓴다). */
+    const hasAnalysis = !!(_last && _last.items && _last.items.length && _lastCompany === company);
+    const r = hasAnalysis ? _last : { items: [] };
+    let tabs = tabsOf(r);
+    /* 문항도 분석도 없는데 이 회사로 저장해 둔 초안이 있으면(다른 날 쓰다 온 경우),
+       그 저장 키를 탭으로 되살린다 — 안 그러면 이어쓰기로 들어와도 빈 화면만 보인다. */
+    if (!tabs.length) {
+      const saved = draftStore()?.all()[company] || {};
+      const labels = Object.keys(saved);
+      if (labels.length) tabs = labels.map(label => ({
+        kind: 'question', text: label, type: null, label, key: label, comps: [],
+      }));
+    }
+    _lastTabs = tabs;
+    _focused = Math.max(0, Math.min(_focused, r.items.length - 1));
+    _tab = Math.min(_tab, Math.max(0, tabs.length - 1));
+    const qMap = qMapOf(r, tabs);
+
+    host.innerHTML = `
+      <div class="write-shell">
+        <aside class="write-side" aria-label="자소서 관리">
+          <button type="button" class="write-back" data-write-back>
+            <i class="ti ti-arrow-left"></i> 역량 분석으로
+          </button>
+          <div class="write-side-doc">
+            <span class="wf-eyebrow">작성 중</span>
+            <b>${company ? esc(company) : '새 자소서'}</b>
+          </div>
+          <div class="write-side-acts">
+            <button type="button" class="write-side-b" data-write-lib><i class="ti ti-folder"></i> 자소서 불러오기</button>
+            <button type="button" class="write-side-b" data-write-new><i class="ti ti-plus"></i> 새 자소서 작성</button>
+            <button type="button" class="write-side-b" data-write-export><i class="ti ti-download"></i> 내보내기</button>
+          </div>
+          <p class="write-side-note">이 브라우저에만 저장돼요. 기기를 옮기면 따라오지 않습니다.</p>
+        </aside>
+
+        <div class="write-main">${draftHtml(r, tabs)}</div>
+
+        <aside class="write-ref" aria-label="요구 역량 참고">
+          ${hasAnalysis
+            ? reqListHtml(r, qMap)
+            : `<div class="write-ref-empty">
+                 <i class="ti ti-list-search"></i>
+                 <b>요구 역량 참고</b>
+                 <p>${company ? `<b>${esc(company)}</b> 공고로 ` : ''}역량 분석을 하면 이 자리에
+                   요구 역량·공고 근거가 나와 옆에 두고 쓸 수 있어요.</p>
+                 <button type="button" class="wf-btn wf-btn--sm wf-btn--primary" data-write-back>역량 분석하러 가기</button>
+               </div>`}
+        </aside>
+      </div>`;
+
+    _wsHost = host;                      // 지금 작업 화면은 작성(#write-root)
+    bind(host, r, tabs);                 // 탭·AI 초안·정성스펙·역량 클릭·자동저장 — 분석 화면과 공유
+    bindWriteSide(host);
+  }
+
+  function bindWriteSide(host) {
+    host.querySelectorAll('[data-write-back]').forEach(el => el.addEventListener('click', () => navigate('jd')));
+    host.querySelectorAll('[data-write-lib]').forEach(el => el.addEventListener('click', () => { if (window.Drafts) Drafts.open(); }));
+    host.querySelectorAll('[data-write-new]').forEach(el => el.addEventListener('click', () => navigate('jd')));
+    host.querySelectorAll('[data-write-export]').forEach(el => el.addEventListener('click', exportDrafts));
+  }
+
+  /* '내보내기' — 이 회사의 모든 문항 초안을 하나로 이어 클립보드에 복사한다.
+     파일 저장 대신 복사로 둔다(브라우저 저장 대화상자를 띄우지 않아도 되고, 어디에든
+     붙여넣을 수 있다). 비어 있으면 아무 일도 하지 않고 알린다. */
+  function exportDrafts() {
+    const company = valueOf('#jd-company');
+    const parts = (_lastTabs || []).map(t => {
+      const d = getDraft(t.key);
+      return d.trim() ? `[${t.label}] ${t.text || ''}\n${d}` : '';
+    }).filter(Boolean);
+    if (!parts.length) {
+      if (typeof toast === 'function') toast('내보낼 초안이 없어요', { icon: false });
+      return;
+    }
+    const text = `${company || '자소서'}\n\n` + parts.join('\n\n──────────\n\n');
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(
+        () => { if (typeof toast === 'function') toast('전체 초안을 클립보드에 복사했어요', { icon: false }); },
+        () => { if (typeof toast === 'function') toast('복사에 실패했어요', { icon: false }); });
+    }
   }
 
   function bind(box, r, tabs) {
@@ -1791,19 +2200,44 @@
     box.querySelectorAll('[data-comp]').forEach(el =>
       el.addEventListener('click', () => focusItem(Number(el.dataset.comp))));
 
-    // 초안 탭
+    // 초안 탭 — 지금 화면(분석/작성)에 맞게 다시 그린다
     box.querySelectorAll('[data-tab]').forEach(el =>
-      el.addEventListener('click', () => { _tab = Number(el.dataset.tab); render(r); }));
+      el.addEventListener('click', () => { _tab = Number(el.dataset.tab); rerender(r); }));
 
-    // 'AI 초안 넣기' — 내 활동과 공고 근거로 문단을 만들어 작성칸에 끼워 넣는다
-    box.querySelectorAll('[data-ai]').forEach(el => {
-      const i = Number(el.dataset.ai);
-      el.addEventListener('click', () => insertAiDraft(r.items[i], i, r));
+    // 'AI 초안 넣기' — 초안 머리의 버튼. 지원동기는 담은 회사 근거로, 그 밖은 고른(_focused)
+    // 역량으로 문단을 만든다. 한 버튼에서 문항 종류를 보고 갈라 준다.
+    const aiBtn = box.querySelector('[data-ai-draft]');
+    if (aiBtn) aiBtn.addEventListener('click', () => {
+      const tab = tabs[_tab];
+      const isMotive = tab?.type?.pick === 'news';
+      const ev = isMotive && tab?.type ? Roadmap.evidenceFor(valueOf('#jd-company'), tab.type.label) : [];
+      if (isMotive && ev.length) { insertMotiveDraft(r, tabs); return; }
+      const item = r.items[_focused] || (tab?.comps || [])[0] || r.items[0];
+      if (item) { insertAiDraft(item, r.items.indexOf(item), r); return; }
+      /* 지원동기인데 담은 근거도, 뽑힌 역량도 없다 — 무엇을 하면 되는지 상태줄에 적는다. */
+      const s = document.getElementById('jd-draft-state');
+      if (s) s.innerHTML = isMotive
+        ? '회사 리포트에서 <b>근거를 담으면</b> 지원동기 AI 초안을 쓸 수 있어요'
+        : '먼저 <b>역량 분석</b>을 하면 그 역량으로 AI 초안을 써 드려요';
     });
+
+    // 문항 초안 영역의 정성스펙 칩 — 눌러 이 문항에 쓸 경험(0~3)을 바꾼다
+    box.querySelectorAll('[data-dqpick]').forEach(el => el.addEventListener('click', () => {
+      toggleQPick(el.dataset.dqkey, el.dataset.dqpick);
+      rerender(r);
+    }));
 
     // 지원동기 초안 — 담아 온 회사 근거로 문단을 만든다
     const motiveBtn = box.querySelector('[data-motive]');
     if (motiveBtn) motiveBtn.addEventListener('click', () => insertMotiveDraft(r, tabs));
+
+    // '자소서 작성하기' — 전용 작성 화면(#write)으로. 저장·고른 스펙은 회사명 scope 로 이어진다.
+    const goWrite = box.querySelector('[data-go-write]');
+    if (goWrite) goWrite.addEventListener('click', () => navigate('write'));
+
+    // '저장된 자소서 불러오기' — 보관함 모달을 연다(#drafts-modal)
+    const openLib = box.querySelector('[data-open-lib]');
+    if (openLib && root.Drafts) openLib.addEventListener('click', () => Drafts.open());
 
     const reopen = box.querySelector('[data-reopen]');
     if (reopen) reopen.addEventListener('click', () => {
@@ -1820,17 +2254,33 @@
   /* 역량 바꿔 보기 — 다시 그리지 않고 클래스만 토글한다.
      innerHTML 로 새로 그리면 작성 중이던 초안이 날아간다(자동저장은 600ms 디바운스라
      방금 친 글자는 아직 저장 전이다). */
+  /* 역량을 누르면: 목록 강조 + 아래 상세만 다시 그린다 + 초안의 'AI 초안 기준 역량' 갱신.
+     통째로 render 하지 않는다 — 오른쪽 작성칸의 커서·스크롤을 잃지 않으려는 것이다
+     (레퍼런스 A: 왼쪽은 목록+상세, 초안은 그대로). */
   function focusItem(i) {
-    if (!Number.isInteger(i) || i < 0) return;
+    if (!Number.isInteger(i) || i < 0 || !_last) return;
     _focused = i;
+    /* 분석 화면이면 #jd-result, 작성 화면이면 #write-root. _wsHost 가 지금 보이는 쪽을
+       가리킨다(둘 다 DOM 에 살아 있어 id 로 못 가른다). */
+    const box = _wsHost || document.getElementById('jd-result');
+    if (!box) return;
 
-    document.querySelectorAll('#jd-result .jd-comp').forEach((el, idx) =>
-      el.classList.toggle('is-open', idx === i));
-    document.querySelectorAll('#jd-result .jd-keys .jd-key').forEach(el =>
+    box.querySelectorAll('.jd-req').forEach(el =>
       el.classList.toggle('is-on', Number(el.dataset.key) === i));
 
-    const el = document.getElementById(`jd-comp-${i}`);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const item = _last.items[i];
+    const detail = box.querySelector('.jd-req-detail');
+    if (item && detail) {
+      detail.replaceWith(document.createRange().createContextualFragment(reqDetailHtml(item)));
+    }
+
+    /* 초안 머리의 '기준 역량' 줄을 바꾼다(지원동기 탭은 제외 — 거긴 회사 근거가 재료다). */
+    const tab = (_lastTabs || [])[_tab];
+    const ctx = box.querySelector('.jd-qctx');
+    if (ctx && item && !(tab?.type?.pick === 'news')) {
+      ctx.innerHTML = `AI 초안 기준 역량 <b>${esc(item.label)}</b>`
+        + ` <span class="jd-qctx-sub">— 왼쪽 목록에서 다른 역량을 누르면 바뀝니다</span>`;
+    }
   }
 
   /* ── AI 초안 ──────────────────────────────────────────────
@@ -1839,8 +2289,9 @@
      그게 사용자의 문장이고, 그걸 AI 문장으로 지우면 되돌릴 방법이 없다. */
   async function insertAiDraft(item, i, r) {
     const ta = $('#jd-draft');
-    const btn = document.querySelector(`[data-ai="${i}"]`);
-    const stateEl = document.querySelector(`[data-ai-state="${i}"]`);
+    /* 버튼·상태 자리는 이제 초안 머리에 있다(레퍼런스 A) — 옛 역량 카드 버튼이 없으면 그리로 폴백. */
+    const btn = document.querySelector(`[data-ai="${i}"]`) || document.querySelector('[data-ai-draft]');
+    const stateEl = document.querySelector(`[data-ai-state="${i}"]`) || document.getElementById('jd-draft-state');
     if (!ta || !item) return;
 
     const tabs = _lastTabs || [];
@@ -1857,7 +2308,10 @@
 
        그래서 **바로 만들고, 재료가 빠졌다는 말은 결과 옆에 남긴다.** 막지 않되
        모르게 하지도 않는다 — 21-5 에서 '공고 없이도 시작' 을 열어 둔 것과 같은 판단이다. */
-    const star = currentStar();
+    /* 이 문항에 고른 정성스펙(0~3개)의 STAR 가 초안 재료다(사용자 지시 2026-08-31).
+       안 골랐으면 빈 배열 → 서버가 STAR 없이 문항 골격으로 쓴다(지원동기 성취담 문제 해결). */
+    const picks = tab?.kind === 'question' ? qPickList(tab.key) : [];
+    const hasStar = picks.length > 0;
 
     btn.disabled = true;
     if (stateEl) stateEl.textContent = '초안을 쓰는 중… (1분 이상 걸릴 수 있어요)';
@@ -1871,7 +2325,7 @@
         quotes: item.quotes || [],
         reads: item.reads || '',
         frame: item.frame || '',
-        star,
+        picks,
         limit: 600,
       });
 
@@ -1889,11 +2343,13 @@
           : '넣었어요';
         /* STAR 없이 만든 문단이 뻔하다는 것을 **결과를 보여준 뒤에** 말한다.
            만들기 전에 말하면 경고이고, 만든 뒤에 말하면 다음에 할 일이 된다. */
-        stateEl.innerHTML = star ? blanks
-          : `${blanks} · <b>정성스펙 카드</b>에서 STAR 를 채우면 더 구체적으로 나와요 `
-            + '<button type="button" class="jd-inline-link" data-open-star>채우러 가기</button>';
+        stateEl.innerHTML = hasStar ? blanks
+          : `${blanks} · 위 <b>자소서 문항</b> 칸에서 이 문항에 <b>정성스펙</b>을 고르면 내 경험(STAR)으로 더 구체적으로 나와요 `
+            + '<button type="button" class="jd-inline-link" data-open-star>고르러 가기</button>';
         const goStar = stateEl.querySelector('[data-open-star]');
-        if (goStar) goStar.addEventListener('click', () => goSpecStar());
+        if (goStar) goStar.addEventListener('click', () => {
+          openStep(3, true);   // 자소서 문항 칸을 열고 그리로 스크롤한다
+        });
       }
       paintAiNotes(i, out);
     } catch (e) {
@@ -1912,8 +2368,10 @@
      그게 사용자의 문장이고, AI 문장으로 지우면 되돌릴 방법이 없다. */
   async function insertMotiveDraft(r, tabs) {
     const ta = $('#jd-draft');
-    const btn = document.querySelector('[data-motive]');
-    const stateEl = document.querySelector('[data-motive-state]');
+    /* 지원동기 초안도 이제 초안 머리의 'AI 초안 넣기' 버튼에서 부른다(전용 버튼을 없앴다).
+       버튼·상태 자리는 그리로 폴백한다. */
+    const btn = document.querySelector('[data-motive]') || document.querySelector('[data-ai-draft]');
+    const stateEl = document.querySelector('[data-motive-state]') || document.getElementById('jd-draft-state');
     if (!ta || !btn) return;
 
     const company = valueOf('#jd-company');
@@ -1923,6 +2381,9 @@
       if (stateEl) stateEl.textContent = '담아 온 근거가 없어요.';
       return;
     }
+    /* 이 문항에 고른 정성스펙(0~3개)의 STAR — 지원동기의 '내 경험' 재료다(사용자 지적 2026-09-01).
+       안 골랐으면 빈 배열 → 서버가 회사 근거만으로 쓰고 안 고른 활동을 끌어들이지 않는다. */
+    const picks = tab?.kind === 'question' ? qPickList(tab.key) : [];
 
     btn.disabled = true;
     if (stateEl) stateEl.textContent = '담은 근거를 읽고 쓰는 중… (1분 이상 걸릴 수 있어요)';
@@ -1935,6 +2396,7 @@
         /* 서버가 필요한 것만 보낸다 — id·url 은 프롬프트에 쓸모가 없고,
            보내 봤자 프롬프트만 길어져 뒤쪽 규칙이 밀린다. */
         evidence: ev.map(e => ({ kind: e.kind, text: e.text, source: e.source || '' })),
+        picks,
         limit: 600,
       });
 
@@ -2055,6 +2517,19 @@
       saveDraft(key, ta.value);
       if (ta.value.trim()) stateEl.textContent = '저장됨';
     });
+
+    /* '저장하기' — 자동저장(입력 600ms·blur)과 별개로 **지금 바로** 저장하는 버튼
+       (사용자 지시 2026-09-01). 자동저장을 못 믿는 사람이 눌러 확인하는 자리라, 눌렀을 때
+       분명히 '저장됨'을 보여준다. 탭 글자수도 같이 갱신한다. */
+    const saveBtn = box.querySelector('[data-save-draft]');
+    if (saveBtn) saveBtn.addEventListener('click', () => {
+      clearTimeout(timer);
+      saveDraft(key, ta.value);
+      stateEl.textContent = '저장됨';
+      const tab = box.querySelector(`[data-tab="${_tab}"] span`);
+      if (tab) tab.textContent = ta.value.length.toLocaleString();
+      if (typeof toast === 'function') toast('저장했어요', { icon: false });
+    });
   }
 
   /* ── 초안 검사 (브라우저에서만 돈다) ──────────────────────────
@@ -2092,7 +2567,7 @@
   }
 
   const api = {
-    init, onEnter, focusItem,
+    init, onEnter, onEnterWrite, focusItem,
     // 화면 없이 검증하는 규칙들 (test/jd-questions.test.js)
     classifyQuestion, competenciesFor, parseQuestions, questionDraftKey, QUESTION_TYPES,
     starGate, actKeyOf,

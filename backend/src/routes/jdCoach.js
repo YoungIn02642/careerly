@@ -219,8 +219,23 @@ router.post('/draft', async (req, res) => {
   if (!competency) return res.status(400).json({ error: '어느 역량으로 쓸지 알려 주세요.' });
 
   const limit = Math.min(Math.max(Number(req.body?.limit) || 600, 200), 1500);
-  /* 아래 '예시 베낌' 검사도 이 값을 본다 — 사용자가 직접 적은 대목은 베낌이 아니다. */
+  /* ── 문항마다 고른 정성스펙(0~3개) (사용자 지시 2026-08-31) ────────────
+     고른 게 있으면 그 STAR 가 본문 재료다. 0개면 STAR 를 강요하지 않고 문항 골격만 쓴다.
+     2~3개면 draft-coach 가 공통점으로 묶는다. star(단일)는 옛 호환용으로 남겨 둔다.
+     칸당 길이를 자르는 것은 프롬프트가 길어져 뒤쪽 규칙이 잘리는 것을 막기 위해서다. */
+  const picks = (Array.isArray(req.body?.picks) ? req.body.picks : [])
+    .slice(0, 3)
+    .map(p => ({ name: String(p?.name || '').trim().slice(0, 120), star: starOf(p?.star) }))
+    .filter(p => p.star);
   const star = starOf(req.body?.star);
+  /* 예시 베낌 검사는 '사용자가 직접 쓴 것' 을 통과시킨다 — 고른 경험들의 STAR 를 칸별로
+     합쳐 그 판정 재료로 쓴다(각 경험 문장이 다 사용자 것이다). */
+  const ownStar = {};
+  for (const p of (picks.length ? picks : (star ? [{ star }] : []))) {
+    for (const k of ['S', 'T', 'A', 'R']) {
+      if (p.star && p.star[k]) ownStar[k] = (ownStar[k] ? ownStar[k] + ' ' : '') + p.star[k];
+    }
+  }
   const prompt = DRAFT.buildPrompt({
     company: String(req.body?.company || '').trim(),
     jobTitle: String(req.body?.jobTitle || '').trim(),
@@ -230,10 +245,7 @@ router.post('/draft', async (req, res) => {
     frame: String(req.body?.frame || '').trim(),
     activities: Array.isArray(req.body?.activities) ? req.body.activities.slice(0, 5) : [],
     question: String(req.body?.question || '').trim(),
-    /* 사용자가 STAR 칸에 직접 쓴 문장. 활동 목록(이름·기간·역할)은 분류일 뿐이라
-       '무슨 일이 있었는지' 를 담지 못한다 — 그 빈자리를 모델이 관용구로 메운 것이
-       "노력했고 잘 마무리했습니다" 문단의 원인이었다(draft-coach.js 주석).
-       칸당 길이를 자르는 것은 프롬프트가 통째로 길어져 뒤쪽 규칙이 잘리는 것을 막기 위해서다. */
+    picks,
     star,
     limit,
   });
@@ -262,11 +274,11 @@ router.post('/draft', async (req, res) => {
        적히는 것이라, 외국어가 섞이는 것보다 훨씬 나쁘다 — 면접에서 바로 무너진다.
        한 번 다시 부르고, 그래도 베끼면 **초안을 주지 않는다.** 지어낸 문장을 주는
        것보다 "실패했다"고 말하는 편이 낫다(parseDraft 와 같은 원칙). */
-    let copied = DRAFT.copiedFromExample(out.draft, star);
+    let copied = DRAFT.copiedFromExample(out.draft, ownStar);
     if (copied) {
       const retry = await ask().catch(() => null);
-      if (retry && !DRAFT.copiedFromExample(retry.draft, star)) { out = retry; copied = null; }
-      else copied = DRAFT.copiedFromExample((retry || out).draft, star);
+      if (retry && !DRAFT.copiedFromExample(retry.draft, ownStar)) { out = retry; copied = null; }
+      else copied = DRAFT.copiedFromExample((retry || out).draft, ownStar);
     }
     if (copied) {
       return res.status(502).json({
@@ -320,12 +332,18 @@ router.post('/motive', async (req, res) => {
   }
 
   const limit = Math.min(Math.max(Number(req.body?.limit) || 600, 200), 1500);
+  /* 지원동기도 '고른 정성스펙(0~3개)' 을 재료로 받는다(사용자 지적 2026-09-01).
+     안 고르면(0개) 회사 근거만으로 쓰고 지원자 경험은 지어내지 않는다. /draft 와 같은 규약. */
+  const picks = (Array.isArray(req.body?.picks) ? req.body.picks : [])
+    .slice(0, 3)
+    .map(p => ({ name: String(p?.name || '').trim().slice(0, 120), star: starOf(p?.star) }))
+    .filter(p => p.star);
   const prompt = DRAFT.buildMotivePrompt({
     company,
     jobTitle: String(req.body?.jobTitle || '').trim(),
     question: String(req.body?.question || '').trim(),
     evidence,
-    activities: Array.isArray(req.body?.activities) ? req.body.activities.slice(0, 5) : [],
+    picks,
     limit,
   });
 

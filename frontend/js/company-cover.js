@@ -333,6 +333,7 @@ window.CompanyCover = (() => {
      거기가 끝**으로 읽는다. */
   let path = [];
   let skipped = {};         // 선택지가 하나뿐이라 자동으로 지나친 단계
+  let lanePage = 0;         // '고른 업종 회사' 목록의 현재 페이지 (0부터)
 
   const root = () => document.getElementById('company-root');
 
@@ -464,6 +465,28 @@ window.CompanyCover = (() => {
     bind(box);
   }
 
+  /* '고른 업종 회사' 페이지 넘김 줄. 한 장뿐이면 아무것도 그리지 않는다.
+     페이지가 많아도(1,779곳 = 149장) 현재 앞뒤 두 장 + 처음·끝만 보이고 사이는 …로 접는다. */
+  function lanePagerHtml(page, pages, total) {
+    if (pages <= 1) return '';
+    const btn = (p, label, cls = '', dis = false) =>
+      `<button type="button" class="co-page ${cls}" data-lane-page="${p}" ${dis ? 'disabled' : ''}>${label}</button>`;
+    const nums = [];
+    let last = -1;
+    for (let p = 0; p < pages; p++) {
+      if (p === 0 || p === pages - 1 || Math.abs(p - page) <= 2) {
+        if (last >= 0 && p - last > 1) nums.push('<span class="co-page-gap">…</span>');
+        nums.push(btn(p, String(p + 1), p === page ? 'is-on' : ''));
+        last = p;
+      }
+    }
+    return `<div class="co-pager">
+      ${btn(page - 1, '‹ 이전', 'co-page--nav', page === 0)}
+      <span class="co-pager-nums">${nums.join('')}</span>
+      ${btn(page + 1, '다음 ›', 'co-page--nav', page === pages - 1)}
+    </div>`;
+  }
+
   /* ── 상태 1 · 검색 우선 ──────────────────────────────────── */
   function searchHtml() {
     const rec = recent();
@@ -477,6 +500,8 @@ window.CompanyCover = (() => {
         </span>
         <span class="co-tile-sub">${esc(c.industry || sub || '기업 리포트 보기')}</span>
         <span class="co-tile-foot">${
+          c.size && SIZE_LABEL[c.size]
+            ? `<span class="co-tile-tag co-tile-tag--${esc(c.size)}">${SIZE_LABEL[c.size]}</span>` : ''}${
           (evAll[c.name] || []).length
             ? `<span class="wf-badge wf-badge--ok">근거 ${evAll[c.name].length}건 담김</span>`
             : `<span class="wf-badge wf-badge--mute">기업 리포트</span>`}</span>
@@ -517,16 +542,19 @@ window.CompanyCover = (() => {
             if (!narrowed) return '';
             const list = companiesUnder(path);
             if (!list.length) return '';
-            const CAP = 12;
-            const shown = list.slice(0, CAP);
+            /* 예전에는 앞 12곳만 보이고 "…외 N곳" 안내뿐이라 나머지를 볼 길이 없었다
+               (사용자 지적). 한 장 12곳씩 페이지로 넘겨 전부 볼 수 있게 한다. */
+            const PAGE = 12;
+            const pages = Math.ceil(list.length / PAGE);
+            if (lanePage >= pages) lanePage = 0;                 // 필터로 페이지 수가 줄면 되돌린다
+            const start = lanePage * PAGE;
+            const shown = list.slice(start, start + PAGE);
             const sizeTag = sizeFilter && SIZE_LABEL[sizeFilter] ? ` · ${SIZE_LABEL[sizeFilter]}` : '';
             return `
             <section>
               <div class="co-lane-h"><h2>고른 업종 회사</h2><span>${list.length.toLocaleString()}곳${sizeTag}</span></div>
-              <div class="co-lane-grid">${shown.map(c => tile({ name: c.n })).join('')}</div>
-              ${list.length > shown.length
-                ? `<p class="jd-hint">…외 ${(list.length - shown.length).toLocaleString()}곳. 위에서 업종을 더 좁히거나 규모 필터를 걸면 줄어들어요.</p>`
-                : ''}
+              <div class="co-lane-grid">${shown.map(c => tile({ name: c.n, size: sizeFilter ? null : c.s })).join('')}</div>
+              ${lanePagerHtml(lanePage, pages, list.length)}
             </section>`;
           })()}
           ${rec.length ? `
@@ -724,6 +752,14 @@ window.CompanyCover = (() => {
     const S = stepsNow();
     const open = Math.min(path.length, S.length - 1);
     const focus = new Set(treeData.focus?.minors || []);
+    /* 추천(focus)은 2차 분류(업종) 단위로 온다. 예전에는 그 단계에서만 별이 붙어서,
+       **업종 대분류에는 추천 표시가 안 보였다**(사용자 지적 — 어느 대분류를 눌러야 할지 헷갈림).
+       그래서 상위 단계도, 그 아래에 추천 업종이 하나라도 있으면 별을 붙인다. */
+    const hasFocusUnder = node => {
+      if (!node || isLeaf(node)) return false;
+      return Object.keys(node).some(k => focus.has(k) || hasFocusUnder(node[k]));
+    };
+    const optFocus = (slice, id) => focus.has(id) || hasFocusUnder(nodeAt([...slice, id]));
 
     const acc = S.map((st, i) => {
       const locked = i > path.length;
@@ -736,11 +772,12 @@ window.CompanyCover = (() => {
       if (isOpen) {
         body = isLast
           ? `<div class="co-indlist">${companiesAt(path).map(companyChip).join('')}</div>`
-          : `<div class="co-indchips">${optionsAt(path.slice(0, i)).map(o => `
-              <button type="button" class="co-indchip ${path[i] === o.id ? 'is-on' : ''} ${focus.has(o.id) ? 'is-focus' : ''}"
+          : `<div class="co-indchips">${optionsAt(path.slice(0, i)).map(o => {
+              const isFocus = optFocus(path.slice(0, i), o.id);
+              return `<button type="button" class="co-indchip ${path[i] === o.id ? 'is-on' : ''} ${isFocus ? 'is-focus' : ''}"
                       data-go="${esc(o.id)}" data-depth="${i}">
-                ${focus.has(o.id) ? '<i class="ti ti-star-filled"></i>' : ''}${esc(o.id)}<b>${o.n.toLocaleString()}</b>
-              </button>`).join('')}</div>`;
+                ${isFocus ? '<i class="ti ti-star-filled"></i>' : ''}${esc(o.id)}<b>${o.n.toLocaleString()}</b>
+              </button>`; }).join('')}</div>`;
       }
 
       return `<div class="co-step-card ${isOpen ? 'is-open' : ''} ${locked ? 'is-locked' : ''} ${done ? 'is-done' : ''}">
@@ -1463,12 +1500,17 @@ window.CompanyCover = (() => {
         const was = path[i];
         path = path.slice(0, i);
         if (was !== el.dataset.go) path.push(el.dataset.go);
+        lanePage = 0;                       // 업종이 바뀌면 목록 첫 장부터
         paint();
       }));
 
     // 접힌 단계를 다시 펼친다 — 그 단계부터 아래 선택은 푼다
     box.querySelectorAll('[data-open]').forEach(el =>
-      el.addEventListener('click', () => { path = path.slice(0, Number(el.dataset.open)); paint(); }));
+      el.addEventListener('click', () => { path = path.slice(0, Number(el.dataset.open)); lanePage = 0; paint(); }));
+
+    // '고른 업종 회사' 페이지 넘김
+    box.querySelectorAll('[data-lane-page]').forEach(el =>
+      el.addEventListener('click', () => { lanePage = Number(el.dataset.lanePage); paint(); }));
 
     // 기업분석 5단계 카드 — 누른 칸만 아래에 펼친다
     box.querySelectorAll('[data-step]').forEach(el =>
@@ -1562,6 +1604,7 @@ window.CompanyCover = (() => {
   function setSize(id) {
     sizeFilter = id || null;
     sizeTouched = true;
+    lanePage = 0;                           // 규모 필터가 바뀌면 목록 첫 장부터
     /* 고른 업종에 그 형태의 회사가 한 곳도 없을 수 있다(민간 ↔ 공공을 오갈 때가
        특히 그렇다). 그대로 두면 "업종은 골랐는데 아무것도 없는" 화면이 되므로,
        **남을 수 있는 데까지만** 되돌린다 — 전부 푸는 것보다 덜 잃는다. */

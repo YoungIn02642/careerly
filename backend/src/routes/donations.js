@@ -58,8 +58,7 @@ router.post('/', requireAuth, ah(async (req, res) => {
   const consent = req.body?.consent === true;
   const rawStar = (req.body?.star && typeof req.body.star === 'object') ? req.body.star : {};
   /* 가릴 말(이름·회사·학교) — 화면에서 사용자가 알려준다. 본인 이름·닉네임은 자동으로 넣는다. */
-  const names = strArr(req.body?.names).concat([req.user.name, req.user.nickname].filter(Boolean));
-  const orgs = strArr(req.body?.orgs);
+  const terms = strArr(req.body?.terms).concat([req.user.name, req.user.nickname].filter(Boolean));
 
   if (!consent) return res.status(400).json({ error: '통계·익명 참조 활용에 동의해야 기증할 수 있어요.' });
   if (!jobIds.has(jobField)) return res.status(400).json({ error: '직무를 선택해 주세요.' });
@@ -69,7 +68,7 @@ router.post('/', requireAuth, ah(async (req, res) => {
   const star = {};
   const maskCount = {};
   for (const k of STAR_KEYS) {
-    const { text, masked } = Anonymize.anonymize(rawStar[k] || '', { names, orgs });
+    const { text, masked } = Anonymize.anonymize(rawStar[k] || '', { terms });
     star[k] = text;
     for (const m of masked) maskCount[m.type] = (maskCount[m.type] || 0) + m.count;
   }

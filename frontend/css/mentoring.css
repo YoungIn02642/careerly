@@ -165,6 +165,8 @@ html { scroll-behavior: smooth; }
 .radar-card { padding: 22px 24px 20px; }
 .cas-title-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; }
 .cas-job-picker { display: flex; align-items: center; gap: 9px; color: var(--color-text-secondary); font-size: 12px; font-weight: 600; }
+/* '비교 직무' 라벨은 한 줄로. 좁은 칸에서 '비교'/'직무' 로 갈라지면 셀렉트와 높이가 안 맞는다. */
+.cas-job-picker > span { white-space: nowrap; }
 .cas-job-picker select {
   min-width: 180px; padding: 9px 32px 9px 11px; border: 1px solid var(--c-border);
   border-radius: 7px; background: var(--c-surface); color: var(--c-ink); font: inherit;

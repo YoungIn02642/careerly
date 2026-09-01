@@ -40,26 +40,48 @@ store.set('삼성전자', '문항1', '   ');
 ok('공백만 저장하면 항목이 사라진다', store.count() === 0);
 ok('회사에 남은 글이 없으면 회사도 사라진다', store.entries().length === 0);
 
-console.log('\n── 3. 즐겨찾기 ──');
+console.log('\n── 3. 즐겨찾기 (자소서=회사 단위) ──');
+/* 즐겨찾기는 문항이 아니라 **자소서(회사) 하나** 를 담는다(2026-09-01). */
 reset();
 store.set('네이버', '문항1', 'A');
 store.set('네이버', '문항2', 'B');
-ok('처음에는 즐겨찾기가 아니다', store.isFav('네이버', '문항1') === false);
-ok('누르면 켜진다', store.toggleFav('네이버', '문항1') === true && store.isFav('네이버', '문항1'));
-ok('다시 누르면 꺼진다', store.toggleFav('네이버', '문항1') === false && !store.isFav('네이버', '문항1'));
+ok('처음에는 즐겨찾기가 아니다', store.isFav('네이버') === false);
+ok('누르면 켜진다', store.toggleFav('네이버') === true && store.isFav('네이버'));
+ok('다시 누르면 꺼진다', store.toggleFav('네이버') === false && !store.isFav('네이버'));
 
-/* 즐겨찾기는 "다시 볼 글" 이라 목록 맨 위에 있어야 뜻이 있다. */
-store.toggleFav('네이버', '문항2');
-ok('즐겨찾기한 글이 먼저 온다', store.entries()[0].drafts[0].label === '문항2');
+/* 즐겨찾기는 "다시 볼 자소서" 라 목록 맨 위에 있어야 뜻이 있다. */
+reset();
+store.set('카카오', '문항1', 'A');
+store.set('네이버', '문항1', 'B');
+store.toggleFav('네이버');
+ok('즐겨찾기한 회사가 먼저 온다', store.entries()[0].company === '네이버');
+ok('그 회사의 fav 플래그가 선다', store.entries()[0].fav === true);
+
+/* 옛 '회사::항목' 형태로 저장돼 있어도 회사 즐겨찾기로 읽는다(하위호환). */
+reset();
+store.set('현대차', '문항1', 'A');
+localStorage.setItem('careerly_jd_fav_v1', JSON.stringify(['현대차::문항1']));
+ok('옛 문항 단위 즐겨찾기도 회사로 읽는다', store.isFav('현대차') === true);
+ok('옛 값을 끄면 회사 흔적까지 지운다', store.toggleFav('현대차') === false && store.isFav('현대차') === false);
 
 console.log('\n── 4. 삭제 ──');
 reset();
 store.set('카카오', '문항1', 'A');
-store.toggleFav('카카오', '문항1');
+store.set('카카오', '문항2', 'B');
+store.toggleFav('카카오');
 store.remove('카카오', '문항1');
-ok('지운 글은 목록에서 사라진다', store.count() === 0);
+ok('한 문항을 지워도 남은 글이 있으면 회사 즐겨찾기는 남는다', store.isFav('카카오') === true);
+store.remove('카카오', '문항2');
+ok('마지막 글까지 지우면 목록에서 사라진다', store.count() === 0);
 /* 즐겨찾기 찌꺼기를 남기면, 같은 이름으로 새 글을 쓸 때 별이 켜진 채로 나타난다. */
-ok('즐겨찾기도 같이 지운다', store.isFav('카카오', '문항1') === false);
+ok('회사가 비면 즐겨찾기도 같이 지운다', store.isFav('카카오') === false);
+
+/* 회사 통째 삭제(removeCompany)도 즐겨찾기를 남기지 않는다. */
+reset();
+store.set('토스', '문항1', 'A');
+store.toggleFav('토스');
+store.removeCompany('토스');
+ok('회사를 통째로 지우면 즐겨찾기도 사라진다', store.isFav('토스') === false && store.count() === 0);
 
 console.log('\n── 5. 회사별 묶음 ──');
 reset();
@@ -70,7 +92,7 @@ const groups = store.entries();
 ok('회사별로 묶는다', groups.length === 2);
 ok('전체 건수를 센다', store.count() === 3);
 ok('즐겨찾기가 있는 회사가 먼저 온다', (() => {
-  store.toggleFav('LG전자', '문항1');
+  store.toggleFav('LG전자');
   return store.entries()[0].company === 'LG전자';
 })());
 
