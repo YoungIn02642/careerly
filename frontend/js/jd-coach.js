@@ -276,6 +276,63 @@
     localStorage.setItem(LS_QPICK, JSON.stringify(all));
     return true;
   }
+  /* ── 역량 분석 결과를 자소서(회사)마다 보관한다 (사용자 지시 2026-09-01) ──────
+     ── 무엇이 문제였나 ──
+     역량 분석 결과는 `_last` 라는 **메모리 변수**에만 있었다. 그래서 보관함에서
+     '이어쓰기'로 들어오거나 새로고침하면 `_last` 가 비어 있고, 작성 화면이
+     `r = { items: [] }` 로 그려진다. 역량이 없으니 **AI 초안 넣기가 동작하지 않는다**
+     (초안은 item.label·quotes·reads·frame 을 재료로 쓴다). 사용자가 겪은 그대로다.
+
+     초안 본문·STAR·고른 스펙은 이미 회사별 localStorage 에 있었는데 **분석만 안 남겼다.**
+     같은 규약으로 맞춘다 — 키는 draftScope()(회사), 저장소는 이 파일이 단일 출처다.
+
+     ── 문항 문구도 같이 남긴다 ──
+     탭은 `parseQuestions()` 가 `#jd-questions` 텍스트에서 만든다. 분석만 되살리고
+     문항을 안 되살리면 탭이 역량 단위로 바뀌어 **저장 키가 달라지고**, 이어쓰기로
+     들어온 사람이 자기 글을 못 찾는다.
+
+     ── 회사 수를 제한한다 ──
+     결과 하나가 수십 KB 라 무한정 쌓으면 localStorage 가 찬다. 오래된 것부터 버린다.
+     지워져도 분석을 다시 돌리면 그만이다(초안 본문은 다른 키라 안 지워진다). */
+  const LS_ANALYSIS = 'careerly_jd_analysis_v1';
+  const ANALYSIS_MAX = 10;
+
+  function loadAnalyses() {
+    try { return JSON.parse(localStorage.getItem(LS_ANALYSIS)) || {}; } catch { return {}; }
+  }
+  /* 저장은 '역량이 하나라도 있을 때만' 한다 — 빈 결과를 덮어 쓰면 멀쩡히 저장돼 있던
+     분석이 사라진다(공고 없이 guideJd 로 들어온 경우가 실제로 그렇다). */
+  function saveAnalysis(company, r, questions) {
+    const scope = String(company || '').trim();
+    if (!scope || !r?.items?.length) return false;
+    const all = loadAnalyses();
+    /* 시각(at)으로 정렬해 버렸더니 **같은 밀리초에 저장된 것들의 순서가 불안정**했다
+       (테스트에서 잡혔다). 객체의 키 순서를 쓴다 — 지웠다 다시 넣으면 맨 뒤로 가므로
+       키 순서가 곧 '오래된 것 → 최근 것' 이고, JSON 왕복에도 그 순서가 남는다. */
+    delete all[scope];
+    all[scope] = { r, questions: String(questions || ''), at: Date.now() };
+    const keys = Object.keys(all);
+    for (const k of keys.slice(0, Math.max(0, keys.length - ANALYSIS_MAX))) delete all[k];
+    try {
+      localStorage.setItem(LS_ANALYSIS, JSON.stringify(all));
+      return true;
+    } catch {
+      /* 용량이 찼다. 이번 것만 남기고 다시 시도한다 — 그래도 안 되면 조용히 포기한다.
+         분석은 다시 돌릴 수 있는 값이라, 여기서 실패했다고 사용자를 막지는 않는다. */
+      try { localStorage.setItem(LS_ANALYSIS, JSON.stringify({ [scope]: all[scope] })); return true; }
+      catch { return false; }
+    }
+  }
+  function analysisOf(company) {
+    const v = loadAnalyses()[String(company || '').trim()];
+    return v?.r?.items?.length ? v : null;
+  }
+  function forgetAnalysis(company) {
+    const all = loadAnalyses();
+    delete all[String(company || '').trim()];
+    localStorage.setItem(LS_ANALYSIS, JSON.stringify(all));
+  }
+
   /* 고른 활동의 STAR — 코치에서 적은 것(starOfPick) 우선, 없으면 스펙 관리 원본(a.star). */
   function starForAct(actKey) {
     const s = starOfPick(actKey);
@@ -1268,6 +1325,9 @@
     try {
       _last = await DB.coachJd(text, { useAi: true, company: valueOf('#jd-company') });
       _lastCompany = valueOf('#jd-company');
+      /* 이 자소서(회사)에 분석 결과를 남긴다 — 보관함에서 이어쓰기로 돌아왔을 때
+         역량이 없어 AI 초안이 안 되던 문제를 여기서 끊는다(사용자 지시 2026-09-01). */
+      saveAnalysis(draftScope(), _last, $('#jd-questions')?.value || '');
       statusEl.textContent = '';
       _focused = 0; _tab = 0;
       /* 분석이 끝나면 **바로 작성 화면(#write)** 으로 넘어간다(사용자 지시 2026-09-01).
@@ -1307,6 +1367,9 @@
     try {
       _last = await DB.guideJd(company);
       _lastCompany = company;
+      /* 공고 없이 시작하면 역량이 안 온다(items 가 비어 있다). saveAnalysis 가
+         빈 결과를 거르므로, 예전에 저장해 둔 분석을 덮어 쓰지 않는다. */
+      saveAnalysis(draftScope(), _last, $('#jd-questions')?.value || '');
       statusEl.textContent = '';
       _focused = 0; _tab = 0;
       /* 문항 칸이 비어 있으면 기본 문항을 실제로 **써 넣는다**. 화면에만 띄우고
@@ -2108,6 +2171,19 @@
     const host = $('#write-root');
     if (!host) return;
     const company = valueOf('#jd-company');
+    /* ── 보관함 '이어쓰기'·새로고침으로 들어오면 _last 가 비어 있다 (사용자 지시 2026-09-01) ──
+       메모리에 없으면 이 회사로 저장해 둔 분석을 되살린다. 이게 없으면 역량이 0개라
+       AI 초안 넣기가 동작하지 않는다. 문항 문구도 같이 되살려야 탭(=저장 키)이
+       그대로여서 이어쓰기로 들어온 사람이 자기 글을 찾는다. */
+    if (company && !(_last?.items?.length && _lastCompany === company)) {
+      const saved = analysisOf(company);
+      if (saved) {
+        _last = saved.r;
+        _lastCompany = company;
+        const qEl = $('#jd-questions');
+        if (qEl && !qEl.value.trim() && saved.questions) qEl.value = saved.questions;
+      }
+    }
     /* 오른쪽 역량 참고는 **지금 회사로 분석한 결과**가 있을 때만 보인다. 회사가 다르면
        남의 회사 역량을 보여주게 되므로 끈다(에디터는 회사별 저장이라 그대로 쓴다). */
     const hasAnalysis = !!(_last && _last.items && _last.items.length && _lastCompany === company);
@@ -2572,6 +2648,8 @@
     classifyQuestion, competenciesFor, parseQuestions, questionDraftKey, QUESTION_TYPES,
     starGate, actKeyOf,
     checkDraft,
+    /* 회사별 분석 보관 (test/jd-analysis.test.js) */
+    saveAnalysis, analysisOf, forgetAnalysis, ANALYSIS_MAX,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;   // node 테스트용
