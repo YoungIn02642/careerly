@@ -2137,3 +2137,25 @@ a.wf-btn { text-decoration: none; }
 @media (max-width: 560px) {
   .write-side-acts { grid-template-columns: 1fr; }
 }
+
+/* ── 문항별 역량 고르기 (사용자 지시 2026-09-01) ────────────────────────────
+   역량 줄은 눌러서 상세를 여는 버튼이고, 오른쪽 +/✓ 는 **지금 보는 문항에 쓸지**를
+   정하는 별개 버튼이다. 둘을 한 버튼에 겹치면 상세를 보려다 선택이 바뀐다. */
+.jd-req-row { display: flex; align-items: stretch; gap: 4px; }
+.jd-req-row > .jd-req { flex: 1 1 auto; min-width: 0; }
+
+.jd-reqs-pick-note {
+  margin: 6px 0 8px; font-size: 12px; line-height: 1.5; color: var(--muted, #667085);
+}
+
+.jd-req-pick {
+  flex: 0 0 auto; width: 30px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--line, #e4e7ec); background: var(--card, #fff);
+  color: var(--muted, #667085); font-size: 14px; font-weight: 700; line-height: 1;
+  transition: background .12s ease, border-color .12s ease, color .12s ease;
+}
+.jd-req-pick:hover { border-color: var(--brand, #4b5bd7); color: var(--brand, #4b5bd7); }
+.jd-req-pick.is-picked {
+  background: var(--brand, #4b5bd7); border-color: var(--brand, #4b5bd7); color: #fff;
+}
+.jd-req-pick:focus-visible { outline: 2px solid var(--brand, #4b5bd7); outline-offset: 2px; }

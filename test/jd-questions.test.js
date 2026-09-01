@@ -71,8 +71,16 @@ const items = [
 const soft = JD.competenciesFor(JD.classifyQuestion('갈등을 해결한 경험'), items);
 ok('협업 문항에는 소프트 역량을 우선 배분한다',
    soft.some(c => /협업/.test(c.label)), `→ ${soft.map(c => c.label).join(', ')}`);
-ok('직무역량 문항에는 상위 역량을 최대 3개까지',
-   JD.competenciesFor(JD.classifyQuestion('직무 역량을 쓰시오'), items).length === 3);
+/* ── 2026-09-01: 자동 배분은 3개 → **1개**로 줄었다 (사용자 지시·심사) ──────────
+   초안이 실제로 쓰는 역량은 늘 하나였는데(서버가 문자열 하나를 받았다) 화면만 3개라고
+   말하고 있었다. 이제 기본 1개를 붙이고 문항마다 사용자가 0~2개로 조정한다.
+   개수 계약은 test/comp-pick.test.js 가 자세히 본다. */
+ok('직무역량 문항에는 상위 역량 1개를 기본으로 붙인다',
+   JD.competenciesFor(JD.classifyQuestion('직무 역량을 쓰시오'), items).length === 1);
+ok('그 1개는 공고 요구 1순위다',
+   JD.competenciesFor(JD.classifyQuestion('직무 역량을 쓰시오'), items)[0].label === items[0].label);
+ok('지원동기는 기본 0개다 (축이 역량이 아니라 회사 근거다)',
+   JD.competenciesFor(JD.classifyQuestion('지원 동기를 기술하시오'), items).length === 0);
 ok('역량이 없으면 빈 배열 (죽지 않는다)',
    JD.competenciesFor(JD.classifyQuestion('직무 역량'), []).length === 0);
 

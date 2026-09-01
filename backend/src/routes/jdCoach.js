@@ -16,6 +16,8 @@ const JD = require('../jd-competency');
 const TRENDS = require('../job-trends');
 const GUIDE = require('../cover-guide');
 const DRAFT = require('../draft-coach');
+/* 문항 유형 분류 — 400 판정이 '유형이 걸리는 문항인가' 를 재료로 친다(2026-09-01). */
+const QF = require('../../../frontend/js/question-frames.js');
 
 const router = express.Router();
 
@@ -215,8 +217,12 @@ function starOf(v) {
 }
 
 router.post('/draft', async (req, res) => {
-  const competency = String(req.body?.competency || '').trim();
-  if (!competency) return res.status(400).json({ error: '어느 역량으로 쓸지 알려 주세요.' });
+  /* ── 역량은 0~2개다 (사용자 지시 2026-09-01) ─────────────────────────────
+     지원동기·성격 장단점처럼 역량 축이 필요 없는 문항이 있어서 0개를 연다.
+     competency(단수)는 옛 호출 호환용으로 남긴다. */
+  const competencies = (Array.isArray(req.body?.competencies) ? req.body.competencies : null)
+    ?? (req.body?.competency ? [req.body.competency] : []);
+  const comps = competencies.map(c => String(c || '').trim()).filter(Boolean).slice(0, 2);
 
   const limit = Math.min(Math.max(Number(req.body?.limit) || 600, 200), 1500);
   /* ── 문항마다 고른 정성스펙(0~3개) (사용자 지시 2026-08-31) ────────────
@@ -236,15 +242,34 @@ router.post('/draft', async (req, res) => {
       if (p.star && p.star[k]) ownStar[k] = (ownStar[k] ? ownStar[k] + ' ' : '') + p.star[k];
     }
   }
+  const quotes = Array.isArray(req.body?.quotes) ? req.body.quotes.slice(0, 4).map(String).filter(Boolean) : [];
+  const question = String(req.body?.question || '').trim();
+
+  /* ── 400 이 막는 것은 '역량의 부재' 가 아니라 '재료의 부재' 다 (심사 지적 2026-09-01) ──
+     예전에는 역량이 없으면 400 이었다. 역량 0개를 여는 김에 그 조건을 없애면 **재료가
+     하나도 없는 호출**이 열린다 — 회사명·직무명·문항 문구만 남은 프롬프트다. 그러면
+     모델이 분량 하한을 지키려고 사전지식에서 회사 이야기를 지어낸다(실측: 삼성전자에
+     없는 '타깃 커스터마이징 전략'). /motive 가 근거 없이는 시작하지 않는 것과 같은 이유다.
+     그래서 조건을 **'사실 출처가 하나라도 있는가'** 로 바꾼다:
+       역량 · 공고 문장 · 고른 정성스펙 · 분류되는 문항 유형 중 하나는 있어야 한다.
+     문항 유형을 재료로 치는 것은, 유형이 걸리면 question-prompts.js 의 골격과 덩이별
+     조건이 프롬프트에 들어와 '무엇을 쓸지' 가 정해지기 때문이다. */
+  const typed = Boolean(QF.classify(question));
+  if (!comps.length && !quotes.length && !picks.length && !star && !typed) {
+    return res.status(400).json({
+      error: '무엇으로 쓸지 알려 주세요 — 역량을 고르거나, 자소서 문항을 넣어 주세요.',
+    });
+  }
+
   const prompt = DRAFT.buildPrompt({
     company: String(req.body?.company || '').trim(),
     jobTitle: String(req.body?.jobTitle || '').trim(),
-    competency,
-    quotes: Array.isArray(req.body?.quotes) ? req.body.quotes.slice(0, 4).map(String) : [],
+    competencies: comps,
+    quotes,
     reads: String(req.body?.reads || '').trim(),
     frame: String(req.body?.frame || '').trim(),
     activities: Array.isArray(req.body?.activities) ? req.body.activities.slice(0, 5) : [],
-    question: String(req.body?.question || '').trim(),
+    question,
     picks,
     star,
     limit,

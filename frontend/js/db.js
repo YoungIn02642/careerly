@@ -281,7 +281,9 @@ window.DB = (() => {
      문장을 짠다 — 안 보내면 일반론이 나오고, 그건 자소서에 쓸 수 없다. */
   /* star 는 사용자가 STAR 입력칸에 직접 쓴 { S, T, A, R } 이다. 활동 목록은 분류일 뿐
      '무슨 일이 있었는지' 를 담지 못해서, 그게 없으면 모델이 빈자리를 관용구로 메운다. */
-  async function draftJd({ competency, company = '', jobTitle = '', question = '',
+  /* competencies 는 이 문항에 고른 역량 **0~2개**의 이름이다(사용자 지시 2026-09-01).
+     0개면 역량 축 없이 문항 골격만으로 쓴다. competency(단수)는 옛 호출 호환용으로 남긴다. */
+  async function draftJd({ competency, competencies = null, company = '', jobTitle = '', question = '',
                            quotes = [], reads = '', frame = '', limit = 600, star = null, picks = null } = {}) {
     /* 활동 목록은 고른 경험이 있을 때만 함께 보낸다 — 안 골랐는데 보내면 서버 프롬프트가
        그 활동을 끌어다 성취담을 지어냈다(사용자 지적 2026-09-01). 서버도 hasStar 로 한 번
@@ -289,7 +291,9 @@ window.DB = (() => {
     const hasExp = (Array.isArray(picks) && picks.length > 0)
       || (star && Object.keys(star).length > 0);
     return api('POST', '/api/jd/draft', {
-      competency, company, jobTitle, question, quotes, reads, frame, limit,
+      competency,
+      competencies: Array.isArray(competencies) ? competencies : undefined,
+      company, jobTitle, question, quotes, reads, frame, limit,
       /* 문항마다 고른 정성스펙(0~3개)의 {name, star}. 0개면 서버가 STAR 없이 쓴다.
          star(단일)는 옛 호환용으로 남긴다(picks 가 있으면 서버가 그쪽을 쓴다). */
       picks: Array.isArray(picks) ? picks : undefined,

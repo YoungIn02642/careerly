@@ -153,7 +153,17 @@ function starLines(star) {
 }
 
 /* ── 프롬프트 조립 (P.C.R.O) ──────────────────────────────── */
-function buildPrompt({ company, jobTitle, competency, quotes, reads, frame, activities, question, limit, star, picks }) {
+function buildPrompt({ company, jobTitle, competency, competencies, quotes, reads, frame, activities, question, limit, star, picks }) {
+  /* ── 역량은 0~2개다 (사용자 지시 2026-09-01) ──────────────────────────────
+     예전에는 문자열 하나만 받았고 라우트가 없으면 400 을 냈다. 그런데 지원동기·성격
+     장단점처럼 **역량 축이 필요 없는 문항**이 있다(question-prompts.js 의 starMode).
+     0개면 역량 관련 규칙을 통째로 빼고 문항 골격만으로 쓴다.
+     2개는 상한이다 — 600자면 배분표가 8~9문장이고 가장 큰 덩이가 4문장인데, 규칙 10 이
+     거기에 4요소를 요구한다. 역량 3개면 역량당 1.33문장이라 무엇도 증명되지 않는다. */
+  const comps = (Array.isArray(competencies) ? competencies : (competency ? [competency] : []))
+    .map(c => String(c || '').trim()).filter(Boolean).slice(0, 2);
+  const compLabel = comps.join(' · ');
+  const hasComp = comps.length > 0;
   const acts = (activities || []).map(activityLine).filter(Boolean);
   const names = (activities || []).map(a => a?.name).filter(Boolean);
 
@@ -203,8 +213,8 @@ function buildPrompt({ company, jobTitle, competency, quotes, reads, frame, acti
     `지원 회사: ${company || '(미지정)'}`,
     jobTitle ? `지원 직무: ${jobTitle}` : null,
     question ? `자소서 문항: ${question}` : null,
-    `이번에 쓸 요구 역량: ${competency}`,
-    reads ? `이 역량으로 기업이 보는 것: ${reads}` : null,
+    hasComp ? `이번에 쓸 요구 역량: ${compLabel}` : null,
+    hasComp && reads ? `이 역량으로 기업이 보는 것: ${reads}` : null,
     /* ── 공고 문장은 '회사 사실' 이 아니라 '직무 수행 내용' 이다 (심사 지적 2026-09-01) ──
        라벨 없이 '공고 원문 근거' 로만 줬더니, "소비자 데이터를 분석해 마케팅 전략을 수립"
        (= 이 직무가 하는 일)이 초안에서 **"삼성전자가 타깃 커스터마이징 전략을 수립하는"**
@@ -276,7 +286,13 @@ function buildPrompt({ company, jobTitle, competency, quotes, reads, frame, acti
     `2. 아래 표현은 쓰지 마라(변별력이 없다): ${banned().join(', ')}`,
     `3. 아래 연결어를 반복하지 마라(AI 초안 티가 난다): ${tells().join(', ')}`,
     starFrame ? `4. STAR 순서를 지키되, 칸마다 아래를 반드시 지킨다:\n${starRules()}` : null,
-    `5. 역량 이름("${competency}")을 문장에 그대로 쓰지 마라. 그 역량을 쓴 상황으로 보여라.`,
+    /* 역량이 0개면 이 규칙을 통째로 뺀다 — 안 그러면 `역량 이름("")을 …` 이 그대로
+       프롬프트에 나간다(빈 괄호를 모델에 보내는 셈이다). */
+    hasComp ? `5. 역량 이름("${compLabel}")을 문장에 그대로 쓰지 마라. 그 역량을 쓴 상황으로 보여라.` : null,
+    /* 역량 2개는 축이 둘이라 문단이 쪼개진다. 정성스펙 2~3개에 걸어 둔 것과 같은 규칙을
+       역량에도 건다 — 없으면 4문장짜리 행동 덩이가 2×2문장으로 갈린다(심사 지적). */
+    comps.length >= 2 ? `5-1. 역량 ${comps.length}개를 **각각 따로 풀지 말고 한 장면에서 같이 드러나게** 써라.`
+      + ` 문단이 역량별로 쪼개지면 틀린 답이다.` : null,
     /* ── 규칙 6 이 지원동기와 정면으로 부딪히고 있었다 (심사 지적 2026-09-01) ──
        "포부로 끝내지 말고 결과와 배운 점으로 닫는다" 는 STAR 문항 기준인데 조건 없이
        붙었다. 그런데 지원동기의 마지막 덩이는 **정의상 포부**이고 가장 큰 덩이(35%)다.
