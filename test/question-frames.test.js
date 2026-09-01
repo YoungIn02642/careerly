@@ -27,10 +27,12 @@ console.log('\n── 2. 성격 장단점(약점)이 직무역량(강점)으로 
 ok('"강점과 약점"은 성격 장단점', type('본인의 강점과 약점을 기술하시오.') === 'trait');
 ok('"강점을 직무에 활용"은 직무역량', type('본인의 강점을 직무에 어떻게 활용할지 서술하시오.') === 'competency');
 
-console.log('\n── 3. 각 유형에 골격(frame)과 유형 규칙(rules)이 있는가 ──');
+console.log('\n── 3. 각 유형에 골격(frame)이 있는가 ──');
+/* 유형 규칙·분량 배분은 2026-09-01 에 backend/src/question-prompts.js 로 옮겼다.
+   두 파일이 id 로 1:1 인지는 test/question-prompts.test.js 가 본다. */
 QF.TYPES.forEach(t => {
   ok(`${t.id.padEnd(11)} frame 있음`, typeof t.frame === 'string' && t.frame.length > 20);
-  ok(`${t.id.padEnd(11)} rules 있음`, Array.isArray(t.rules) && t.rules.length >= 1);
+  ok(`${t.id.padEnd(11)} rules 는 여기 없다`, t.rules === undefined);
 });
 
 console.log('\n── 4. frameFor / 미분류 ──');
