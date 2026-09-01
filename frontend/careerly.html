@@ -69,9 +69,21 @@
     <div class="nav-auth" id="nav-auth">
       <button class="btn-nav-login" onclick="navigate('login')">회원가입 / 로그인</button>
     </div>
+    <!-- 로그인 상태 — 닉네임 + 사용자 아이콘. 아이콘을 누르면 메뉴가 열린다
+         (사용자 지시 2026-09-01: 로그아웃 버튼 대신 아이콘 드롭다운). -->
     <div class="nav-user" id="nav-user">
       <span class="nav-user-name" id="nav-user-name" onclick="navigate('mypage')">홍길동님</span>
-      <button class="btn-nav-logout" onclick="handleLogout()">로그아웃</button>
+      <button class="nav-user-btn" id="nav-user-btn" type="button"
+              onclick="toggleUserMenu()" aria-label="내 메뉴" aria-haspopup="true" aria-expanded="false">
+        <i class="ti ti-user-circle"></i>
+      </button>
+      <div class="nav-user-menu" id="nav-user-menu" hidden role="menu">
+        <button type="button" role="menuitem" onclick="userMenuGo('mypage')"><i class="ti ti-home"></i> 마이페이지</button>
+        <button type="button" role="menuitem" onclick="userMenuGo('mypage','account')"><i class="ti ti-settings"></i> 계정관리</button>
+        <button type="button" role="menuitem" onclick="toggleUserMenu(false); Drafts.open()"><i class="ti ti-bookmark"></i> 내 자소서 보관함</button>
+        <div class="nav-user-menu-sep"></div>
+        <button type="button" role="menuitem" class="nav-user-menu-out" onclick="handleLogout()"><i class="ti ti-logout"></i> 로그아웃</button>
+      </div>
     </div>
     <!-- 관리자에게만 보인다. updateNavAuth() 가 켜고 끈다.
          숨기는 것은 편의일 뿐이고 실제 차단은 서버(requireAdmin)가 한다. -->
@@ -709,11 +721,16 @@
 </main>
 
 <!-- ══════════ DRAFTS — 내 자소서 보관함 ══════════
-     자소서 코치 화면 맨 아래에 붙어 있던 보관함을 **자기 페이지**로 옮겼다
-     (사용자 지시 2026-08-28). 글 목록은 쓰던 흐름의 꼬리가 아니라 따로 찾아가는 자리다.
-     들어가는 문은 코치 화면 왼쪽 사이드바. 내용은 js/drafts.js 가 만든다. -->
-<main class="page page--doc" id="page-drafts">
-  <div class="wrap" id="drafts-wrap"></div>
+     예전에는 자기 페이지(#drafts)였는데, **모달**로 바꿨다(사용자 지시 2026-09-01,
+     링커리어 '자기소개서 불러오기' 참고). 코치·작성 화면 어디서든 열어 불러오는
+     자리라, 페이지로 두면 글을 이어쓰려고 화면을 통째로 떠나야 했다.
+     모달 마크업은 아래 #drafts-modal, 내용은 js/drafts.js 의 render() 가 만든다. -->
+
+<!-- ══════════ DONATE — 내 합격 자소서 기증 ══════════
+     동의 기반 합격 코퍼스(A 참조군). 남의 글을 긁지 않고 본인이 익명으로 기증한다.
+     저장 전 개인정보 익명화(js/anonymize.js). 내용은 js/donate.js 가 만든다. -->
+<main class="page page--doc" id="page-donate">
+  <div class="wrap"><div id="donate-body"></div></div>
 </main>
 
 <!-- ══════════ SPEC-UP — 스펙 채우기 ══════════
@@ -884,6 +901,22 @@
   </div>
 </div>
 
+<!-- ══ 자소서 불러오기 모달 (내 자소서 보관함) ══
+     예전 #drafts 페이지를 대체한다(사용자 지시 2026-09-01 · 링커리어 참고).
+     본문은 js/drafts.js 의 render() 가 #drafts-modal-body 에 그린다.
+     .modal--wide 로 넓게 — 목록·검색·이어쓰기가 한눈에 들어와야 한다. -->
+<div class="modal-overlay" id="drafts-modal">
+  <div class="modal modal--wide">
+    <div class="modal-head">
+      <div class="modal-head-l">
+        <div class="modal-title">내 자소서 보관함</div>
+      </div>
+      <button class="modal-close" onclick="Drafts.close()"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="modal-body" id="drafts-modal-body"></div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <!-- ══ 커리어 인사이트 (커뮤니티 게시판) ══
@@ -934,11 +967,11 @@
           <button type="button" class="wf-btn wf-btn--sm wf-btn--block" id="jd-sample">예시 넣기</button>
           <span class="jd-status" id="jd-status"></span>
         </div>
-        <!-- 보관함은 이 화면 아래가 아니라 **자기 페이지**다(사용자 지시 2026-08-28).
-             글 목록은 쓰던 화면의 꼬리가 아니라 따로 찾아가는 자리라서다. js/drafts.js -->
+        <!-- 보관함은 **모달**로 연다(사용자 지시 2026-09-01). 화면을 떠나지 않고 불러온다.
+             모달 마크업은 #drafts-modal, 내용은 js/drafts.js. -->
         <div class="jd-side-foot jd-side-lib">
           <div class="wf-eyebrow">내 글</div>
-          <button type="button" class="wf-btn wf-btn--sm wf-btn--block" onclick="navigate('drafts')">
+          <button type="button" class="wf-btn wf-btn--sm wf-btn--block" onclick="Drafts.open()">
             <i class="ti ti-folder"></i> 내 자소서 보관함
           </button>
           <p class="jd-side-libnote" id="jd-lib-count"></p>
@@ -1087,9 +1120,9 @@
       </section>
     </div>
 
-        <!-- 문항별 정성스펙 · STAR — 문항 칸 **아래 따로** 둔다(사용자 지시 2026-08-28).
-             문항 칸 안에 넣었더니 문항 세 개만 적어도 카드가 화면을 넘겼다.
-             내용은 js/jd-coach.js 의 renderSpecStar() 가 만든다. 비워 둬도 분석은 된다. -->
+        <!-- 정성스펙 STAR — 역량 분석 **전에** 내 활동마다 STAR 를 적는 자리(사용자 지시 2026-09-01).
+             어느 경험을 어느 문항에 쓸지 고르는 건 초안 작성 화면으로 옮겼다. 여기서 적은 STAR 는
+             '스펙에 저장하기' 로 내 스펙 관리에도 저장할 수 있다. renderSpecStar() 가 만든다. -->
         <section class="jd-ss" id="jd-spec-star"></section>
       </div>
     </div>
@@ -1100,6 +1133,15 @@
   </div>
   <!-- 입력칸 '넓게 보기' 뒤에 깔리는 막. 눌러서 닫는다. -->
   <button type="button" class="jd-scrim" id="jd-scrim" hidden aria-label="넓게 보기 닫기"></button>
+</main>
+
+<!-- ══ 자소서 작성 — 역량 분석 뒤의 전용 작성 화면 (#write) ══
+     예전에는 코치(#jd) 결과 오른쪽 칸에 초안 에디터가 붙어 있었다. 링커리어처럼
+     **작성만 하는 별도 페이지**로 뗐다(사용자 지시 2026-09-01): 왼쪽=자소서 관리·
+     불러오기, 가운데=문항 탭+에디터, 오른쪽=요구역량 참고. 전부 js/jd-coach.js 의
+     renderWrite() 가 #write-root 에 그린다(분석 결과 _last 를 그대로 읽는다). -->
+<main class="page page--doc" id="page-write" data-screen-label="자소서 작성">
+  <div id="write-root"></div>
 </main>
 
 <!-- ══ CAREER ROADMAP ══ -->
@@ -1165,6 +1207,8 @@
 <script src="js/career.js"></script>
 <script src="js/mentoring.js"></script>
 <script src="js/drafts.js"></script>
+<script src="js/anonymize.js"></script>
+<script src="js/donate.js"></script>
 <script src="js/jd-coach.js"></script>
 <script src="js/company-cover.js"></script>
 <!-- 마크다운 렌더러. insight.js 보다 **먼저** 와야 한다 — 본문을 그릴 때 쓴다. -->

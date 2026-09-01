@@ -43,6 +43,16 @@
   }
   const keyOf = (company, label) => `${company}::${label}`;
 
+  /* 즐겨찾기는 **자소서(회사) 단위**다(사용자 지시 2026-09-01). 예전에는 문항별
+     (회사::항목)로 담았는데, 사람은 "이 회사 자소서" 를 다시 보지 문항 하나만 즐겨찾지
+     않는다. 저장은 회사명만 넣고, 옛 '회사::항목' 값은 회사 즐겨찾기로 접어 읽는다. */
+  function favCompanies() {
+    return new Set(loadFavs().map(k => k.includes('::') ? k.split('::')[0] : k));
+  }
+  /* 그 회사의 옛/새 즐겨찾기 흔적을 모두 지운 목록을 돌려준다. */
+  const favsWithout = company =>
+    loadFavs().filter(k => k !== company && !k.startsWith(`${company}::`));
+
   const store = {
     all: loadAll,
     get(company, label) { return unwrap(loadAll()[company]?.[label]).text; },
@@ -64,31 +74,40 @@
         if (!Object.keys(all[company]).length) delete all[company];
       }
       localStorage.setItem(LS_DRAFTS, JSON.stringify(all));
-      /* 즐겨찾기도 같이 지운다. 남겨 두면 없는 글이 별표를 달고 목록에 뜬다. */
-      const favs = loadFavs().filter(k => k !== keyOf(company, label));
-      localStorage.setItem(LS_FAV, JSON.stringify(favs));
+      /* 회사에 남은 글이 없으면 그 회사 즐겨찾기(자소서 단위)도 같이 지운다 —
+         남겨 두면 없는 자소서가 별표를 달고 목록에 뜬다. */
+      if (!all[company]) localStorage.setItem(LS_FAV, JSON.stringify(favsWithout(company)));
     },
 
-    isFav(company, label) { return loadFavs().includes(keyOf(company, label)); },
-    toggleFav(company, label) {
-      const k = keyOf(company, label);
-      const favs = loadFavs();
-      const at = favs.indexOf(k);
-      if (at >= 0) favs.splice(at, 1); else favs.push(k);
-      localStorage.setItem(LS_FAV, JSON.stringify(favs));
-      return at < 0;
+    /* 회사(자소서) 하나를 통째로 지운다 — 보관함의 '자소서 단위' 삭제가 쓴다(2026-09-01).
+       그 회사의 즐겨찾기도 같이 지운다. */
+    removeCompany(company) {
+      const all = loadAll();
+      delete all[company];
+      localStorage.setItem(LS_DRAFTS, JSON.stringify(all));
+      localStorage.setItem(LS_FAV, JSON.stringify(favsWithout(company)));
     },
 
-    /* 회사별로 묶어 최근 순으로. 즐겨찾기가 하나라도 있는 회사가 먼저 온다 —
-       즐겨찾기는 "다시 볼 글" 이라 목록 맨 위에 있어야 뜻이 있다. */
+    isFav(company) { return favCompanies().has(company); },
+    /* 자소서(회사) 단위 토글. 켤 때 회사명만 넣고, 옛 '회사::항목' 흔적은 지운다. */
+    toggleFav(company) {
+      const has = favCompanies().has(company);
+      const favs = favsWithout(company);
+      if (!has) favs.push(company);
+      localStorage.setItem(LS_FAV, JSON.stringify(favs));
+      return !has;
+    },
+
+    /* 회사별로 묶어 최근 순으로. 즐겨찾기한 회사가 먼저 온다 —
+       즐겨찾기는 "다시 볼 자소서" 라 목록 맨 위에 있어야 뜻이 있다. */
     entries() {
-      const favs = loadFavs();
+      const favSet = favCompanies();
       return Object.entries(loadAll()).map(([company, items]) => {
         const drafts = Object.entries(items)
-          .map(([label, v]) => ({ label, fav: favs.includes(keyOf(company, label)), ...unwrap(v) }))
+          .map(([label, v]) => ({ label, ...unwrap(v) }))
           .filter(d => d.text.trim())
-          .sort((a, b) => (b.fav - a.fav) || ((b.at || 0) - (a.at || 0)));
-        return { company, drafts, fav: drafts.some(d => d.fav), at: drafts[0]?.at || 0 };
+          .sort((a, b) => (b.at || 0) - (a.at || 0));
+        return { company, drafts, fav: favSet.has(company), at: drafts[0]?.at || 0 };
       }).filter(g => g.drafts.length)
         .sort((a, b) => (b.fav - a.fav) || (b.at - a.at));
     },
@@ -121,80 +140,120 @@
 
   let _open = null;        // 펼쳐 본 글 (회사::항목)
   let _favOnly = false;    // 즐겨찾기만 보기
+  /* ── 삭제(선택) 모드 (사용자 지시 2026-09-01) ─────────────────────────
+     상단 '삭제'를 누르면 이 모드로 들어간다. 삭제 단위는 **자소서(회사) 하나 통째**다
+     (사용자 지시) — 문항 1·2·3 을 따로 고르지 않고 그 회사의 자소서를 통으로 지운다.
+     고른 것은 **회사명**의 Set 이다. */
+  let _selMode = false;
+  let _selected = new Set();
 
+  /* 문항 미리보기 — 펼치면 내용을 보이되 **50자까지만**, 뒤는 …(사용자 지시 2026-09-01).
+     공백은 한 칸으로 접어 한 줄로 보이게 한다(줄바꿈이 많은 초안이 세 줄로 벌어지지 않게). */
+  function preview(text) {
+    const s = String(text || '').replace(/\s+/g, ' ').trim();
+    return s.length > 50 ? `${esc(s.slice(0, 50))}…` : esc(s);
+  }
+
+  /* 모달 본문(#drafts-modal-body)에 그린다. 예전에는 #drafts 페이지의 #drafts-wrap 이었다
+     (2026-09-01 모달로 대체). 페이지 머리(h1·설명)는 모달 헤더가 대신하므로 여기서는
+     목록만 그린다. */
   function render() {
-    const box = $('#drafts-wrap');
+    const box = $('#drafts-modal-body');
     if (!box) return;
     const all = store.entries();
-    const groups = _favOnly ? all.map(g => ({ ...g, drafts: g.drafts.filter(d => d.fav) })).filter(g => g.drafts.length) : all;
+    const groups = _favOnly ? all.filter(g => g.fav) : all;
     const total = all.reduce((n, g) => n + g.drafts.length, 0);
-    const favTotal = all.reduce((n, g) => n + g.drafts.filter(d => d.fav).length, 0);
 
     box.innerHTML = `
-      <div class="jd-head">
-        <div class="wf-eyebrow wf-eyebrow--lg">My cover letters</div>
-        <h1>내 자소서 보관함</h1>
-        <p>자소서 코치에서 쓴 초안이 회사별로 쌓입니다. 하나를 골라 <b>이어쓰기</b>로 돌아가거나,
-          자주 보는 글에 <b>즐겨찾기</b>를 달아 두세요.
-          <b>이 브라우저에만 저장</b>되니 기기를 옮기면 따라오지 않아요.</p>
-      </div>
-
       ${total ? `
         <div class="dr-bar">
           <span class="dr-count"><b>${total.toLocaleString()}건</b> · 회사 ${all.length}곳</span>
-          <button type="button" class="wf-btn wf-btn--sm ${_favOnly ? 'is-on' : ''}" data-fav-only>
-            <i class="ti ti-star${_favOnly ? '-filled' : ''}"></i> 즐겨찾기만 (${favTotal})
-          </button>
-          <button type="button" class="wf-btn wf-btn--sm wf-btn--primary" onclick="navigate('jd')">
-            <i class="ti ti-pencil"></i> 새 자소서 쓰기
+          ${_selMode ? '' : `
+            <button type="button" class="wf-btn wf-btn--sm ${_favOnly ? 'is-on' : ''}" data-fav-only>
+              <i class="ti ti-star${_favOnly ? '-filled' : ''}"></i> 즐겨찾기
+            </button>`}
+          <button type="button" class="wf-btn wf-btn--sm dr-selbtn ${_selMode ? 'is-on' : ''}" data-sel-toggle>
+            <i class="ti ti-trash"></i> ${_selMode ? '삭제 취소' : '삭제'}
           </button>
         </div>
+        ${_selMode ? `
+          <div class="dr-selhint">지울 <b>자소서</b>를 골라 주세요(회사 단위로 통째 삭제). <b>${_selected.size}개</b> 선택됨.</div>` : ''}
 
         ${groups.length ? `<div class="dr-list">
-          ${groups.map(g => `
-            <section class="dr-group">
-              <div class="dr-company">
-                <span class="wf-avatar wf-avatar--sm" style="--co-color:${accentOf(g.company)}">${esc(g.company.charAt(0))}</span>
-                <b>${esc(g.company)}</b>
-                <span class="wf-badge wf-badge--mute">${g.drafts.length}건</span>
-                <button type="button" class="wf-btn wf-btn--xs" data-go="${esc(g.company)}">
-                  이 회사로 이어쓰기
-                </button>
-              </div>
+          ${groups.map(g => {
+            const csel = _selected.has(g.company);
+            return `
+            <section class="dr-group ${_selMode && csel ? 'is-checked' : ''}">
+              ${_selMode
+                ? `<button type="button" class="dr-company dr-company--pick" data-check="${esc(g.company)}" aria-pressed="${csel}">
+                     <span class="dr-check"><i class="ti ti-${csel ? 'square-check-filled' : 'square'}"></i></span>
+                     <span class="wf-avatar wf-avatar--sm" style="--co-color:${accentOf(g.company)}">${esc(g.company.charAt(0))}</span>
+                     <b>${esc(g.company)}</b>
+                     <span class="wf-badge wf-badge--mute">${g.drafts.length}건</span>
+                   </button>`
+                : `<div class="dr-company ${g.fav ? 'is-fav' : ''}">
+                     <button type="button" class="dr-fav" data-fav="${esc(g.company)}"
+                             aria-pressed="${g.fav}" title="즐겨찾기">
+                       <i class="ti ti-star${g.fav ? '-filled' : ''}"></i>
+                     </button>
+                     <span class="wf-avatar wf-avatar--sm" style="--co-color:${accentOf(g.company)}">${esc(g.company.charAt(0))}</span>
+                     <b>${esc(g.company)}</b>
+                     <span class="wf-badge wf-badge--mute">${g.drafts.length}건</span>
+                     <button type="button" class="wf-btn wf-btn--xs" data-go="${esc(g.company)}">이 회사로 이어쓰기</button>
+                   </div>`}
               ${g.drafts.map(d => {
                 const key = keyOf(g.company, d.label);
                 const open = _open === key;
-                return `<article class="dr-item ${open ? 'is-open' : ''} ${d.fav ? 'is-fav' : ''}">
+                const meta = `<span class="dr-meta">${d.text.length.toLocaleString()}자${d.at ? ` · ${timeAgo(d.at)}` : ''}</span>`;
+                /* 삭제 모드: 자소서를 회사 머리에서 통째로 고른다. 문항은 어떤 글인지 알아볼
+                   수 있게 라벨만 읽기전용으로 보여준다(개별 선택 아님). */
+                if (_selMode) {
+                  return `<div class="dr-item dr-item--ro">
+                    <span class="dr-open dr-open--static"><b>${esc(d.label)}</b>${meta}</span>
+                  </div>`;
+                }
+                /* 일반 모드: 문항을 누르면(토글) 자신이 적은 내용을 미리보기로 편다(50자까지).
+                   즐겨찾기는 문항이 아니라 **자소서(회사) 머리**에 있다(2026-09-01). */
+                return `<article class="dr-item ${open ? 'is-open' : ''}">
                   <div class="dr-item-h">
-                    <button type="button" class="dr-fav" data-fav="${esc(key)}"
-                            aria-pressed="${d.fav}" title="즐겨찾기">
-                      <i class="ti ti-star${d.fav ? '-filled' : ''}"></i>
-                    </button>
-                    <button type="button" class="dr-open" data-open="${esc(key)}">
+                    <button type="button" class="dr-open" data-open="${esc(key)}" aria-expanded="${open}">
                       <b>${esc(d.label)}</b>
-                      <span class="dr-meta">${d.text.length.toLocaleString()}자${d.at ? ` · ${timeAgo(d.at)}` : ''}</span>
+                      ${meta}
                       <i class="ti ti-chevron-down dr-chev"></i>
                     </button>
                   </div>
                   ${open ? `
                     <div class="dr-body">
-                      <pre class="dr-text">${esc(d.text)}</pre>
+                      <p class="dr-preview">${preview(d.text) || '<span class="dr-empty-in">아직 내용이 없어요</span>'}</p>
                       <div class="dr-act">
                         <button type="button" class="wf-btn wf-btn--xs wf-btn--primary" data-go="${esc(g.company)}">이어쓰기</button>
                         <button type="button" class="wf-btn wf-btn--xs" data-copy="${esc(key)}">복사</button>
-                        <button type="button" class="wf-btn wf-btn--xs dr-del" data-del="${esc(key)}">삭제</button>
                       </div>
                     </div>` : ''}
                 </article>`;
               }).join('')}
-            </section>`).join('')}
-        </div>` : `<p class="dr-empty">즐겨찾기한 글이 없어요. 글 왼쪽의 별을 눌러 담아 두세요.</p>`}
+            </section>`;
+          }).join('')}
+        </div>` : `<p class="dr-empty">즐겨찾기한 자소서가 없어요. 회사 이름 왼쪽의 별을 눌러 담아 두세요.</p>`}
+
+        ${_selMode ? `
+          <div class="dr-selbar">
+            <button type="button" class="wf-btn wf-btn--sm" data-sel-all>
+              ${_selected.size >= all.length && all.length ? '전체 해제' : '전체 선택'}
+            </button>
+            <span class="dr-selbar-sp"></span>
+            <button type="button" class="wf-btn wf-btn--sm" data-sel-cancel>취소</button>
+            <button type="button" class="wf-btn wf-btn--sm dr-del" data-sel-del
+              ${_selected.size ? '' : 'disabled'}>
+              <i class="ti ti-trash"></i> 선택 삭제${_selected.size ? ` (${_selected.size})` : ''}
+            </button>
+          </div>` : ''}
       ` : `
         <div class="dr-blank">
           <i class="ti ti-file-text"></i>
           <b>아직 저장된 자소서가 없어요</b>
           <p>자소서 코치에서 초안을 쓰면 여기에 회사별로 쌓입니다.</p>
-          <button type="button" class="wf-btn wf-btn--primary" onclick="navigate('jd')">자소서 코치로 가기</button>
+          <button type="button" class="wf-btn wf-btn--primary" onclick="Drafts.close(); navigate('jd')">자소서 코치로 가기</button>
         </div>`}`;
 
     bind(box);
@@ -205,14 +264,50 @@
 
     on('[data-fav-only]', 'click', () => { _favOnly = !_favOnly; render(); });
 
+    /* ── 삭제(선택) 모드 ──────────────────────────────────────────
+       '삭제'로 켜고 끈다. 켜면 즐겨찾기 필터는 풀어 모든 글을 지울 후보로 보여준다 —
+       필터가 걸려 있으면 "안 보이는 글은 왜 안 지워지지"가 된다. 끄면 고른 것도 비운다. */
+    on('[data-sel-toggle]', 'click', () => {
+      _selMode = !_selMode;
+      _selected.clear();
+      if (_selMode) { _favOnly = false; _open = null; }
+      render();
+    });
+    on('[data-sel-cancel]', 'click', () => { _selMode = false; _selected.clear(); render(); });
+
+    on('[data-check]', 'click', el => {
+      const key = el.dataset.check;
+      if (_selected.has(key)) _selected.delete(key); else _selected.add(key);
+      render();
+    });
+
+    /* 전체 선택 ↔ 해제 — 지금 보이는 **회사(자소서)** 전부 기준. 이미 다 골랐으면 해제. */
+    on('[data-sel-all]', 'click', () => {
+      const companies = store.entries().map(g => g.company);
+      if (companies.every(c => _selected.has(c))) _selected.clear();
+      else companies.forEach(c => _selected.add(c));
+      render();
+    });
+
+    /* 선택 삭제 — **자소서(회사) 통째**로 지운다. 되돌릴 수 없어 몇 개인지 밝혀 한 번 묻고,
+       지운 뒤 모드를 나간다. */
+    on('[data-sel-del]', 'click', () => {
+      if (!_selected.size) return;
+      if (!confirm(`선택한 자소서 ${_selected.size}개를 통째로 지울까요? 되돌릴 수 없어요.`)) return;
+      for (const company of _selected) store.removeCompany(company);
+      _selected.clear();
+      _selMode = false;
+      _open = null;
+      render();
+    });
+
     on('[data-open]', 'click', el => {
       _open = _open === el.dataset.open ? null : el.dataset.open;
       render();
     });
 
     on('[data-fav]', 'click', el => {
-      const [company, label] = el.dataset.fav.split('::');
-      store.toggleFav(company, label);
+      store.toggleFav(el.dataset.fav);
       render();
     });
 
@@ -225,28 +320,33 @@
       } catch { el.textContent = '복사 실패'; }
     });
 
-    /* 지우면 되돌릴 수 없다 — 자소서는 다시 쓰기 어려운 글이라 한 번 묻는다. */
-    on('[data-del]', 'click', el => {
-      const [company, label] = el.dataset.del.split('::');
-      if (!confirm(`${company} · ${label} 초안을 지울까요? 되돌릴 수 없어요.`)) return;
-      store.remove(company, label);
-      _open = null;
-      render();
-    });
-
-    /* 이어쓰기 — 코치 화면으로 가면서 회사명을 넘긴다. 저장 칸(scope)이 회사명을
-       따라가므로, 그 회사로 분석을 돌리면 예전 초안이 그대로 불러와진다.
-       회사 칸을 채우는 일은 코치 화면이 한다(onEnter 가 이 키를 읽는다) — 여기서
-       남의 화면의 DOM 을 건드리면 그 화면이 아직 안 그려졌을 때 조용히 실패한다. */
+    /* 이어쓰기 — **작성 화면(#write)** 으로 바로 간다(2026-09-01). 회사명을 넘기면
+       작성 화면 onEnterWrite 가 그 회사로 화면을 세우고, 저장 칸(scope)이 회사명을
+       따라가므로 예전 초안이 그대로 불러와진다. 회사 칸을 채우는 일은 작성 화면이
+       한다 — 여기서 남의 화면 DOM 을 건드리면 아직 안 그려졌을 때 조용히 실패한다. */
     on('[data-go]', 'click', el => {
       localStorage.setItem('careerly_selected_company', el.dataset.go);
-      navigate('jd');
+      close();
+      navigate('write');
     });
   }
 
-  function onEnter() { _open = null; render(); }
+  /* ── 모달 열고 닫기 (2026-09-01) ──────────────────────────────
+     페이지(#drafts)에서 모달(#drafts-modal)로 바뀌었다. 열 때마다 새로 그린다 —
+     다른 화면에서 초안을 쓰다 열면 방금 쓴 글이 목록에 있어야 한다.
+     openModal/closeModal 은 전역(mentoring.js) 이라 모달 규약을 공유한다. */
+  function open() {
+    _open = null;
+    _selMode = false;
+    _selected.clear();
+    render();
+    if (typeof openModal === 'function') openModal('drafts-modal');
+  }
+  function close() {
+    if (typeof closeModal === 'function') closeModal('drafts-modal');
+  }
 
-  const api = { onEnter, render, store, unwrap };
+  const api = { open, close, render, store, unwrap };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;   // node 테스트용
   root.Drafts = api;
 

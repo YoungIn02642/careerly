@@ -35,25 +35,28 @@
 
   const escapeRe = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-  /* 호출부가 넘긴 '가릴 말'(이름·회사·학교). 두 글자 미만은 무시한다 — 한 글자를
-     지우면 본문 곳곳이 뚫린다. 긴 것부터 지운다(회사명이 학교명을 품는 경우 대비). */
-  function termRules(terms, tag) {
+  /* 호출부가 넘긴 '가릴 말'(이름·회사·학교). 입력칸이 하나라 종류를 구분하지 않고
+     **중립 태그 [비공개]** 하나로 가린다 — 회사명을 [이름]으로 라벨하면 "저장 전 이렇게
+     가려집니다" 미리보기가 거짓말이 된다. 두 글자 미만은 무시하고(한 글자를 지우면 본문이
+     곳곳 뚫린다), 긴 것부터 지운다(회사명이 학교명을 품는 경우 대비). */
+  function termRules(terms) {
     return (terms || [])
       .map(t => String(t || '').trim())
       .filter(t => t.length >= 2)
       .sort((a, b) => b.length - a.length)
-      .map(t => ({ type: tag === '[이름]' ? '이름' : '회사·학교', re: new RegExp(escapeRe(t), 'g'), tag }));
+      .map(t => ({ type: '가린 말', re: new RegExp(escapeRe(t), 'g'), tag: '[비공개]' }));
   }
 
   /* text 를 익명화한다.
-     opts.names / opts.orgs : 사용자가 알려준 이름·회사·학교(가릴 말).
+     opts.terms(권장) / opts.names / opts.orgs : 사용자가 알려준 가릴 말(이름·회사·학교).
+       셋 다 합쳐 같은 규칙으로 가린다(입력칸이 하나다).
      반환: { text, masked:[{type,count}] } — masked 는 화면이 "무엇을 가렸는지" 로 쓴다. */
   function anonymize(text, opts = {}) {
     let out = String(text ?? '');
     const counts = {};
+    const terms = [...(opts.terms || []), ...(opts.names || []), ...(opts.orgs || [])];
     const rules = [
-      ...termRules(opts.names, '[이름]'),
-      ...termRules(opts.orgs, '[회사·학교]'),
+      ...termRules(terms),
       ...RULES,
     ];
     for (const r of rules) {
