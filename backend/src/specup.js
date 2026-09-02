@@ -385,8 +385,17 @@ async function certSchedules(certNames, { year, today = todayStr() } = {}) {
 
    대신 온통청년(한국고용정보원)의 청년정책 목록에는 **대학생이 지원할 수 있는
    공모전·서포터즈·해외탐방·교육과정**이 지자체·부처 단위로 올라온다. 정책 데이터라
-   잡음이 섞이므로 키워드로 거른다. 거른 결과를 '공모전 전체' 라고 부르지 않고
-   화면에도 출처를 그대로 적는다. */
+   잡음이 섞이므로 **정책 분류로 받아 활동성으로 거른다**(아래 YOUTH_CLASSES 주석).
+   거른 결과를 '공모전 전체' 라고 부르지 않고 화면에도 출처를 그대로 적는다.
+
+   ── 다른 소스는 다 확인했고 안 쓴다 (2026-09-02 실호출) ──
+   | 후보 | 왜 안 쓰나 |
+   |---|---|
+   | 한국콘텐츠진흥원 지원사업공고(`kocca.kr/api/pims/List.do`) | 게시판 전체가 **5건**이고 전부 **기업 대상**(참가기업·입주기업 모집). 대학생이 지원할 수 있는 것이 0건이다 |
+   | 온통청년 `getContent`(청년소식) | **HTTP 500**. 메뉴 자체도 청년꿀팁·인터뷰·보도자료 같은 읽을거리다 |
+   | 온통청년 `getSpace`(청년공간) | 200 이지만 **모든 필드가 null**. 내용도 청년센터 주소다 |
+   | data.go.kr KIPRIS 공모전 아이디어 | **수상작**이라 모집공고가 아니다 |
+   ACTIVITY_TOPICS 의 keywords 는 이제 조회에 쓰지 않는다 — 탭 이름과 문서용으로만 남긴다. */
 const ACTIVITY_TOPICS = {
   contest: {
     label: '공모전·대회',
@@ -398,13 +407,69 @@ const ACTIVITY_TOPICS = {
   },
 };
 
+/* ── 키워드 13번 호출 대신 '정책 분류' 로 한 번에 받는다 (실측 2026-09-02) ────────
+   ── 왜 바꿨나 ──
+   키워드로 찾으면 **키워드에 없는 활동은 영영 안 잡힌다.** 실제로 '크리에이터단'·
+   '추진단'·'홍보파트너' 가 통째로 빠져 있었다. 그렇다고 키워드를 늘리면 반대쪽으로
+   샌다 — '프로젝트' 를 넣어 봤더니 53건이 걸리는데 그중 33건이 `일자리 > 취업/창업`
+   지원금 사업이었다. 스펙업에 창업지원금이 뜨면 안 된다.
+
+   정책에 **대·중분류가 이미 붙어 있다.** 서포터즈·공모전 검색 결과는 전부
+   `참여권리 > 청년참여` 였고, 지원금 사업은 `일자리 > …` 였다. 분류로 받으면
+   키워드를 몰라도 활동이 걸리고, 지원금은 애초에 안 온다.
+
+   실측 비교(2026-09-02, 같은 필터·같은 마감 기준):
+     키워드 13회 호출 → 17건 · **분류 6회 호출 → 38건** (2.2배, 호출은 오히려 적다)
+
+   ── 대분류 이름이 두 벌로 온다 ──
+   `참여권리` 와 `참여･기반` 이 섞여 있다(분류체계 이관 중으로 보인다). 중분류
+   `청년참여` 로 부르는 것이 더 많이 잡히지만(246 vs 208), 둘 다 받아 합친다 —
+   한쪽만 쓰면 이관이 끝나는 날 조용히 절반이 사라진다.
+
+   ── 코드 파라미터는 쓰지 않는다 ──
+   `plcyLclsfCd=023010` 처럼 코드로 부르면 **전체 2,743건이 그대로 온다.** 모르는
+   파라미터가 무시되는 이 API 의 성질(위 plcyNm 주석 참고)이 여기서도 나온다. */
+const YOUTH_CLASSES = [
+  `mclsfNm=${encodeURIComponent('청년참여')}`,
+  `lclsfNm=${encodeURIComponent('참여권리')}`,
+];
+const YOUTH_PAGE_SIZE = 100;      // 이 API 의 한 페이지 상한
+const YOUTH_MAX_PAGES = 5;        // 350건이면 다 받는다. 늘어나도 폭주하지 않게 상한을 둔다
+
+/* ── 분류만으로는 안 갈리는 것 (실측) ──────────────────────────────
+   `청년참여` 안에 '청년축제'·'청년자율공간 사업자 모집' 이 같이 있다. 스펙업은
+   **학생이 참여해서 이력이 되는 것**을 붙이는 자리라 그 둘을 갈라야 한다.
+
+   활동 이름을 나열하는 방식은 실패했다 — 서포터즈·기자단까지는 되는데
+   '크리에이터단'·'추진단' 에서 끝없이 새 이름이 나온다. 그래서 **뽑는다는 말**로
+   잡되, 이름 자체가 신호인 것들은 따로 살린다('청년정책 서포터즈 2기' 는 제목에
+   '모집' 이 없다 — 뽑는 말만 보면 이게 걸러진다). */
+const YOUTH_RECRUIT = /모집|선발|참여자|참가자|공모|경진|대회|경연|해커톤|콘테스트/;
+const YOUTH_ACT_NAME = /서포터즈|기자단|홍보(단|대사|파트너)|참여단|자문단|모니터링?단|평가단|체험단|기획단|추진단|크리에이터단|네트워크\s*위원|정책\s*위원/;
+/* 행사·시설·현금성 그 자체. 다만 그 행사의 '단' 을 뽑는 글은 활동이라 위에서 먼저 살린다
+   — '북구청춘페스타 추진기획단 모집' 은 페스타가 아니라 기획단 모집이다. */
+const YOUTH_NOT_ACT = /축제|페스타|한마당|박람회|의 날|공간\s*조성|시설|임대|주거|기숙사|바우처|증명사진|건강검진|교통비|수당|장학금|대출|이자|보증금|생활비|정착금|면접정장|사업자\s*모집|입주기업/;
+
+function isYouthActivity(name) {
+  const n = String(name || '');
+  if (YOUTH_ACT_NAME.test(n)) return true;
+  return !YOUTH_NOT_ACT.test(n) && YOUTH_RECRUIT.test(n);
+}
+
+/* 어느 탭에 놓을지. 분류로 받으므로 주제어는 **거르는 데가 아니라 나누는 데** 쓴다. */
+const YOUTH_CONTEST = /공모전|경진|대회|경연|해커톤|콘테스트|공모/;
+const topicOf = name => (YOUTH_CONTEST.test(String(name || '')) ? 'contest' : 'activity');
+
 const youthCache = new Map();   // `${topic}:${page}` → { at, data }
 
-async function youthActivities({ topic = 'contest', page = 1, size = 30 } = {}) {
+async function youthActivities({ topic = 'contest' } = {}) {
   const t = ACTIVITY_TOPICS[topic] ? topic : 'contest';
-  const cacheKey = `${t}:${page}`;
-  const hit = youthCache.get(cacheKey);
-  if (hit && Date.now() - hit.at < YOUTH_TTL_MS) return hit.data;
+  /* ── 캐시는 탭이 아니라 **조회 단위**로 잡는다 (2026-09-02) ────────────────
+     예전에는 탭마다 다른 키워드로 불러서 `topic:page` 가 캐시 단위였다. 이제 분류로
+     한 번에 받아 화면에서 나누므로, 탭마다 캐시를 따로 두면 **같은 조회를 두 번** 한다.
+     받은 것을 통째로 캐시하고 탭은 그걸 걸러 쓴다. */
+  const hit = youthCache.get('all');
+  if (hit && Date.now() - hit.at < YOUTH_TTL_MS) return sliceTopic(hit.rows, t);
 
   const apiKey = key('YOUTH_API_KEY');
   if (!apiKey) {
@@ -433,28 +498,35 @@ async function youthActivities({ topic = 'contest', page = 1, size = 30 } = {}) 
      모르는 파라미터는 무시되고 전체(2,715건)가 그대로 오므로, 파라미터 이름이
      틀리면 **0건이 아니라 '전부'** 가 온다는 것도 같이 확인했다(srchWord·searchWord·
      pblancNm 전부 2,715건). 둘 다 조용히 틀리는 모양이라 이름을 못 박아 둔다. */
+  /* 분류로 받는다. 페이지가 끝나거나 상한에 닿을 때까지 이어 받는다. */
   const seen = new Map();
-  for (const kw of ACTIVITY_TOPICS[t].keywords) {
-    const url = `${YOUTH_API}?apiKeyNm=${encodeURIComponent(apiKey)}`
-      + `&rtnType=json&pageNum=${page}&pageSize=${size}&plcyNm=${encodeURIComponent(kw)}`;
-    let parsed;
-    try {
-      const { status, body } = await getText(url);
-      if (status === 403 || /invalid api key/i.test(body)) {
-        const e = new Error('온통청년 인증키가 거부됐습니다.');
-        e.payload = { code: 503, reason: 'bad-key',
-          error: '온통청년 인증키가 거부됐어요.', how: YOUTH_APPLY_URL };
-        throw e;
+  for (const cls of YOUTH_CLASSES) {
+    for (let pageNum = 1; pageNum <= YOUTH_MAX_PAGES; pageNum++) {
+      const url = `${YOUTH_API}?apiKeyNm=${encodeURIComponent(apiKey)}`
+        + `&rtnType=json&pageNum=${pageNum}&pageSize=${YOUTH_PAGE_SIZE}&${cls}`;
+      let parsed;
+      try {
+        const { status, body } = await getText(url);
+        if (status === 403 || /invalid api key/i.test(body)) {
+          const e = new Error('온통청년 인증키가 거부됐습니다.');
+          e.payload = { code: 503, reason: 'bad-key',
+            error: '온통청년 인증키가 거부됐어요.', how: YOUTH_APPLY_URL };
+          throw e;
+        }
+        parsed = JSON.parse(body);
+      } catch (err) {
+        if (err.payload) throw err;
+        break;                        // 이 분류가 실패해도 다른 분류는 살린다
       }
-      parsed = JSON.parse(body);
-    } catch (err) {
-      if (err.payload) throw err;
-      continue;                       // 키워드 하나가 실패해도 나머지는 살린다
+      const list = parsed?.result?.youthPolicyList || [];
+      for (const p of list) {
+        const row = toActivity(p);
+        if (row && !seen.has(row.id)) seen.set(row.id, row);
+      }
+      /* 마지막 페이지면 그만 — totCount 를 믿지 않고 받은 개수로 판정한다
+         (이 API 는 파라미터를 잘못 주면 조용히 전체를 주므로 개수 쪽이 안전하다). */
+      if (list.length < YOUTH_PAGE_SIZE) break;
     }
-    (parsed?.result?.youthPolicyList || []).forEach(p => {
-      const row = toActivity(p, t);
-      if (row && !seen.has(row.id)) seen.set(row.id, row);
-    });
   }
 
   /* ── 이미 끝난 모집은 빼고 준다 (실측) ──────────────────────────
@@ -466,13 +538,21 @@ async function youthActivities({ topic = 'contest', page = 1, size = 30 } = {}) 
      정책이 있는데(실측: '청년정책 서포터즈 2기' 는 aplyYmd 가 비어 있다), 모른다는
      이유로 지우면 열려 있는 모집이 사라진다. 아는 것만 판정한다. */
   const today = ymd(new Date().toISOString().slice(0, 10).replace(/-/g, ''));
-  const items = [...seen.values()]
+  const rows = [...seen.values()]
     .filter(a => !a.endDate || a.endDate >= today)
     .sort((a, b) => String(a.endDate || '9999').localeCompare(String(b.endDate || '9999')));
-  const data = { topic: t, label: ACTIVITY_TOPICS[t].label, items,
-    source: '온통청년 청년정책(한국고용정보원)' };
-  youthCache.set(cacheKey, { at: Date.now(), data });
-  return data;
+  youthCache.set('all', { at: Date.now(), rows });
+  return sliceTopic(rows, t);
+}
+
+/* 받아 둔 전체에서 한 탭만 떼어 준다. 응답 모양은 예전과 같다 — 화면을 안 고쳐도 된다. */
+function sliceTopic(rows, t) {
+  return {
+    topic: t,
+    label: ACTIVITY_TOPICS[t].label,
+    items: rows.filter(a => a.topic === t),
+    source: '온통청년 청년정책(한국고용정보원)',
+  };
 }
 
 /* ── 지원 대상 지역 ────────────────────────────────────────────
@@ -524,19 +604,21 @@ function regionOf(zipCd) {
   return names.length <= 2 ? names.join('·') : `${names[0]} 외 ${names.length - 1}곳`;
 }
 
-function toActivity(p, topic) {
+function toActivity(p) {
   const id = p.plcyNo || p.bizId;
   if (!id) return null;
   const name = p.plcyNm || '';
-  /* 키워드가 정책 설명 어딘가에만 걸린 것들이 섞인다. 제목이나 키워드에
-     주제어가 들어간 것만 남긴다 — 지원금 정책이 '공모전' 칸에 있으면 안 된다. */
-  const hay = `${name} ${p.plcyKywdNm || ''}`;
-  if (!ACTIVITY_TOPICS[topic].keywords.some(k => hay.includes(k))) return null;
+  /* 분류(청년참여)로 받아도 축제·시설·현금성이 섞인다. 학생이 참여해서 이력이 되는
+     것만 남긴다 — 판정 근거는 isYouthActivity 주석에 있다. */
+  if (!isYouthActivity(name)) return null;
 
   const [start, end] = String(p.aplyYmd || '').split('~').map(s => ymd(s));
   return {
     id: String(id),
     name,
+    /* 어느 탭(공모전·대회 / 대외활동·서포터즈)에 놓을지. 예전에는 키워드로 조회할 때
+       이미 갈려 있었지만, 이제 한 번에 받아서 여기서 나눈다. */
+    topic: topicOf(name),
     org: p.sprvsnInstCdNm || p.operInstCdNm || '',
     summary: (p.plcyExplnCn || '').replace(/\s+/g, ' ').trim().slice(0, 160),
     keywords: String(p.plcyKywdNm || '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 4),
