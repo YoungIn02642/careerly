@@ -4571,3 +4571,34 @@ const item = r.items[_focused] || (tab?.comps || [])[0] || r.items[0];
   모르는 파라미터를 무시하고 전부 주는 이 API 의 성질이 여기서도 나온다(19-6-1 과 같은 부류).
 - 캐시를 `topic:page` 에서 **조회 단위 하나**로 바꿨다. 이제 한 번 받아 탭으로 나누므로
   탭마다 캐시를 두면 같은 조회를 두 번 한다.
+
+### 42-5. 운영 500 — 배포 DB 에 컬럼이 없었다 (2026-09-02 사고)
+
+사용자가 "스펙 저장이 안 된다"고 알려 왔다. 콘솔에는 `/api/specs/me` 500 뿐이었다.
+
+**로컬에서는 재현되지 않았다.** GET·PUT 둘 다 200 이고, `repo.specs.byUser`·`upsert` 를
+직접 불러도 멀쩡했다. 직렬화도 정상이었다. 여기서 한참 헤맸다.
+
+**돌파구는 로컬과 배포에 같은 공개 엔드포인트를 나란히 찔러 본 것이다.**
+
+| | `/api/mentors` (비로그인) |
+|---|---|
+| 배포 | **500** |
+| 로컬 | 200 |
+
+로그인이 필요 없어 인증 변수를 지운 채 비교할 수 있었다. `mentors.list()` 는
+`p.mentor_fields`·`s.job_major`·`s.job_middles` 를 **이름으로** 조회하는데, 그 컬럼들이
+운영 DB 에 없었다. `migrate-schema.js` 를 운영에 돌려 셋이 추가됐다 —
+`profiles.mentor_fields` · `user_specs.job_codes` · `spec_activities.star`.
+
+**왜 조용히 틀렸나.** `load-schema.js` 가 돌리는 `schema.sql` 은 전부
+`CREATE TABLE IF NOT EXISTS` 라 테이블이 있으면 통째로 건너뛴다. 새 컬럼은 안 생기는데
+에러도 안 난다 — 서버는 뜨고, 저장할 때가 되어서야 죽는다. `SELECT *` 인 조회는
+멀쩡해서 **'반은 되고 반은 안 되는'** 상태가 되어 더 헷갈렸다.
+
+**고친 것 둘.**
+1. `docs/배포.md` 9장에 `migrate-schema.js` 를 절차로 넣었다. 컬럼을 추가하면
+   `schema.sql` 과 `scripts/migrate-schema.js` 의 `COLUMNS` **양쪽에** 적는다.
+2. 전역 에러 핸들러가 `err.message` 한 줄만 찍고 있었다. 그래서 로그를 봐도
+   **어느 쿼리인지 알 수 없었다.** MySQL `code`·`errno`·`sql`·스택을 같이 남긴다 —
+   응답은 그대로 '서버에서 문제가 생겼습니다' 이고 로그에만 남긴다.

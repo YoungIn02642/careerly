@@ -1265,7 +1265,25 @@ app.use((req, res) => {
 /* 라우트에서 던진 예외를 잡는다. 없으면 async 라우트의 실패가 응답 없이 매달려
    요청이 타임아웃될 때까지 브라우저가 기다린다. */
 app.use((err, req, res, next) => {
+  /* ── 메시지만 찍으면 배포에서 원인을 못 찾는다 (2026-09-02 실제 사고) ──────────
+     운영 DB 에 컬럼이 없어 `/api/mentors` 와 스펙 저장이 500 을 냈는데, 로그에는
+     `Unknown column 'p.mentor_fields' in 'field list'` 한 줄만 남았다. **어느 쿼리인지
+     알 수 없어서** 로컬과 배포를 나란히 찔러 가며 좁혀야 했다.
+
+     그래서 진단에 필요한 것을 같이 남긴다:
+       · code / errno    — MySQL 오류코드(ER_BAD_FIELD_ERROR 등). 원인 분류가 바로 된다
+       · sql             — 어느 쿼리인지. 이것 하나면 위 사고는 즉시 끝났다
+       · stack           — 어느 파일·줄에서 났는지
+
+     **응답에는 아무것도 더 내보내지 않는다.** 스택과 SQL 은 내부 구조를 드러내므로
+     로그에만 남긴다 — 아래 res.json 은 그대로 '서버에서 문제가 생겼습니다' 다.
+
+     sql 은 값이 바인딩되기 전 문장이라 개인정보가 섞이지 않는다(mysql2 는 파라미터를
+     `sqlMessage` 가 아니라 별도로 들고 있다). 그래도 길면 잘라서 로그를 덮지 않게 한다. */
   console.error('[error]', req.method, req.path, '-', err.message);
+  if (err.code || err.errno) console.error('  code:', err.code, '· errno:', err.errno);
+  if (err.sql) console.error('  sql :', String(err.sql).replace(/\s+/g, ' ').slice(0, 300));
+  if (err.stack) console.error(err.stack);
   if (res.headersSent) return next(err);
 
   /* 본문이 한도를 넘으면 express.json 이 여기로 던진다. 500 으로 뭉개면
