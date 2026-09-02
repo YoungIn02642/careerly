@@ -276,6 +276,54 @@
     localStorage.setItem(LS_QPICK, JSON.stringify(all));
     return true;
   }
+  /* ── 문항마다 쓸 역량을 사용자가 고른다 (사용자 지시 2026-09-01) ──────────────
+     ── 무엇이 문제였나 ──
+     역량은 `competenciesFor` 가 자동으로 붙였다. 공고 요구 강도 순으로 앞에서 3개인데
+     (jd-competency.js 가 score 내림차순으로 준다), **문항과의 관련도는 안 본다.**
+     그래서 지원동기에 '협업' 이 붙었다(사용자 지적).
+
+     ── 그런데 자동 매핑을 없애면 안 된다 (심사 지적) ──
+     그 정렬이 이 화면에서 "공고가 무엇을 요구했는가" 를 붙잡는 **유일한 객관 앵커**다.
+     선택권만 주면 사람은 초록 점(내 근거 있음)을 누르고 회색 점(갭)을 피한다 —
+     화면이 이미 어느 쪽이 쉬운지 색으로 알려주고 있다. 그래서 **기본값으로 남긴다.**
+
+     ── 상한은 2개다 (심사 지적, 산술) ──
+     600자면 배분표가 8~9문장으로 쪼갠다. 가장 큰 행동 덩이가 4문장인데 규칙 10이 거기에
+     '무엇을·누구에게·어떤 기준으로·어떤 순서로' 4요소를 요구한다 → **역량 1개 = 문장당
+     1요소**가 사양이 상정한 값이다. 3개면 역량당 1.33문장(지원동기·성격은 0.67문장)이라
+     '1문장 이하 = 사실상 빠짐' 에 바로 걸린다. 2개까지가 문장이 성립하는 경계다.
+
+     ── 저장 규약 ──
+     키가 **없으면 기본값**을 쓰고, 있으면(빈 배열이어도) 사용자가 고른 것이다.
+     "아직 안 골랐다" 와 "0개를 골랐다" 를 갈라야 지원동기에서 0개가 뜻을 갖는다. */
+  const LS_CPICK = 'careerly_jd_cpick_v1';
+  const C_PICK_MAX = 2;
+
+  function loadCPicks() {
+    try { return JSON.parse(localStorage.getItem(LS_CPICK)) || {}; } catch { return {}; }
+  }
+  /* 고른 역량 이름 목록. **안 골랐으면 null** — 빈 배열(0개 선택)과 구별해야 한다. */
+  function cPicks(qKey) {
+    const v = loadCPicks()[draftScope()]?.[qKey];
+    return Array.isArray(v) ? v.filter(Boolean).slice(0, C_PICK_MAX) : null;
+  }
+  /* 고르거나 뺀다. 상한에 걸리면 false 를 돌려 화면이 알린다.
+     한 번이라도 누르면 그 문항은 '사용자가 정한 문항' 이 되어 기본값을 더는 안 쓴다. */
+  function toggleCPick(qKey, label, shownLabels) {
+    const all = loadCPicks();
+    const scope = draftScope();
+    const byQ = all[scope] || (all[scope] = {});
+    /* 처음 누를 때의 출발점은 **지금 화면에 보이는 목록**(=기본값)이다. 화면에 A 가
+       붙어 있는데 B 를 누르면 [A, B] 가 되어야지 [B] 가 되면 사용자가 놀란다. */
+    const cur = Array.isArray(byQ[qKey]) ? byQ[qKey].slice()
+      : (Array.isArray(shownLabels) ? shownLabels.slice(0, C_PICK_MAX) : []);
+    const at = cur.indexOf(label);
+    if (at >= 0) cur.splice(at, 1);
+    else { if (cur.length >= C_PICK_MAX) return false; cur.push(label); }
+    byQ[qKey] = cur;                       // 빈 배열도 그대로 남긴다(0개 선택이 뜻을 갖는다)
+    localStorage.setItem(LS_CPICK, JSON.stringify(all));
+    return true;
+  }
   /* ── 역량 분석 결과를 자소서(회사)마다 보관한다 (사용자 지시 2026-09-01) ──────
      ── 무엇이 문제였나 ──
      역량 분석 결과는 `_last` 라는 **메모리 변수**에만 있었다. 그래서 보관함에서
@@ -1441,13 +1489,49 @@
   }
 
   /* 문항 유형 → 붙일 역량. 서버가 준 items 안에서만 고른다. */
+  /* ── 기본값은 1개다 (사용자 지시·심사 2026-09-01) ─────────────────────────
+     예전에는 soft 문항 2개·그 외 3개를 붙였다. 그런데 **초안이 실제로 쓰는 역량은
+     언제나 하나**였고(서버가 `competency` 문자열 하나를 받는다), 화면만 3개라고
+     말하고 있었다. 자동 매핑의 병은 '자동' 이 아니라 개수와 문항 무관함이었다.
+       · 개수 → 1개로 줄인다. 사용자가 문항마다 0~2개로 조정한다.
+       · 문항 무관 → 지원동기는 **기본 0개**다. 그 문항의 축은 역량이 아니라 회사 근거다.
+     items 는 jd-competency.js 가 공고 요구 강도(score) 내림차순으로 준다 —
+     기본값 1개는 곧 '공고가 가장 세게 요구한 역량' 이다. 그 앵커를 버리지 않는다. */
   function competenciesFor(type, items) {
     if (!items?.length) return [];
+    /* 지원동기·포부는 회사 근거로 쓴다(question-prompts.js motive: starMode 'support').
+       역량 축을 걸면 "왜 이 회사인가" 자리에 직무 이야기가 들어간다. */
+    if (type?.pick === 'news') return [];
     if (type?.pick === 'soft') {
       const soft = items.filter(it => SOFT_HINT.test(it.label));
-      return (soft.length ? soft : items).slice(0, 2);
+      return (soft.length ? soft : items).slice(0, 1);
     }
-    return items.slice(0, 3);
+    return items.slice(0, 1);
+  }
+
+  /* 이 문항에 실제로 쓸 역량 — 사용자가 고른 게 있으면 그것, 없으면 기본값(자동 매핑).
+     화면과 초안이 **같은 함수**를 봐야 "문항마다 이 역량으로 씁니다" 가 거짓말이 안 된다. */
+  function resolveComps(type, qKey, items) {
+    if (!items?.length) return [];
+    const picked = cPicks(qKey);
+    if (!picked) return competenciesFor(type, items);
+    const byLabel = new Map(items.map(it => [it.label, it]));
+    return picked.map(l => byLabel.get(l)).filter(Boolean).slice(0, C_PICK_MAX);
+  }
+
+  /* ── 공고 원문은 역량과 함께 꺼지면 안 된다 (심사 지적 2026-09-01) ──────────
+     초안 호출이 `quotes: item.quotes` 로 **역량 항목에 매달아** 보내고 있었다.
+     그래서 역량을 0개로 고르면 프롬프트에서 `채용공고에 적힌 이 직무가 하는 일` 이
+     통째로 사라지고, 남는 사실이 회사명·직무명·문항 문구뿐이 된다. 그 상태에서
+     분량 하한을 지키려면 모델이 갈 곳은 사전지식뿐이다(실측으로 겪은 지어내기다).
+     그래서 역량이 0개여도 **공고 문장은 상위 역량들에서 모아 늘 보낸다.** */
+  function quotesFor(comps, r) {
+    const from = (comps?.length ? comps : (r?.items || []).slice(0, 3));
+    const out = [];
+    for (const it of from) for (const q of (it?.quotes || [])) {
+      if (q && !out.includes(q)) out.push(q);
+    }
+    return out.slice(0, 4);
   }
 
   /* 문항 초안의 저장 키. **문항 문구가 아니라 순번**을 쓴다.
@@ -1465,10 +1549,14 @@
     if (questions.length) {
       return questions.map((q, i) => {
         const type = classifyQuestion(q);
+        const key = questionDraftKey(i);
         return {
           kind: 'question', text: q, type,
-          label: `문항 ${i + 1}`, key: questionDraftKey(i),
-          comps: competenciesFor(type, r.items),
+          label: `문항 ${i + 1}`, key,
+          /* 사용자가 고른 게 있으면 그것, 없으면 기본값. **화면 칩과 초안이 같은 값을
+             보게** 하려고 여기서 한 번에 정한다(예전에는 칩은 comps, 초안은 전역
+             _focused 를 봐서 서로 달랐다 — 심사에서 잡혔다). */
+          comps: resolveComps(type, key, r.items),
         };
       });
     }
@@ -1519,19 +1607,34 @@
   function reqListHtml(r, qMap) {
     const ok = r.items.filter(hasMine).length;
     const f = r.items[_focused];
+    /* ── 이 문항에 쓸 역량을 여기서 고른다 (사용자 지시 2026-09-01) ──────────────
+       줄을 누르면 상세가 열리고(예전 그대로), 오른쪽 토글을 누르면 **지금 보고 있는
+       문항**에 넣거나 뺀다. 초안은 이 선택을 그대로 쓴다(tabsOf → resolveComps). */
+    const tab = (_lastTabs || [])[_tab];
+    const onQ = tab?.kind === 'question';
+    const picked = new Set((onQ ? (tab.comps || []) : []).map(c => c.label));
+    const shown = [...picked];
     return `<div class="jd-reqs">
       <div class="jd-reqs-h">
         <b>요구 역량</b><span class="jd-reqs-n">${r.items.length}</span>
         <span class="jd-reqs-sub">근거 ${ok} · 없음 ${r.items.length - ok}</span>
       </div>
+      ${onQ ? `<p class="jd-reqs-pick-note">${tab.label}에 쓸 역량 <b>${picked.size}</b>/${C_PICK_MAX}
+        — 오른쪽 <b>+</b> 로 고르세요. ${picked.size ? '' : '<b>0개</b>면 문항 골격만으로 씁니다.'}</p>` : ''}
       <div class="jd-reqs-list">
         ${r.items.map((it, i) => `
-          <button type="button" class="jd-req ${i === _focused ? 'is-on' : ''}" data-key="${i}">
-            <span class="jd-req-dot ${hasMine(it) ? 'is-ok' : 'is-gap'}"></span>
-            <span class="jd-req-name">${esc(it.label)}</span>
-            ${(qMap[i] || []).length ? `<span class="jd-req-q">문항 ${(qMap[i]).join('·')}</span>` : ''}
-            ${it.market ? `<span class="jd-req-n">${it.market.pct}%</span>` : ''}
-          </button>`).join('')}
+          <div class="jd-req-row">
+            <button type="button" class="jd-req ${i === _focused ? 'is-on' : ''}" data-key="${i}">
+              <span class="jd-req-dot ${hasMine(it) ? 'is-ok' : 'is-gap'}"></span>
+              <span class="jd-req-name">${esc(it.label)}</span>
+              ${(qMap[i] || []).length ? `<span class="jd-req-q">문항 ${(qMap[i]).join('·')}</span>` : ''}
+              ${it.market ? `<span class="jd-req-n">${it.market.pct}%</span>` : ''}
+            </button>
+            ${onQ ? `<button type="button" class="jd-req-pick ${picked.has(it.label) ? 'is-picked' : ''}"
+              data-cpick="${esc(it.label)}" data-cshown="${esc(shown.join('|'))}"
+              title="${picked.has(it.label) ? '이 문항에서 빼기' : '이 문항에 쓰기'}"
+              aria-pressed="${picked.has(it.label)}">${picked.has(it.label) ? '✓' : '+'}</button>` : ''}
+          </div>`).join('')}
       </div>
       ${f ? reqDetailHtml(f) : ''}
     </div>`;
@@ -2273,6 +2376,21 @@
     // 역량 키워드 칩 · 역량 머리줄 — 둘 다 같은 역량을 연다
     box.querySelectorAll('[data-key]').forEach(el =>
       el.addEventListener('click', () => focusItem(Number(el.dataset.key))));
+
+    /* 문항별 역량 고르기 — 상한에 걸리면 알리고, 아니면 화면을 다시 그린다.
+       다시 그리는 이유: 탭의 comps 가 바뀌면 초안 머리의 기준 역량 줄과 문항 배지가
+       같이 바뀌어야 한다. 에디터 내용은 회사별 저장이라 다시 그려도 안 잃는다. */
+    box.querySelectorAll('[data-cpick]').forEach(el => el.addEventListener('click', () => {
+      const tab = (_lastTabs || [])[_tab];
+      if (tab?.kind !== 'question') return;
+      const shown = (el.dataset.cshown || '').split('|').filter(Boolean);
+      if (!toggleCPick(tab.key, el.dataset.cpick, shown)) {
+        const s = document.getElementById('jd-draft-state');
+        if (s) s.innerHTML = `한 문항에 역량은 <b>${C_PICK_MAX}개</b>까지예요 — 하나를 빼고 고르세요`;
+        return;
+      }
+      if (_wsHost) renderWrite(); else render(_last);
+    }));
     box.querySelectorAll('[data-comp]').forEach(el =>
       el.addEventListener('click', () => focusItem(Number(el.dataset.comp))));
 
@@ -2288,8 +2406,15 @@
       const isMotive = tab?.type?.pick === 'news';
       const ev = isMotive && tab?.type ? Roadmap.evidenceFor(valueOf('#jd-company'), tab.type.label) : [];
       if (isMotive && ev.length) { insertMotiveDraft(r, tabs); return; }
-      const item = r.items[_focused] || (tab?.comps || [])[0] || r.items[0];
-      if (item) { insertAiDraft(item, r.items.indexOf(item), r); return; }
+      /* ── 전역 포커스가 아니라 **이 문항에 고른 역량**을 쓴다 (심사 지적 2026-09-01) ──
+         예전엔 `r.items[_focused]` 였다. _focused 는 render 마다 유효 범위로 고정돼
+         (항상 값이 있고) tab.comps 폴백에는 도달하지 않았다. 그래서 화면은 "문항 1은
+         A 로 씁니다" 라고 적어 놓고 초안은 마지막으로 누른 역량으로 썼다.
+         이제 탭이 들고 있는 comps 가 곧 초안이 쓰는 역량이다. 0개면 0개로 부른다. */
+      const comps = tab?.kind === 'question' ? (tab.comps || []) : (r.items[_focused] ? [r.items[_focused]] : []);
+      if (comps.length || tab?.kind === 'question') {
+        insertAiDraft(comps, r); return;
+      }
       /* 지원동기인데 담은 근거도, 뽑힌 역량도 없다 — 무엇을 하면 되는지 상태줄에 적는다. */
       const s = document.getElementById('jd-draft-state');
       if (s) s.innerHTML = isMotive
@@ -2363,12 +2488,16 @@
      서버(draft-coach.js)가 인사담당자·현업 관점의 틀로 문단을 만들어 온다.
      받은 문단은 **덮어쓰지 않고 커서 자리에 끼워 넣는다** — 이미 쓰던 글이 있으면
      그게 사용자의 문장이고, 그걸 AI 문장으로 지우면 되돌릴 방법이 없다. */
-  async function insertAiDraft(item, i, r) {
+  /* comps 는 이 문항에 고른 역량 **0~2개**다(사용자 지시 2026-09-01).
+     0개면 역량 축 없이 문항 골격만으로 쓴다 — 지원동기가 그 경우다. */
+  async function insertAiDraft(comps, r) {
+    const list = Array.isArray(comps) ? comps.filter(Boolean) : (comps ? [comps] : []);
+    const i = list.length ? r.items.indexOf(list[0]) : -1;
     const ta = $('#jd-draft');
     /* 버튼·상태 자리는 이제 초안 머리에 있다(레퍼런스 A) — 옛 역량 카드 버튼이 없으면 그리로 폴백. */
     const btn = document.querySelector(`[data-ai="${i}"]`) || document.querySelector('[data-ai-draft]');
     const stateEl = document.querySelector(`[data-ai-state="${i}"]`) || document.getElementById('jd-draft-state');
-    if (!ta || !item) return;
+    if (!ta) return;
 
     const tabs = _lastTabs || [];
     const tab = tabs[_tab];
@@ -2394,13 +2523,15 @@
 
     try {
       const out = await DB.draftJd({
-        competency: item.label,
+        /* 역량 0~2개. 서버는 competencies 배열을 먼저 보고, 없으면 옛 competency 를 쓴다. */
+        competencies: list.map(c => c.label),
         company: valueOf('#jd-company'),
         jobTitle: r?.market?.bucket || '',
         question: tab?.kind === 'question' ? tab.text : '',
-        quotes: item.quotes || [],
-        reads: item.reads || '',
-        frame: item.frame || '',
+        /* 공고 문장은 역량과 함께 꺼지면 안 된다 — 역량 0개여도 상위 역량에서 모아 보낸다. */
+        quotes: quotesFor(list, r),
+        reads: list.map(c => c.reads).filter(Boolean).join(' / '),
+        frame: list[0]?.frame || '',
         picks,
         limit: 600,
       });
@@ -2648,6 +2779,8 @@
     classifyQuestion, competenciesFor, parseQuestions, questionDraftKey, QUESTION_TYPES,
     starGate, actKeyOf,
     checkDraft,
+    /* 문항별 역량 고르기 (test/comp-pick.test.js) */
+    cPicks, toggleCPick, resolveComps, quotesFor, C_PICK_MAX,
     /* 회사별 분석 보관 (test/jd-analysis.test.js) */
     saveAnalysis, analysisOf, forgetAnalysis, ANALYSIS_MAX,
   };
