@@ -144,8 +144,48 @@ const useGemini = () => GEMINI.isConfigured();
 const draftProvider = () => (useGemini() ? GEMINI.PROVIDER : PROVIDER);
 const draftModel = () => (useGemini() ? GEMINI.modelLabel() : modelLabel());
 
-async function callDraftModel(text, system, opts = {}) {
-  return useGemini() ? GEMINI.callModel(text, system, opts) : callModel(text, system, opts);
+/* ── Gemini 가 죽으면 Groq 로 넘긴다 (2026-09-03 운영 사고) ────────────────────
+   ── 무슨 일이 있었나 ──
+   Gemini 가 `HTTP 503 This model is currently experiencing high traffic` 를 내기
+   시작했고, **AI 초안이 통째로 죽었다.** 화면에는 504 만 보였다. 그런데 같은 순간
+   Groq 는 멀쩡했다(같은 프롬프트로 4.7초·494자 정상). 앱의 나머지 AI 기능은 전부
+   Groq 로 돌고 있었으니, 초안만 살릴 수 있는데 안 살린 것이다.
+
+   원인은 라우팅이 **키의 존재 하나로만** 갈렸다는 것이다. 키가 있으면 무조건 Gemini 고,
+   429(쿼터)·503(과부하)·타임아웃 어느 쪽이든 되돌아갈 길이 없었다. 검증 중에 쿼터가
+   소진돼 같은 증상을 두 번 봤는데도 '나중에' 로 미뤄 뒀다가 운영에서 터졌다.
+
+   ── 왜 '조용한 폴백' 이 여기서는 맞나 ──
+   이 파일 위 주석이 명시적 라우팅을 고집하는 이유는 옛 Ollama 사고 때문이다 —
+   환경변수가 안 읽혀 **안 켜진 로컬 도구**로 조용히 떨어졌다. 여기는 다르다.
+   되돌아가는 곳이 이미 설정돼 돌아가는 Groq 이고, 무엇으로 썼는지는 응답의
+   provider·model 이 딱 잘라 말한다(화면이 그걸 그대로 보여준다).
+
+   ── 두 번 부르는 시간을 감당할 수 있나 ──
+   Gemini 실패는 대개 즉시 온다(503·429 는 5초 안쪽). 최악은 타임아웃(60초) + Groq(5초)
+   인데, 라우트가 외국어·베낌으로 최대 두 번 더 부를 수 있어 그대로 두면 프록시가
+   먼저 끊는다. 그래서 **폴백이 가능할 때는 Gemini 쪽 상한을 짧게 준다** — 어차피
+   60초를 기다려 봐야 나오지 않을 응답이다. */
+const GEMINI_FIRST_TRY_MS = Number(process.env.DRAFT_GEMINI_TIMEOUT_MS || 25000);
+
+/* used 를 넘기면 **실제로 쓴 프로바이더**를 적어 준다. 폴백했는데 응답에 'gemini' 라고
+   적히면 화면이 거짓말을 한다 — 어느 모델이 쓴 글인지가 이 기능의 판단 근거다. */
+async function callDraftModel(text, system, opts = {}, used = null) {
+  const mark = (provider, model) => { if (used) { used.provider = provider; used.model = model; } };
+  if (!useGemini()) { mark(PROVIDER, modelLabel()); return callModel(text, system, opts); }
+  try {
+    const out = await GEMINI.callModel(text, system, { ...opts, timeoutMs: GEMINI_FIRST_TRY_MS });
+    mark(GEMINI.PROVIDER, GEMINI.modelLabel());
+    return out;
+  } catch (e) {
+    /* 키가 잘못됐으면 Groq 로 넘겨도 같은 글을 못 쓴다 — 는 아니지만, 설정이 틀린 것을
+       조용히 덮으면 영영 못 고친다. 그래도 사용자 앞에서 기능이 죽는 것보다는 낫다:
+       넘기되 **로그에는 남긴다.** 무엇으로 썼는지는 응답의 provider 가 말해 준다. */
+    console.warn('[초안] Gemini 실패 → Groq 로 넘어갑니다 —', String(e?.message || e).slice(0, 160));
+    if (!isConfigured()) throw e;          // Groq 도 없으면 원래 오류를 그대로 올린다
+    mark(PROVIDER, modelLabel());
+    return callModel(text, system, opts);
+  }
 }
 
 module.exports = {

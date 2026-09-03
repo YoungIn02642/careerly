@@ -278,8 +278,12 @@ router.post('/draft', async (req, res) => {
   try {
     /* num_predict 를 넉넉히 준다 — 문단 + 빈칸 안내 + 검토까지 한 응답에 담기므로
        기본값(512)이면 JSON 이 중간에 잘려서 파싱이 통째로 실패한다. */
+    /* Gemini 가 죽으면 Groq 로 넘어간다(ai-provider callDraftModel). 무엇으로 썼는지를
+       여기 담아 응답에 싣는다 — draftProvider() 는 '무엇으로 보내려 했나' 라서 폴백하면
+       거짓말이 된다. 재시도마다 덮어써서 **마지막으로 쓴 것**이 남는다. */
+    const used = {};
     const ask = async () => DRAFT.parseDraft(
-      await callDraftModel(prompt, DRAFT.SYSTEM, { num_ctx: 8192, num_predict: 1100 }));
+      await callDraftModel(prompt, DRAFT.SYSTEM, { num_ctx: 8192, num_predict: 1100 }, used));
 
     let out = await ask();
     /* 한국어가 아닌 글자가 섞이면 한 번만 다시 부른다. 실측으로 8회 중 1회꼴이라
@@ -311,7 +315,7 @@ router.post('/draft', async (req, res) => {
         detail: `예시(${copied.key})와 겹침: ${copied.chunk}`,
       });
     }
-    res.json({ ...out, model: draftModel(), provider: draftProvider() });
+    res.json({ ...out, model: used.model || draftModel(), provider: used.provider || draftProvider() });
   } catch (e) {
     const status = e?.status || 502;
     res.status(status).json({
@@ -372,9 +376,11 @@ router.post('/motive', async (req, res) => {
     limit,
   });
 
+  /* 폴백으로 프로바이더가 바뀔 수 있다 — 실제로 쓴 것을 담아 응답에 싣는다. */
+  const used = {};
   try {
     const ask = async () => DRAFT.parseDraft(
-      await callDraftModel(prompt, DRAFT.SYSTEM, { num_ctx: 8192, num_predict: 1100 }));
+      await callDraftModel(prompt, DRAFT.SYSTEM, { num_ctx: 8192, num_predict: 1100 }, used));
 
     let out = await ask();
     /* 외국어 혼입은 /draft 와 같은 규칙으로 막는다 — 같은 모델·같은 출력 형식이라
@@ -387,7 +393,7 @@ router.post('/motive', async (req, res) => {
 
     /* 담아 온 근거를 그대로 돌려준다 — 화면이 "이 초안은 이 근거로 썼다" 를
        초안 옆에 적을 수 있어야 한다. 출처 없이 나온 문단은 검증할 방법이 없다. */
-    res.json({ ...out, usedEvidence: evidence, model: draftModel(), provider: draftProvider() });
+    res.json({ ...out, usedEvidence: evidence, model: used.model || draftModel(), provider: used.provider || draftProvider() });
   } catch (e) {
     const status = e?.status || 502;
     res.status(status).json({

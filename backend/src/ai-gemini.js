@@ -53,7 +53,10 @@ function cfgError(msg) { const e = new Error(msg); e.status = 503; throw e; }
    그래서 512 로 못박고, maxOutputTokens 는 사고 몫(THINK_BUDGET)+본문(num_predict)을
    함께 덮게 준다 — 안 그러면 사고가 예산을 먹어 본문이 빈 채 끝난다. */
 const THINK_BUDGET = 512;
-async function callModel(text, system, { num_predict = 512 } = {}) {
+/* timeoutMs 는 호출하는 쪽이 더 짧게 줄 수 있다 — 초안은 Gemini 가 실패하면 Groq 로
+   넘어가므로(ai-provider.js callDraftModel), 60초를 다 기다릴 이유가 없다. */
+async function callModel(text, system, { num_predict = 512, timeoutMs } = {}) {
+  const limitMs = Number(timeoutMs) > 0 ? Number(timeoutMs) : TIMEOUT_MS;
   const key = (process.env.GEMINI_API_KEY || '').trim();
   if (!key) {
     cfgError('GEMINI_API_KEY 가 없습니다. https://aistudio.google.com/apikey 에서 발급받아 '
@@ -61,7 +64,7 @@ async function callModel(text, system, { num_predict = 512 } = {}) {
   }
 
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => ctrl.abort(), limitMs);
 
   let res, data;
   try {
@@ -86,7 +89,7 @@ async function callModel(text, system, { num_predict = 512 } = {}) {
     /* 네트워크·타임아웃은 사용자가 할 일(잠시 뒤 재시도)이 같아 하나로 묶는다. */
     const timedOut = e?.name === 'AbortError';
     const err = new Error(timedOut
-      ? `AI 응답이 ${Math.round(TIMEOUT_MS / 1000)}초 안에 오지 않았습니다. 잠시 뒤 다시 시도해 주세요.`
+      ? `AI 응답이 ${Math.round(limitMs / 1000)}초 안에 오지 않았습니다. 잠시 뒤 다시 시도해 주세요.`
       : `Gemini 연결 실패: ${String(e?.message || '').slice(0, 200)}`);
     err.status = timedOut ? 504 : 502;
     throw err;
