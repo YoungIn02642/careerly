@@ -2713,9 +2713,7 @@
       timer = setTimeout(() => {
         saveDraft(key, ta.value);
         stateEl.textContent = '저장됨';
-        // 탭 글자수도 같이 갱신 — 어느 문항이 얼마나 찼는지가 탭에 보인다
-        const tab = box.querySelector(`[data-tab="${_tab}"] span`);
-        if (tab) tab.textContent = ta.value.length.toLocaleString();
+        paintTabCount(box, _tab, ta.value.length);
       }, 600);
     });
     // 탭을 옮기거나 페이지를 뜨면 대기 중인 저장을 흘려보내지 않는다
@@ -2733,10 +2731,22 @@
       clearTimeout(timer);
       saveDraft(key, ta.value);
       stateEl.textContent = '저장됨';
-      const tab = box.querySelector(`[data-tab="${_tab}"] span`);
-      if (tab) tab.textContent = ta.value.length.toLocaleString();
+      paintTabCount(box, _tab, ta.value.length);
       if (typeof toast === 'function') toast('저장했어요', { icon: false });
     });
+  }
+
+  /* ── 탭의 글자 수만 갱신한다 (사용자 지적 2026-09-03) ────────────────────────
+     탭은 span 이 둘이다 — `.jd-qtab-lab`(문항 1) 과 `.jd-qtab-n`(글자 수).
+     그런데 갱신 코드가 `[data-tab="N"] span` 으로 **첫 번째 span** 을 집어서,
+     저장될 때마다 **문항 이름을 글자 수로 덮어썼다.** 화면에는 '문항 1' 이 사라지고
+     '4' 만 남아, 지금 몇 번 문항을 쓰는지 알 수 없었다.
+
+     숫자 칸을 이름으로 지목한다. 못 찾으면 아무것도 안 바꾼다 — 라벨을 덮어쓰느니
+     숫자가 안 갱신되는 편이 낫다(다시 그릴 때 어차피 맞는 값이 들어간다). */
+  function paintTabCount(box, tabIndex, len) {
+    const n = box?.querySelector(`[data-tab="${tabIndex}"] .jd-qtab-n`);
+    if (n) n.textContent = Number(len || 0).toLocaleString();
   }
 
   /* ── 초안 검사 (브라우저에서만 돈다) ──────────────────────────
