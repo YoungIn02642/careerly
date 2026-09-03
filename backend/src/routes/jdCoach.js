@@ -224,7 +224,10 @@ router.post('/draft', async (req, res) => {
     ?? (req.body?.competency ? [req.body.competency] : []);
   const comps = competencies.map(c => String(c || '').trim()).filter(Boolean).slice(0, 2);
 
-  const limit = Math.min(Math.max(Number(req.body?.limit) || 600, 200), 1500);
+  /* 문항 상한은 사용자가 정한다(프론트 limitOf). byte 로 적힌 공고는 한글 2byte 기준으로
+     환산돼 오므로 3,000자까지 받는다 — 6,000byte 짜리 문항까지 덮는다.
+     기본값 1,000 은 프론트와 같아야 한다. 갈리면 화면이 말한 분량과 초안이 어긋난다. */
+  const limit = Math.min(Math.max(Number(req.body?.limit) || 1000, 200), 3000);
   /* ── 문항마다 고른 정성스펙(0~3개) (사용자 지시 2026-08-31) ────────────
      고른 게 있으면 그 STAR 가 본문 재료다. 0개면 STAR 를 강요하지 않고 문항 골격만 쓴다.
      2~3개면 draft-coach 가 공통점으로 묶는다. star(단일)는 옛 호환용으로 남겨 둔다.
@@ -360,7 +363,10 @@ router.post('/motive', async (req, res) => {
     });
   }
 
-  const limit = Math.min(Math.max(Number(req.body?.limit) || 600, 200), 1500);
+  /* 문항 상한은 사용자가 정한다(프론트 limitOf). byte 로 적힌 공고는 한글 2byte 기준으로
+     환산돼 오므로 3,000자까지 받는다 — 6,000byte 짜리 문항까지 덮는다.
+     기본값 1,000 은 프론트와 같아야 한다. 갈리면 화면이 말한 분량과 초안이 어긋난다. */
+  const limit = Math.min(Math.max(Number(req.body?.limit) || 1000, 200), 3000);
   /* 지원동기도 '고른 정성스펙(0~3개)' 을 재료로 받는다(사용자 지적 2026-09-01).
      안 고르면(0개) 회사 근거만으로 쓰고 지원자 경험은 지어내지 않는다. /draft 와 같은 규약. */
   const picks = (Array.isArray(req.body?.picks) ? req.body.picks : [])

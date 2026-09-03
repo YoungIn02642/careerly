@@ -324,6 +324,65 @@
     localStorage.setItem(LS_CPICK, JSON.stringify(all));
     return true;
   }
+  /* ── 문항마다 분량 상한을 사용자가 정한다 (사용자 지시 2026-09-03) ──────────────
+     자소서 문항은 회사마다 상한이 다르다 — "1,000자 이내", "2,000 byte" 처럼 공고에
+     적혀 있다. 지금까지는 초안 요청이 `limit: 600` 으로 **고정**이라, 1,000자짜리
+     문항에 600자짜리 초안이 나오고 사용자가 다시 늘려 써야 했다.
+
+     ── 글자와 byte 를 다 받는다 ──
+     국내 자소서 상한은 두 가지로 적힌다. byte 로 적는 곳은 관행적으로 **한글 2byte**
+     (EUC-KR 기준)로 센다 — UTF-8(한글 3byte)이 아니다. 잡코리아·사람인 계열이 그렇다.
+     UTF-8 로 세면 같은 글이 1.5배로 잡혀 사용자가 쓸 수 있는 분량을 깎아먹는다.
+
+     ── 안 정하면 1,000자 ──
+     사용자 지정 기본값이다. 예전 기본(600자)보다 크다 — 실제 공고에서 가장 흔한 상한이고,
+     모자란 초안을 늘리는 것보다 긴 초안을 줄이는 편이 사용자에게 쉽다. */
+  const LS_LIMIT = 'careerly_jd_limit_v1';
+  const LIMIT_DEFAULT = 1000;
+  const LIMIT_MIN = 200;
+  const LIMIT_MAX_CHAR = 3000;          // 서버 clamp 와 맞춘다
+  const LIMIT_MAX_BYTE = LIMIT_MAX_CHAR * 2;
+
+  /* 한글·전각은 2byte, 나머지는 1byte. 국내 자소서 byte 상한의 관행이다. */
+  function byteLen(str) {
+    let n = 0;
+    for (const ch of String(str || '')) n += /[ᄀ-ᇿ㄰-㆏가-힯　-〿＀-￯]/.test(ch) ? 2 : 1;
+    return n;
+  }
+
+  function loadLimits() {
+    try { return JSON.parse(localStorage.getItem(LS_LIMIT)) || {}; } catch { return {}; }
+  }
+  /* 이 문항의 상한. 안 정했으면 기본값(1,000자)을 돌려준다 — null 을 돌려주면
+     부르는 쪽마다 기본값을 따로 적게 되고, 그러면 화면과 초안이 갈린다. */
+  function limitOf(qKey) {
+    const v = loadLimits()[draftScope()]?.[qKey];
+    const unit = v?.unit === 'byte' ? 'byte' : 'char';
+    const max = unit === 'byte' ? LIMIT_MAX_BYTE : LIMIT_MAX_CHAR;
+    const n = Number(v?.n);
+    if (!Number.isFinite(n) || n <= 0) return { n: LIMIT_DEFAULT, unit: 'char', custom: false };
+    return { n: Math.min(Math.max(Math.round(n), LIMIT_MIN), max), unit, custom: true };
+  }
+  function setLimit(qKey, n, unit) {
+    const all = loadLimits();
+    const scope = draftScope();
+    const byQ = all[scope] || (all[scope] = {});
+    const num = Number(n);
+    /* 비우면 '기본값으로 돌아간다' 는 뜻이다 — 0 을 저장해 두면 다음에 못 고친다. */
+    if (!Number.isFinite(num) || num <= 0) delete byQ[qKey];
+    else byQ[qKey] = { n: Math.round(num), unit: unit === 'byte' ? 'byte' : 'char' };
+    if (!Object.keys(byQ).length) delete all[scope];
+    localStorage.setItem(LS_LIMIT, JSON.stringify(all));
+    return limitOf(qKey);
+  }
+  /* 지금 글이 상한 대비 얼마인지. 화면 카운터와 초과 판정이 같은 함수를 본다. */
+  function usageOf(text, lim) {
+    const used = lim.unit === 'byte' ? byteLen(text) : String(text || '').length;
+    return { used, over: used > lim.n, unitLabel: lim.unit === 'byte' ? 'byte' : '자' };
+  }
+  /* 서버에 넘길 목표 글자 수. byte 상한은 한글 2byte 기준이라 절반이 대략의 글자 수다. */
+  const charTarget = lim => (lim.unit === 'byte' ? Math.round(lim.n / 2) : lim.n);
+
   /* ── 역량 분석 결과를 자소서(회사)마다 보관한다 (사용자 지시 2026-09-01) ──────
      ── 무엇이 문제였나 ──
      역량 분석 결과는 `_last` 라는 **메모리 변수**에만 있었다. 그래서 보관함에서
@@ -2013,6 +2072,8 @@
       return `<div class="jd-draft-pane"><div class="jd-empty">쓸 문항이 없어요.
         위 <b>자소서 문항</b> 칸에 문항을 한 줄에 하나씩 넣으면 문항별로 쓸 수 있습니다.</div></div>`;
     }
+    /* 이 문항의 분량 상한(사용자 지시 2026-09-03). 안 정했으면 기본 1,000자다. */
+    const lim = limitOf(tab.key);
 
     const company = valueOf('#jd-company');
     /* 지원동기 문항은 공고가 아니라 **회사 근거**가 재료다. 담아 온 것 중 이 문항
@@ -2065,6 +2126,18 @@
         <div class="jd-draft-h">
           <b>내 초안</b>
           <span class="jd-draft-end">
+            <!-- 분량 상한 — 공고에 적힌 값을 그대로 넣는다(1,000자 / 2,000 byte).
+                 비우면 기본 1,000자. AI 초안이 이 값을 목표로 쓴다. -->
+            <label class="jd-limit" title="공고에 적힌 분량을 넣으세요. 비우면 1,000자입니다">
+              <span class="jd-limit-lab">분량</span>
+              <input type="number" class="jd-limit-n" id="jd-limit-n" inputmode="numeric"
+                min="${LIMIT_MIN}" step="100" placeholder="${LIMIT_DEFAULT}"
+                value="${lim.custom ? lim.n : ''}" aria-label="분량 상한">
+              <select class="jd-limit-u" id="jd-limit-u" aria-label="분량 단위">
+                <option value="char"${lim.unit === 'char' ? ' selected' : ''}>자</option>
+                <option value="byte"${lim.unit === 'byte' ? ' selected' : ''}>byte</option>
+              </select>
+            </label>
             <span class="jd-draft-state" id="jd-draft-state"></span>
             <button type="button" class="wf-btn wf-btn--sm" data-ai-draft>
               <i class="ti ti-sparkles"></i> AI 초안 넣기</button>
@@ -2533,7 +2606,8 @@
         reads: list.map(c => c.reads).filter(Boolean).join(' / '),
         frame: list[0]?.frame || '',
         picks,
-        limit: 600,
+        /* 사용자가 정한 분량 상한. byte 면 한글 2byte 기준으로 글자 수로 환산한다. */
+        limit: charTarget(limitOf(tab?.key)),
       });
 
       const at = ta.selectionStart ?? ta.value.length;
@@ -2604,7 +2678,8 @@
            보내 봤자 프롬프트만 길어져 뒤쪽 규칙이 밀린다. */
         evidence: ev.map(e => ({ kind: e.kind, text: e.text, source: e.source || '' })),
         picks,
-        limit: 600,
+        /* 사용자가 정한 분량 상한. byte 면 한글 2byte 기준으로 글자 수로 환산한다. */
+        limit: charTarget(limitOf(tab?.key)),
       });
 
       const at = ta.selectionStart ?? ta.value.length;
@@ -2699,8 +2774,13 @@
     const key = ta.dataset.key;
     let timer = null;
 
+    /* 카운터는 **상한 대비**로 보여준다 — 자소서는 '몇 자 썼나' 보다 '넘었나' 가 중요하다.
+       단위가 byte 면 byte 로 센다(한글 2byte, limitOf 주석 참고). */
     const paint = () => {
-      countEl.textContent = ta.value.length ? `${ta.value.length.toLocaleString()}자` : '0자';
+      const lim = limitOf(key);
+      const u = usageOf(ta.value, lim);
+      countEl.textContent = `${u.used.toLocaleString()} / ${lim.n.toLocaleString()}${u.unitLabel}`;
+      countEl.classList.toggle('is-over', u.over);
       paintCheck(chkEl, ta.value);
     };
     paint();
@@ -2726,6 +2806,28 @@
     /* '저장하기' — 자동저장(입력 600ms·blur)과 별개로 **지금 바로** 저장하는 버튼
        (사용자 지시 2026-09-01). 자동저장을 못 믿는 사람이 눌러 확인하는 자리라, 눌렀을 때
        분명히 '저장됨'을 보여준다. 탭 글자수도 같이 갱신한다. */
+    /* ── 분량 상한 입력 (사용자 지시 2026-09-03) ────────────────────────────
+       바꾸면 곧바로 저장하고 카운터를 다시 그린다. 화면을 통째로 다시 그리지 않는다 —
+       입력 중인 초안의 커서·스크롤을 잃지 않으려는 것이다(focusItem 과 같은 판단). */
+    const limN = box.querySelector('#jd-limit-n');
+    const limU = box.querySelector('#jd-limit-u');
+    const applyLimit = () => {
+      const saved = setLimit(key, limN?.value, limU?.value);
+      if (limN) {
+        /* 상한을 지우면 기본값으로 돌아간다 — placeholder 가 그 값을 보여주므로 칸은 비운다. */
+        if (!saved.custom) limN.value = '';
+        /* 범위를 벗어난 값은 잘린다(200 미만·3,000자 초과). **잘린 값을 칸에 되돌려
+           적는다** — 안 그러면 칸에는 100 이 보이는데 실제로는 200 으로 도는, 화면이
+           거짓말하는 상태가 된다. */
+        else if (String(saved.n) !== String(limN.value)) limN.value = saved.n;
+      }
+      if (limU) limU.value = saved.unit;
+      paint();
+    };
+    limN?.addEventListener('change', applyLimit);
+    limN?.addEventListener('blur', applyLimit);
+    limU?.addEventListener('change', applyLimit);
+
     const saveBtn = box.querySelector('[data-save-draft]');
     if (saveBtn) saveBtn.addEventListener('click', () => {
       clearTimeout(timer);
@@ -2789,6 +2891,8 @@
     classifyQuestion, competenciesFor, parseQuestions, questionDraftKey, QUESTION_TYPES,
     starGate, actKeyOf,
     checkDraft,
+    /* 문항별 분량 상한 (test/draft-limit.test.js) */
+    limitOf, setLimit, usageOf, byteLen, charTarget, LIMIT_DEFAULT,
     /* 문항별 역량 고르기 (test/comp-pick.test.js) */
     cPicks, toggleCPick, resolveComps, quotesFor, C_PICK_MAX,
     /* 회사별 분석 보관 (test/jd-analysis.test.js) */

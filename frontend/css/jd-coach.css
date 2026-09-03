@@ -2159,3 +2159,29 @@ a.wf-btn { text-decoration: none; }
   background: var(--brand, #4b5bd7); border-color: var(--brand, #4b5bd7); color: #fff;
 }
 .jd-req-pick:focus-visible { outline: 2px solid var(--brand, #4b5bd7); outline-offset: 2px; }
+
+/* ── 문항 분량 상한 (사용자 지시 2026-09-03) ────────────────────────────────
+   공고에 적힌 분량("1,000자 이내" · "2,000 byte")을 그대로 넣는 자리다.
+   초안 머리에 두는 이유는 **쓰기 전에 보이는 자리**여서다 — 다 쓰고 나서
+   넘은 걸 알면 늦다. */
+.jd-limit {
+  display: inline-flex; align-items: center; gap: 4px; margin-right: 8px;
+  padding: 3px 6px; border: 1px solid var(--line, #e4e7ec); border-radius: 8px;
+  background: var(--card, #fff);
+}
+.jd-limit-lab { font-size: 11px; color: var(--muted, #667085); }
+.jd-limit-n {
+  width: 62px; border: 0; background: transparent; text-align: right;
+  font-size: 12px; font-weight: 700; color: inherit; padding: 0; -moz-appearance: textfield;
+}
+.jd-limit-n::-webkit-outer-spin-button,
+.jd-limit-n::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.jd-limit-n:focus { outline: none; }
+.jd-limit:focus-within { border-color: var(--brand, #4b5bd7); }
+.jd-limit-u {
+  border: 0; background: transparent; font-size: 12px; color: var(--muted, #667085);
+  padding: 0 2px; cursor: pointer;
+}
+
+/* 상한을 넘으면 카운터가 알린다 — 막지는 않는다(줄이는 건 사용자 몫이다). */
+.jd-draft-count.is-over { color: var(--danger, #d92d20); font-weight: 700; }
