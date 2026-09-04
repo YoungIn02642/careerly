@@ -351,7 +351,6 @@ a.wf-btn { text-decoration: none; }
 .co-card-top { display: flex; align-items: baseline; gap: 7px; }
 .co-card-n { font-family: var(--font-code); font-size: 11px; color: var(--wf-mute-soft); }
 .co-card-l { font-size: 15px; font-weight: 500; color: var(--wf-ink); }
-.co-card-ask { font-size: 12.8px; line-height: 1.5; color: var(--wf-mute); }
 .co-card-metric { margin-top: auto; display: flex; align-items: flex-end; gap: 8px; }
 .co-card-v { font-size: 22px; line-height: 1.15; font-weight: 500; color: var(--wf-ink); font-variant-numeric: tabular-nums; }
 .co-card-v small { font-size: 13px; font-weight: 400; color: var(--wf-body-mid); margin-left: 2px; }
@@ -1020,8 +1019,26 @@ a.wf-btn { text-decoration: none; }
   padding: 13px 18px; border-bottom: 1px solid var(--wf-hairline);
 }
 .jd-draft-h b { font-size: 15px; font-weight: 500; color: var(--wf-ink); }
-.jd-draft-h .jd-draft-end { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-.jd-draft-state { font-size: 12.8px; color: var(--wf-mute); }
+.jd-draft-h .jd-draft-end { margin-left: auto; display: flex; align-items: center; gap: 8px; flex: none; }
+.jd-draft-h .jd-draft-end .wf-btn { white-space: nowrap; }
+
+/* 상태줄은 **머리줄 아래 한 줄을 통째로** 쓴다 (사용자 지적 2026-09-04).
+   분량·버튼 사이에 끼워 두면 '빈칸 4개를 …' 같은 긴 문장이 좁은 칸에서 글자
+   단위로 쪼개져 읽을 수 없었다. flex 컨테이너로 만들면 안 된다 — 안의 <b> 와
+   글자 토막이 저마다 flex 항목이 되어 세로로 흩어진다(그게 그 깨짐의 원인이었다). */
+.jd-draft-state { flex: 1 0 100%; font-size: 12.8px; line-height: 1.6; color: var(--wf-mute); }
+.jd-draft-state:empty { display: none; }
+
+/* AI 초안 진행률 (사용자 지시 2026-09-04) — 지난 호출들이 실제로 걸린 시간의
+   중앙값을 분모로 삼아 채운다(jd-coach.js startAiProgress 머리주석에 근거).
+   토큰 스트리밍이 왜 불가능한지도 그 주석에 실측과 함께 있다. */
+.jd-ai-prog {
+  display: inline-block; width: 60px; height: 5px; border-radius: 999px;
+  background: var(--wf-fill, #eceef1); overflow: hidden; vertical-align: middle; margin-right: 4px;
+}
+.jd-ai-prog-bar { display: block; height: 100%; background: #6d3aff; transition: width .2s linear; }
+.jd-ai-prog-pct { font-family: var(--font-num, var(--font)); font-weight: 700; color: var(--wf-ink); }
+.jd-ai-done { color: #22a06b; font-size: 15px; vertical-align: -2px; }
 
 /* 문항 선택 */
 .jd-qtabs { display: flex; gap: 2px; padding: 0 18px; border-bottom: 1px solid var(--wf-hairline); overflow-x: auto; }
@@ -1352,40 +1369,9 @@ a.wf-btn { text-decoration: none; }
 .jd-ev-h b { font-size: 13px; font-weight: 500; color: var(--wf-ink); }
 .jd-ev-use { font-size: 11px; color: var(--wf-mute); }
 
-/* ── 기업규모 필터 ──────────────────────────────────────────
-   1단계에서 고른 대·중견·중소·공이 여기로 온다. 계열 아코디언보다 **위**에 둔다 —
-   아래 목록 전체를 바꾸는 스위치라, 목록 사이에 끼면 그 계열에만 걸리는 것으로 읽힌다.
-
-   ── 폭을 아래 목록과 맞춘다 (사용자 지시) ──
-   이 칸은 .co-search-page 의 직계 자식인데 폭 제한이 없었다. 그래서 1600px 화면에서
-   **혼자만 x=32 에서 시작**하고(폭 1536) 바로 아래 .co-lanes 는 x=250(폭 1100)이라,
-   규모 칩만 218px 왼쪽으로 삐져나와 보였다. 같은 1100px 기둥에 세운다.
-   위 여백도 없어서 검색창에 붙어 있었다 — .co-lanes 와 같은 56px 을 준다. */
-.co-sizes { max-width: 1100px; margin: 56px auto 0; }
-.co-sizechips { display: flex; flex-wrap: wrap; gap: 8px; }
-.co-sizechip {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 9px 15px; border: 1px solid var(--wf-hairline); border-radius: 999px;
-  background: var(--wf-canvas); font: inherit; font-size: 14px; color: var(--wf-body); cursor: pointer;
-}
-.co-sizechip:hover { border-color: var(--wf-ink); color: var(--wf-ink); }
-.co-sizechip b { font-size: 12px; font-weight: 500; color: var(--wf-mute); }
-.co-sizechip.is-on {
-  border-color: var(--wf-ink); background: var(--wf-ink); color: var(--wf-canvas);
-}
-.co-sizechip.is-on b { color: var(--wf-canvas); opacity: .72; }
-
-/* ── 기업 형태 필터 한 줄 ────────────────────────────────────
-   단계가 아니라 필터라 한 줄에 눕히고 배경을 깔아 **단계 카드와 다른 물건**임을
-   모양으로 알린다. 아래 단계 카드는 흰 바탕에 테두리다. */
-.co-filter {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
-  padding: 12px 14px; border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-md);
-  background: var(--wf-fill);
-}
-.co-filter > b { font-size: 13px; font-weight: 600; color: var(--wf-body); margin-right: 2px; }
-.co-filter-hint { margin-left: auto; font-size: 12.5px; color: var(--wf-mute); }
-@media (max-width: 640px) { .co-filter-hint { margin-left: 0; width: 100%; } }
+/* ── 옛 기업 형태 필터 CSS 는 걷어냈다 (사용자 지시 2026-09-04) ──────────────
+   맨 위 한 줄(.co-sizes/.co-filter/.co-sizechip)에서 마지막 단계 안(.co-stepsizes)으로
+   옮겼다. 옮긴 쪽 규칙은 아래 "회사 단계의 기업 형태 칩" 에 있다. */
 
 /* ── 진행 표시 ───────────────────────────────────────────────
    자동으로 건너뛴 단계는 점선이다. 지우면 "내가 안 골랐는데 정해져 있다" 가 되어
@@ -1433,7 +1419,6 @@ a.wf-btn { text-decoration: none; }
 .co-step-card.is-done .co-step-n { background: var(--wf-ok, #00a83a); color: #fff; }
 .co-step-t { flex: 1; min-width: 0; }
 .co-step-t b { display: block; font-size: 14px; font-weight: 600; color: var(--wf-ink); }
-.co-step-t small { display: block; font-size: 12.5px; color: var(--wf-mute); }
 .co-step-pick {
   font-size: 13px; font-weight: 600; color: var(--wf-purple, #7a3dff);
   max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -1442,6 +1427,38 @@ a.wf-btn { text-decoration: none; }
 /* 마지막 단(회사)은 목록이 길 수 있다 — 석유·화학 61곳. 카드 안에서 스크롤한다. */
 .co-step-b { max-height: 340px; overflow-y: auto; }
 .co-step-b .co-indchips, .co-step-b .co-indlist { padding-top: 12px; }
+
+/* 회사 단계의 기업 형태 칩 (사용자 지시 2026-09-04) — 맨 위 한 줄에 있던 필터를
+   여기로 옮겼다. 이 업종 안에서만 세므로 숫자가 지금 보는 목록과 같은 축이다. */
+.co-stepsizes {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+  padding: 12px 0 10px; background: var(--wf-canvas, #fff);
+  border-bottom: 1px solid var(--wf-hairline);
+}
+.co-stepsizes-l { font-size: 12px; font-weight: 700; color: var(--wf-mute); margin-right: 2px; }
+.co-stepsize {
+  padding: 5px 10px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--wf-hairline); background: var(--wf-canvas, #fff);
+  font-family: var(--font); font-size: 12.5px; font-weight: 600; color: var(--wf-body-mid);
+}
+.co-stepsize:hover { border-color: #b9b9c2; color: var(--wf-ink); }
+.co-stepsize b { margin-left: 5px; font-family: var(--font-num, var(--font)); font-weight: 700; opacity: .65; }
+.co-stepsize.is-on { background: #080808; border-color: #080808; color: #fff; }
+.co-stepsize.is-on b { opacity: .8; }
+
+/* 회사 단계의 규모 묶음 (사용자 지시 2026-09-04). 제목은 스크롤 안에서도 어느 묶음을
+   보는지 알 수 있게 위에 붙여 둔다 — 61곳짜리 업종은 한 화면에 안 들어온다. */
+.co-sizegroup + .co-sizegroup { margin-top: 14px; }
+.co-sizegroup-h {
+  /* 형태 칩 줄(위, z-index 2)에 가리지 않게 그 아래에 붙는다. */
+  position: sticky; top: 41px; z-index: 1;
+  display: flex; align-items: center; gap: 7px;
+  padding: 9px 0 5px; background: var(--wf-canvas, #fff);
+}
+.co-sizegroup-h b { font-size: 12.5px; font-weight: 700; color: var(--wf-ink); }
+.co-sizegroup-h span { font-size: 11.5px; color: var(--wf-mute); }
+.co-sizegroup .co-indlist { padding-top: 0; }
 
 /* 회사 칩의 규모 배지. 필터가 꺼져 있을 때만 붙는다 — 켜져 있으면 전부 같은 값이라
    정보가 아니라 잡음이 된다(company-cover.js companyChip 주석). */
@@ -1942,7 +1959,6 @@ a.wf-btn { text-decoration: none; }
 }
 .jd-qtab:hover { color: var(--wf-ink); }
 .jd-qtab.is-on { background: #080808; color: #fff; border-bottom: 0; }
-.jd-qtab .jd-qtab-n { font-family: var(--font-num, var(--font)); font-size: 11px; font-weight: 800; opacity: .7; margin: 0; }
 
 /* 문항 머리(큰 제목) */
 .jd-qhead { padding: 18px 20px 14px; border-bottom: 1px solid var(--wf-hairline); background: var(--wf-canvas); }
@@ -1961,12 +1977,13 @@ a.wf-btn { text-decoration: none; }
 .jd-dspec-chip.is-on { border-style: solid; border-color: #6d3aff; background: #f0ebff; color: #5a26e8; }
 .jd-dspec-chip[disabled] { opacity: .45; cursor: default; }
 .jd-dspec-chip i { font-size: 13px; }
-.jd-dspec-note { font-size: 11px; color: #b3b3bd; }
+/* '이 문항 역량' 칩은 표시 전용이다 — 고르고 빼는 일은 오른쪽 요구 역량 목록에서 한다.
+   누를 수 있어 보이면 눌러 보고 아무 일도 안 일어나는 것이 더 나쁘다. */
+.jd-dspec-chip.is-static { cursor: default; }
 
 /* 맥락 줄(AI 초안 기준 역량) */
 .jd-qctx { margin-top: 12px; font-size: 12.5px; color: var(--wf-body-mid); }
 .jd-qctx b { color: var(--wf-ink); font-weight: 800; }
-.jd-qctx-sub { color: var(--wf-mute); }
 .jd-qctx-warn { color: #a15c00; font-weight: 600; display: inline-flex; align-items: center; gap: 5px; }
 .jd-motive-btn { margin-top: 12px; }
 
@@ -2138,9 +2155,9 @@ a.wf-btn { text-decoration: none; }
   .write-side-acts { grid-template-columns: 1fr; }
 }
 
-/* ── 문항별 역량 고르기 (사용자 지시 2026-09-01) ────────────────────────────
-   역량 줄은 눌러서 상세를 여는 버튼이고, 오른쪽 +/✓ 는 **지금 보는 문항에 쓸지**를
-   정하는 별개 버튼이다. 둘을 한 버튼에 겹치면 상세를 보려다 선택이 바뀐다. */
+/* ── 문항별 역량 고르기 (사용자 지시 2026-09-01, 클릭 색 변경으로 통합 2026-09-04) ──
+   역량 줄을 누르면 상세도 열리고, 지금 보는 문항에 쓸지도 같이 정해진다.
+   선택 여부는 별도 버튼이 아니라 줄 자체의 색으로 보여준다(.is-picked). */
 .jd-req-row { display: flex; align-items: stretch; gap: 4px; }
 .jd-req-row > .jd-req { flex: 1 1 auto; min-width: 0; }
 
@@ -2148,14 +2165,34 @@ a.wf-btn { text-decoration: none; }
   margin: 6px 0 8px; font-size: 12px; line-height: 1.5; color: var(--muted, #667085);
 }
 
-.jd-req-pick {
-  flex: 0 0 auto; width: 30px; border-radius: 8px; cursor: pointer;
-  border: 1px solid var(--line, #e4e7ec); background: var(--card, #fff);
-  color: var(--muted, #667085); font-size: 14px; font-weight: 700; line-height: 1;
-  transition: background .12s ease, border-color .12s ease, color .12s ease;
+.jd-req.is-picked { background: var(--brand, #4b5bd7); }
+.jd-req.is-picked .jd-req-name,
+.jd-req.is-picked .jd-req-n { color: #fff; }
+/* 배지는 바탕까지 같이 뒤집는다 — 글자만 희게 두면 흰 배지에 흰 글자가 된다. */
+.jd-req.is-picked .jd-req-q { background: rgba(255, 255, 255, .22); color: #fff; }
+
+/* ── 문항 분량 상한 (사용자 지시 2026-09-03) ────────────────────────────────
+   공고에 적힌 분량("1,000자 이내" · "2,000 byte")을 그대로 넣는 자리다.
+   초안 머리에 두는 이유는 **쓰기 전에 보이는 자리**여서다 — 다 쓰고 나서
+   넘은 걸 알면 늦다. */
+.jd-limit {
+  display: inline-flex; align-items: center; gap: 4px; margin-right: 8px;
+  padding: 3px 6px; border: 1px solid var(--line, #e4e7ec); border-radius: 8px;
+  background: var(--card, #fff);
 }
-.jd-req-pick:hover { border-color: var(--brand, #4b5bd7); color: var(--brand, #4b5bd7); }
-.jd-req-pick.is-picked {
-  background: var(--brand, #4b5bd7); border-color: var(--brand, #4b5bd7); color: #fff;
+.jd-limit-lab { font-size: 11px; color: var(--muted, #667085); }
+.jd-limit-n {
+  width: 62px; border: 0; background: transparent; text-align: right;
+  font-size: 12px; font-weight: 700; color: inherit; padding: 0; -moz-appearance: textfield;
 }
-.jd-req-pick:focus-visible { outline: 2px solid var(--brand, #4b5bd7); outline-offset: 2px; }
+.jd-limit-n::-webkit-outer-spin-button,
+.jd-limit-n::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.jd-limit-n:focus { outline: none; }
+.jd-limit:focus-within { border-color: var(--brand, #4b5bd7); }
+.jd-limit-u {
+  border: 0; background: transparent; font-size: 12px; color: var(--muted, #667085);
+  padding: 0 2px; cursor: pointer;
+}
+
+/* 상한을 넘으면 카운터가 알린다 — 막지는 않는다(줄이는 건 사용자 몫이다). */
+.jd-draft-count.is-over { color: var(--danger, #d92d20); font-weight: 700; }
