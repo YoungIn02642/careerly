@@ -37,7 +37,18 @@ const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const modelLabel = () => GEMINI_MODEL;
 const isConfigured = () => Boolean((process.env.GEMINI_API_KEY || '').trim());
 
-function cfgError(msg) { const e = new Error(msg); e.status = 503; throw e; }
+/* 오류 문구를 학생용(message)과 운영자용(detail·로그)으로 가른다 —
+   이유는 ai-provider.js 의 같은 자리 주석에 적어 뒀다(사용자 지시 2026-09-04). */
+const AI_OFF_MSG = 'AI 기능을 지금 쓸 수 없어요. 잠시 후 다시 시도해 주세요.';
+
+function aiError(status, userMsg, detail) {
+  if (detail) console.error(`[ai:gemini] ${detail}`);
+  const e = new Error(userMsg);
+  e.status = status;
+  e.detail = detail || '';
+  return e;
+}
+function cfgError(detail) { throw aiError(503, AI_OFF_MSG, detail); }
 
 /* 호출 한 겹. 반환값은 모델이 낸 JSON 문자열 — Groq 의 callModel 과 같은 계약이라
    호출부(parseDraft)가 어느 프로바이더든 똑같이 읽는다.
@@ -53,6 +64,12 @@ function cfgError(msg) { const e = new Error(msg); e.status = 503; throw e; }
    그래서 512 로 못박고, maxOutputTokens 는 사고 몫(THINK_BUDGET)+본문(num_predict)을
    함께 덮게 준다 — 안 그러면 사고가 예산을 먹어 본문이 빈 채 끝난다. */
 const THINK_BUDGET = 512;
+
+/* ── 스트리밍은 쓰지 않는다 — 실측 2026-09-04 ──────────────────────────────
+   화면 작성률을 실제 글자 수로 그리려고 `:streamGenerateContent?alt=sse` 를 붙여 봤는데,
+   `responseMimeType: application/json` + thinkingConfig 조합에서 **본문 없이 끝났다**
+   (조각이 하나도 안 온 채 스트림이 닫힘 → 25초 뒤 타임아웃). Groq 쪽도 같은 이유로
+   막혔다(ai-provider.js callModel 머리주석). 그래서 진행률은 시간을 재서 그린다. */
 /* timeoutMs 는 호출하는 쪽이 더 짧게 줄 수 있다 — 초안은 Gemini 가 실패하면 Groq 로
    넘어가므로(ai-provider.js callDraftModel), 60초를 다 기다릴 이유가 없다. */
 async function callModel(text, system, { num_predict = 512, timeoutMs } = {}) {
@@ -60,7 +77,7 @@ async function callModel(text, system, { num_predict = 512, timeoutMs } = {}) {
   const key = (process.env.GEMINI_API_KEY || '').trim();
   if (!key) {
     cfgError('GEMINI_API_KEY 가 없습니다. https://aistudio.google.com/apikey 에서 발급받아 '
-           + 'backend/.env 의 GEMINI_API_KEY 에 넣어주세요.');
+           + 'backend/.env 의 GEMINI_API_KEY 에 넣으세요.');
   }
 
   const ctrl = new AbortController();
@@ -88,42 +105,42 @@ async function callModel(text, system, { num_predict = 512, timeoutMs } = {}) {
     clearTimeout(timer);
     /* 네트워크·타임아웃은 사용자가 할 일(잠시 뒤 재시도)이 같아 하나로 묶는다. */
     const timedOut = e?.name === 'AbortError';
-    const err = new Error(timedOut
-      ? `AI 응답이 ${Math.round(limitMs / 1000)}초 안에 오지 않았습니다. 잠시 뒤 다시 시도해 주세요.`
-      : `Gemini 연결 실패: ${String(e?.message || '').slice(0, 200)}`);
-    err.status = timedOut ? 504 : 502;
-    throw err;
+    throw aiError(timedOut ? 504 : 502,
+      timedOut
+        ? `AI 응답이 ${Math.round(limitMs / 1000)}초 안에 오지 않았어요. 잠시 뒤 다시 시도해 주세요.`
+        : 'AI 응답을 받지 못했어요. 잠시 뒤 다시 시도해 주세요.',
+      timedOut ? `타임아웃(${limitMs}ms)` : `연결 실패: ${String(e?.message || '').slice(0, 200)}`);
   }
   clearTimeout(timer);
-
   try { data = await res.json(); } catch { data = null; }
 
   /* 상태코드별로 사용자가 할 일이 다르므로 갈라 준다(Groq 쪽과 같은 정책). */
   if (!res.ok) {
     const detail = String(data?.error?.message || `HTTP ${res.status}`).slice(0, 200);
-    let msg, out;
+    let msg, out, log;
     if (res.status === 400 && /api.?key|api_key_invalid/i.test(detail)) {
-      msg = 'Gemini 인증에 실패했습니다. GEMINI_API_KEY 가 올바른지 확인해 주세요 '
-          + '— https://aistudio.google.com/apikey';
+      msg = AI_OFF_MSG;
+      log = '인증 실패 — GEMINI_API_KEY 가 올바른지 확인하세요 (https://aistudio.google.com/apikey)';
       out = 503;
     } else if (res.status === 401 || res.status === 403) {
-      msg = `Gemini 인증에 실패했습니다(HTTP ${res.status}). GEMINI_API_KEY 를 확인해 주세요.`;
+      msg = AI_OFF_MSG;
+      log = `인증 실패(HTTP ${res.status}) — GEMINI_API_KEY 를 확인하세요`;
       out = 503;
     } else if (res.status === 429) {
-      msg = 'Gemini 무료 쿼터를 초과했습니다. 잠시 뒤 다시 시도해 주세요.';
+      msg = '지금 요청이 몰려 있어요. 잠시 뒤 다시 시도해 주세요.';
+      log = `무료 쿼터 초과(HTTP 429): ${detail}`;
       out = 429;
     } else if (res.status === 404 || /not found|not.*support|deprecated/i.test(detail)) {
-      msg = `Gemini 모델 "${GEMINI_MODEL}" 을(를) 쓸 수 없습니다(${detail}). `
-          + '.env 의 GEMINI_MODEL 을 현행 모델로 바꿔주세요 '
-          + '(목록: https://ai.google.dev/gemini-api/docs/models).';
+      msg = AI_OFF_MSG;
+      log = `모델 "${GEMINI_MODEL}" 을(를) 쓸 수 없습니다(${detail}). `
+          + '.env 의 GEMINI_MODEL 을 현행 모델로 바꾸세요 (https://ai.google.dev/gemini-api/docs/models)';
       out = 503;
     } else {
-      msg = `Gemini 호출 실패 (HTTP ${res.status}): ${detail}`;
+      msg = 'AI 응답을 받지 못했어요. 잠시 뒤 다시 시도해 주세요.';
+      log = `호출 실패 (HTTP ${res.status}): ${detail}`;
       out = 502;
     }
-    const err = new Error(msg);
-    err.status = out;
-    throw err;
+    throw aiError(out, msg, log);
   }
 
   /* 안전필터에 막히면 candidates 가 비어 온다 — 빈 문자열로 넘기면 parseDraft 가

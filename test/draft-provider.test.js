@@ -121,7 +121,13 @@ const reset = mode => { calls.gemini = 0; calls.groq = 0; geminiMode = mode; };
   let threw = null;
   try { await AI.callDraftModel('본문', '시스템', {}, {}); } catch (e) { threw = e; }
   ok('예외가 올라온다', Boolean(threw));
-  ok('Gemini 쪽 오류다', /Gemini|503|traffic/i.test(threw?.message || ''), `→ ${threw?.message?.slice(0, 50)}`);
+  /* 오류 문구는 학생이 보고, 원인은 운영자가 본다(사용자 지시 2026-09-04) —
+     그래서 원인은 message 가 아니라 detail 에 실려 온다. 둘 다 확인한다:
+     ① 화면에 뜰 message 에는 키 이름·모델명 같은 내부 사정이 없어야 하고
+     ② 원인은 detail 로 살아 있어야 한다(조용히 삼키면 영영 못 고친다). */
+  ok('Gemini 쪽 오류다', /Gemini|503|traffic|호출 실패/i.test(threw?.detail || ''), `→ ${threw?.detail?.slice(0, 50)}`);
+  ok('화면 문구에는 내부 사정이 없다', !/API_KEY|\.env|GEMINI_MODEL|GROQ_MODEL/i.test(threw?.message || ''),
+     `→ ${threw?.message?.slice(0, 50)}`);
   process.env.GROQ_API_KEY = keepGroq;
 
   console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
