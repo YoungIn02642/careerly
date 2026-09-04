@@ -79,26 +79,21 @@ html { scroll-behavior: smooth; }
 .section-label i { font-size: 16px; }
 
 /* ════════════ DASHBOARD ════════════ */
-/* 맨 위 두 점수 — 직무 적합도 / CAS 점수 (2026-08-22)
-   같은 크기·같은 모양으로 나란히 둔다. 한쪽이 크면 그쪽이 '진짜 점수' 로 읽히는데,
-   둘은 서로 다른 질문에 답하는 대등한 값이다. */
-.cas-two {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;
+/* 직무 적합도(왼쪽) · 내 CAS 점수(오른쪽)를 좌우로 나란히 (2026-09-04, 사용자 지시).
+   예전엔 맨 위에 요약 띠(.cas-two)를 두고 상세 두 카드를 세로로 쌓았는데, 점수가
+   위·아래 두 번 나와 중복이라 요약 띠를 걷고 상세를 한 줄에 좌우로 두었다.
+   두 카드는 높이가 다르므로(왼쪽 업무특성 축이 길다) 위를 맞춰 세운다.
+   세로 스택일 때 카드마다 붙던 아래 여백은 여기선 grid gap 이 대신하므로 0 으로 지운다. */
+.cas-detail-split {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
+  align-items: start; margin-bottom: 14px;
 }
-.cas-two-item {
-  background: #fff; border: 1px solid var(--color-border-secondary, #e6e6e9);
-  border-radius: 14px; padding: 18px 20px;
 }
-.cas-two-lab { font-size: 12.5px; font-weight: 700; color: var(--color-text-secondary); margin-bottom: 8px; }
-.cas-two-num {
-  font-size: 40px; font-weight: 700; color: var(--brand);
-  line-height: 1; letter-spacing: -1.5px; font-feature-settings: "tnum";
-}
-.cas-two-num span { font-size: 16px; color: var(--color-text-tertiary); font-weight: 500; margin-left: 5px; letter-spacing: 0; }
-.cas-two-sub { font-size: 12.5px; color: var(--color-text-secondary); margin-top: 8px; }
-@media (max-width: 720px) {
-  .cas-two { grid-template-columns: 1fr; }
-}
+.cas-detail-split > #cas-fit > .fit-card { margin-bottom: 0; }
+/* 오른쪽 칸 — CAS 점수(cas-hero) 밑에 직무역량 레이더를 세로로 쌓는다. */
+.cas-detail-right { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.cas-detail-right > .cas-hero,
+.cas-detail-right > .radar-card { margin-bottom: 0; }
 
 .cas-hero {
   display: grid; grid-template-columns: 260px 1fr; gap: 32px;
@@ -820,6 +815,7 @@ html { scroll-behavior: smooth; }
 .empty-state .d { font-size: 13px; color: var(--color-text-tertiary); }
 
 @media (max-width: 980px) {
+  .cas-detail-split { grid-template-columns: 1fr; }
   .cas-hero { grid-template-columns: 1fr; gap: 22px; }
   .compare-grid, .profile-grid { grid-template-columns: 1fr; }
   .mentor-grid { grid-template-columns: repeat(2, 1fr); }
