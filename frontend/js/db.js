@@ -146,7 +146,7 @@ window.DB = (() => {
         how: data?.how || null,
       };
     } catch (e) {
-      return { ok: false, reason: 'network', error: '서버에 연결하지 못했어요.', how: null };
+      return { ok: false, reason: 'network', error: '연결하지 못했어요. 잠시 후 다시 시도해 주세요.', how: null };
     }
   }
 
@@ -283,14 +283,16 @@ window.DB = (() => {
      '무슨 일이 있었는지' 를 담지 못해서, 그게 없으면 모델이 빈자리를 관용구로 메운다. */
   /* competencies 는 이 문항에 고른 역량 **0~2개**의 이름이다(사용자 지시 2026-09-01).
      0개면 역량 축 없이 문항 골격만으로 쓴다. competency(단수)는 옛 호출 호환용으로 남긴다. */
-  async function draftJd({ competency, competencies = null, company = '', jobTitle = '', question = '',
-                           quotes = [], reads = '', frame = '', limit = 600, star = null, picks = null } = {}) {
+  /* 보낼 몸통 한 벌. draftJd(한 번에)와 draftJdStream(진행률)이 **같은 것**을 보내야
+     한다 — 두 곳에서 따로 만들면 스트리밍일 때만 재료가 빠지는 식으로 갈린다. */
+  function draftBody({ competency, competencies = null, company = '', jobTitle = '', question = '',
+                       quotes = [], reads = '', frame = '', limit = 600, star = null, picks = null } = {}) {
     /* 활동 목록은 고른 경험이 있을 때만 함께 보낸다 — 안 골랐는데 보내면 서버 프롬프트가
        그 활동을 끌어다 성취담을 지어냈다(사용자 지적 2026-09-01). 서버도 hasStar 로 한 번
        더 거르지만, 안 보내면 프롬프트가 짧아지고 의도도 분명해진다. */
     const hasExp = (Array.isArray(picks) && picks.length > 0)
       || (star && Object.keys(star).length > 0);
-    return api('POST', '/api/jd/draft', {
+    return {
       competency,
       competencies: Array.isArray(competencies) ? competencies : undefined,
       company, jobTitle, question, quotes, reads, frame, limit,
@@ -299,7 +301,11 @@ window.DB = (() => {
       picks: Array.isArray(picks) ? picks : undefined,
       star,
       activities: hasExp ? (_mySpec?.activities || []) : [],
-    });
+    };
+  }
+
+  async function draftJd(args = {}) {
+    return api('POST', '/api/jd/draft', draftBody(args));
   }
 
   /* 공고 없이 시작할 때의 작성 기준. 역량은 안 온다(공고에서 나오는 값이라
