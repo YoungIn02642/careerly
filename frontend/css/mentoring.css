@@ -96,11 +96,6 @@ html { scroll-behavior: smooth; }
 }
 .cas-two-num span { font-size: 16px; color: var(--color-text-tertiary); font-weight: 500; margin-left: 5px; letter-spacing: 0; }
 .cas-two-sub { font-size: 12.5px; color: var(--color-text-secondary); margin-top: 8px; }
-/* 두 점수를 나란히 두면 합계처럼 읽힐 수 있다. 각 칸이 무엇에 답하는지 못 박는다. */
-.cas-two-q {
-  font-size: 12px; color: var(--color-text-tertiary); margin-top: 6px;
-  padding-top: 8px; border-top: 1px dashed var(--color-border-secondary, #e6e6e9);
-}
 @media (max-width: 720px) {
   .cas-two { grid-template-columns: 1fr; }
 }

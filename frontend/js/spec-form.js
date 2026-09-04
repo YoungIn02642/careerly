@@ -287,8 +287,6 @@ window.SpecForm = (() => {
         </div>
 
         <div class="sf-subhead">자격증</div>
-        <div class="sf-act-note">자격증명을 입력하면 목록에서 찾아드려요 (국가자격 613종 + 주요 민간자격).
-          목록에 없으면 <b>그냥 적어도 저장</b>됩니다.</div>
         <div class="sf-cert-reco" id="sf-cert-reco" hidden></div>
         <div class="sf-lang-list" id="sf-cert-list"></div>
         <button type="button" class="sf-act-add" id="sf-cert-add"><i class="ti ti-plus"></i> 자격증 추가</button>
@@ -300,8 +298,6 @@ window.SpecForm = (() => {
         <button type="button" class="sf-act-add" id="sf-lang-add"><i class="ti ti-plus"></i> 어학 시험 추가</button>
 
         <div class="sf-subhead">제2외국어</div>
-        <div class="sf-act-note">등급만 선택하면 됩니다. 프로필에 기록으로 남고,
-          CAS 어학 점수는 영어 시험 기준이라 여기 값은 점수에 반영되지 않아요.</div>
         <div class="sf-lang-list" id="sf-foreign-list"></div>
         <button type="button" class="sf-act-add" id="sf-foreign-add"><i class="ti ti-plus"></i> 제2외국어 추가</button>
       </div>
@@ -1806,7 +1802,7 @@ window.SpecForm = (() => {
       await KECO.load();
     } catch {
       majorHost.innerHTML = '<span class="sf-hint-inline sf-hint-warn">'
-        + '직무 분류를 불러오지 못했어요. 새로고침해도 안 되면 서버가 떠 있는지 확인해주세요.</span>';
+        + '직무 분류를 불러오지 못했어요. 잠시 후 새로고침해 주세요.</span>';
       return;
     }
 
