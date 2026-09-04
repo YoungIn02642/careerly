@@ -48,6 +48,7 @@ const majorCatalog = require('../src/major-catalog');
 const companies = require('../src/company-classify');
 const wageJobs = require('../src/wage-jobs');
 const jobFilter = require('../src/job-filter');
+const roadmapHidden = require('../src/roadmap-hidden');
 const { DEMO_SEED, generateRandom } = require('../src/demo-seed');
 
 const app = express();
@@ -174,12 +175,30 @@ app.get('/api/majors/classify', (req, res) => {
    자동완성만 안 뜨고 직접 입력은 계속된다(server.js 의 같은 주석). */
 app.get('/api/universities/suggest', (req, res) => res.json({ query: q(req), items: [] }));
 
-/* 직업 트리는 wage-jobs.json 캐시에서 그대로 나온다. **filterTree 를 빠뜨리면 안 된다** —
-   운영은 catalog-db.jobCatalog() 안에서 이걸 거쳐 내보내므로, 여기서 안 걸면 미리보기에만
-   대학생 취업 선택지가 아닌 직업이 더 보인다(같은 화면인데 목록이 달라진다). */
+/* 직업 트리는 wage-jobs.json 캐시에서 그대로 나온다.
+   **운영과 같은 목록을 내보내야 한다** — 운영(catalog-db.jobCatalog())은 2026-08-11 결정대로
+   job-filter.js 의 전체 필터를 끈 채 roadmap-hidden.js 가 정한 중분류·직업만 감추고
+   나머지는 그대로 준다. 예전엔 여기서 filterTree() 를 걸어 7·19·282 로 줄였는데, 그러면
+   미리보기에서만 6·8·9·10번 분야(미용·경비·건설·설치정비·농림어업)가 통째로 사라져 운영과
+   목록이 달라졌다. 그래서 **운영과 똑같은 roadmap-hidden 을 써서** 감출 것만 감춘다. */
 app.get('/api/jobs', (req, res) => {
   res.set('Cache-Control', 'no-cache');
-  res.json(jobFilter.filterTree(wageJobs.catalog()));
+  const tree = wageJobs.catalog();
+  const majors = (tree.majors || []).map(M => ({
+    ...M,
+    middles: (M.middles || [])
+      .filter(m => !roadmapHidden.isHiddenMiddle(m.code))
+      .map(m => ({ ...m, jobs: (m.jobs || []).filter(j => !roadmapHidden.isHiddenJob(j.name)) })),
+  }));
+  res.json({
+    ...tree,
+    majors,
+    counts: {
+      majors: majors.length,
+      middles: majors.reduce((s, M) => s + M.middles.length, 0),
+      jobs: majors.reduce((s, M) => s + M.middles.reduce((t, m) => t + (m.jobs || []).length, 0), 0),
+    },
+  });
 });
 
 /* ── 인증 — 비밀번호를 보지 않는다 ───────────────────────────

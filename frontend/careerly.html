@@ -609,15 +609,6 @@
         취업에 성공한 선배들의 실제 데이터와 비교해 계산합니다.</p>
     </div>
 
-    <!-- ══ 두 점수 요약 — 맨 위에 나란히 (2026-08-22, 사용자 지시) ══
-         아래에 적합도 카드와 CAS 카드가 따로 있지만, 위아래로 떨어져 있어서
-         **둘 다 있다는 것 자체가 안 읽혔다.** 적합도는 직업을 골라야 계산되는데
-         안 고르면 그 자리가 안내문이라, 아래로 스크롤하기 전에는 CAS 점수 하나만
-         있는 화면으로 보인다.
-         여기는 숫자와 '무엇에 답하는 점수인지' 만 담는다 — 계산은 아래 두 모듈이
-         하고(js/cas-fit.js · js/cas-hero.js) 이 띠는 그 값을 받아 적기만 한다. -->
-    <div class="cas-two" id="cas-two"></div>
-
     <!-- 여기 한동안 '지금 모집 중인 공고' 띠가 있었다. 2026-08-22 걷어냈다
          (사용자 지시) — CAS 는 **내 점수를 보여주는 화면**이고, "그래서 어디에
          지원하는가" 는 로드맵 3단계인 회사 찾기가 답한다. 거기에는 회사별 공고에
@@ -626,40 +617,51 @@
          자리를 다른 것으로 메우지 않는다 — 아래 GAP 카드와 #cas-next 가 이미
          "그래서 다음에 무엇을" 에 답한다. -->
 
-    <!-- 직무 적합도 — 이 직업의 업무특성과 내 스펙을 견준 1000점.
-         내용은 js/cas-fit.js 가 만든다(임금직업정보시스템 업무특성 기준). -->
-    <div id="cas-fit"></div>
+    <!-- 직무 적합도(왼쪽) · 내 CAS 점수(오른쪽)를 좌우로 나란히 (2026-09-04, 사용자 지시).
+         예전엔 맨 위에 두 점수 요약 띠(#cas-two)를 두고 그 아래 두 상세 카드를 세로로
+         쌓았는데, 같은 점수가 위(요약)·아래(상세)에 두 번 나와 중복이었다. 요약 띠를 걷고
+         상세 두 카드를 한 줄에 좌우로 두어 한 번에 보이게 한다. 980px 아래에서는 세로로 쌓인다.
+         두 카드는 서로 다른 질문에 답한다 — 왼쪽 '이 일에 내가 맞나' / 오른쪽 '선배 사이 내 위치'. -->
+    <div class="cas-detail-split">
+      <!-- 직무 적합도 — 이 직업의 업무특성과 내 스펙을 견준 1000점.
+           내용은 js/cas-fit.js 가 만든다(임금직업정보시스템 업무특성 기준). -->
+      <div id="cas-fit"></div>
 
-    <!-- CAS hero — 값은 js/cas-hero.js 가 채운다 -->
-    <div class="card cas-hero" id="cas-hero">
-      <div>
-        <div class="cas-score-label">내 CAS 점수</div>
-        <div class="cas-score-row">
-          <span class="cas-score-num" id="cas-score-num">—</span>
-          <span class="cas-score-max">/ 1000</span>
+      <!-- 오른쪽 칸 — 내 CAS 점수 위에 직무역량 레이더를 세로로 쌓는다.
+           왼쪽 직무 적합도 카드가 업무특성 축 때문에 길어서, 레이더를 여기 오른쪽
+           CAS 점수 밑에 두면 빈 공간을 채우며 두 칸 높이가 얼추 맞는다 (2026-09-04, 사용자 지시). -->
+      <div class="cas-detail-right">
+        <!-- CAS hero — 값은 js/cas-hero.js 가 채운다 -->
+        <div class="card cas-hero" id="cas-hero">
+          <div>
+            <div class="cas-score-label">내 CAS 점수</div>
+            <div class="cas-score-row">
+              <span class="cas-score-num" id="cas-score-num">—</span>
+              <span class="cas-score-max">/ 1000</span>
+            </div>
+            <div class="cas-rank" id="cas-rank"><i class="ti ti-trophy"></i>계산 중…</div>
+            <div class="cas-split" id="cas-split"></div>
+          </div>
+          <div>
+            <div class="cas-dist-head">
+              <span id="cas-dist-label">백분위 분포</span>
+              <b id="cas-grade">—</b>
+            </div>
+            <div class="cas-bar">
+              <div class="cas-bar-fill"></div>
+              <div class="cas-bar-marker" style="left:0"></div>
+            </div>
+            <div class="cas-scale">
+              <span>미흡</span><span>보통</span><span class="hit">우수</span><span>탁월</span>
+            </div>
+            <div class="cas-dist-help" id="cas-dist-help"></div>
+          </div>
         </div>
-        <div class="cas-rank" id="cas-rank"><i class="ti ti-trophy"></i>계산 중…</div>
-        <div class="cas-split" id="cas-split"></div>
-      </div>
-      <div>
-        <div class="cas-dist-head">
-          <span id="cas-dist-label">백분위 분포</span>
-          <b id="cas-grade">—</b>
-        </div>
-        <div class="cas-bar">
-          <div class="cas-bar-fill"></div>
-          <div class="cas-bar-marker" style="left:0"></div>
-        </div>
-        <div class="cas-scale">
-          <span>미흡</span><span>보통</span><span class="hit">우수</span><span>탁월</span>
-        </div>
-        <div class="cas-dist-help" id="cas-dist-help"></div>
+
+        <!-- 직무역량 레이더 — 이 직무가 요구하는 역량 vs 내가 채운 정도 -->
+        <div class="card radar-card" id="cas-radar-card"></div>
       </div>
     </div>
-
-    <!-- category cards -->
-    <!-- 직무역량 레이더 — 이 직무가 요구하는 역량 vs 내가 채운 정도 -->
-    <div class="card radar-card" id="cas-radar-card"></div>
 
     <!-- 정량 / 정성 비교 -->
     <div class="section-label"><i class="ti ti-chart-bar"></i>스펙 비교 — 나 vs 같은 길을 간 선배 평균</div>

@@ -20,6 +20,8 @@ const { RULES } = require('./major-catalog');
 /* 시행기관 매핑표. 자격 이름·구분만 보고 정해지는 값이라 DB 컬럼을 늘리지 않았다 —
    컬럼으로 두면 표를 고칠 때마다 배포 DB 에 이관을 돌려야 한다. */
 const certReco = require('./cert-reco');
+/* 로드맵에서 감출 중분류·직업의 단일 출처(미리보기 서버와 공유). */
+const { isHiddenMiddle, isHiddenJob } = require('./roadmap-hidden');
 
 /* LIKE 특수문자 무력화. 백슬래시도 함께 막아야 '\%' 같은 입력이 새지 않는다. */
 const esc = s => String(s || '').replace(/[\\%_]/g, c => '\\' + c);
@@ -180,18 +182,16 @@ async function jobCatalog() {
   ]);
   if (!majorsRaw.length) return { empty: true, counts: { majors: 0, middles: 0, jobs: 0 }, majors: [] };
 
-  /* ── 관리직(임원·부서장)만 제외 (사용자 지시 2026-08-26) ──────────────
-     2차 분류 '01' 은 24개가 전부 대학교 총장·기업 고위임원·행정부고위공무원 같은
-     **신입이 지원할 수 없는 경력 종착지**라, 로드맵/스펙입력 목록에서 뺀다.
+  /* ── 감출 중분류·개별 직업 (roadmap-hidden.js 단일 출처) ───────────────
+     '01'(관리직 임원)처럼 신입이 지원할 수 없는 중분류, 그리고 사용자가 하나씩 짚어
+     지운 개별 직업(이용사·방문판매원·단순 운송/판매직 등)을 뺀다. 목록과 이유는
+     roadmap-hidden.js 에 있다 — 운영과 미리보기가 같은 파일을 써서 화면이 갈리지 않는다.
      여기 한 곳이 로드맵·스펙입력·저장 검증(server.js)을 동시에 정하므로, 빼면
      저장도 자동으로 막힌다(고를 수 없는 값을 저장 시도할 일이 없어진다).
-     나머지 분류는 그대로 둔다(job-filter.js 의 전체 필터는 2026-08-11 결정대로 끈 채).
-     '01' 을 뺀 1차 '경영·사무·금융·보험직' 은 경영·행정·사무직·금융·보험직이 남아
-     이름이 여전히 맞으므로 1차 이름은 손대지 않는다. */
-  const HIDDEN_MIDDLES = new Set(['01']);
+     나머지 분류는 그대로 둔다(job-filter.js 의 전체 필터는 2026-08-11 결정대로 끈 채). */
   const majors  = majorsRaw;
-  const middles = middlesRaw.filter(m => !HIDDEN_MIDDLES.has(m.code));
-  const jobs    = jobsRaw.filter(j => !HIDDEN_MIDDLES.has(j.middle_code));
+  const middles = middlesRaw.filter(m => !isHiddenMiddle(m.code));
+  const jobs    = jobsRaw.filter(j => !isHiddenMiddle(j.middle_code) && !isHiddenJob(j.name));
 
   const asJson = v => (typeof v === 'string' ? (() => { try { return JSON.parse(v); } catch { return null; } })() : v);
 
