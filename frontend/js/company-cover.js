@@ -513,8 +513,6 @@ window.CompanyCover = (() => {
         <div class="co-search-head">
           <div class="wf-eyebrow wf-eyebrow--lg">Company research</div>
           <h1>${rm ? `${Roadmap.withJosa(rm.jobName || rm.middleName, '로')} 어디에 지원할까요?` : '어느 회사에 지원하세요?'}</h1>
-          <p>회사를 고르면 실적·최근 기사에서 자소서 지원동기에 그대로 인용할 수 있는
-             사실만 모아 드려요.</p>
         </div>
 
         <div class="co-searchbar">
@@ -526,8 +524,9 @@ window.CompanyCover = (() => {
           ${suggestHtml()}
         </div>
 
-        ${filterHtml()}
-
+        <!-- 기업 형태 필터는 여기(맨 위 한 줄)에서 **마지막 단계(회사) 안**으로 옮겼다
+             (사용자 지시 2026-09-04). 업종을 고르기도 전에 "대기업 545곳" 을 먼저 묻는
+             것은 순서가 거꾸로다 — 어느 업종인지 정해야 그 안에서 규모가 뜻을 갖는다. -->
         <div class="co-lanes">
           <!-- 업종 고르기가 이 화면의 본 흐름이다. 최근 본 회사·많이 찾는 회사는
                **지름길**이라 그 아래로 내린다 — 위에 두면 목록을 고르러 온 사람이
@@ -560,7 +559,10 @@ window.CompanyCover = (() => {
           ${rec.length ? `
             <section>
               <div class="co-lane-h"><h2>최근 본 회사</h2><span>${rec.length}곳</span></div>
-              <div class="co-lane-grid">${rec.slice(0, 4).map(n => tile({ name: n }, '다시 열기')).join('')}</div>
+              <!-- 업종을 적는다 — '다시 열기' 는 타일을 누르면 되는 일이지 이 자리에
+                   적을 정보가 아니다(사용자 지시 2026-09-04). -->
+              <div class="co-lane-grid">${rec.slice(0, 4)
+                .map(n => tile({ name: n, industry: industryOf(n) })).join('')}</div>
             </section>` : ''}
           <section>
             <div class="co-lane-h"><h2>많이 찾는 회사</h2>
@@ -624,6 +626,34 @@ window.CompanyCover = (() => {
   const companiesAt = p => { const n = nodeAt(p); return isLeaf(n) ? keepSize(n) : []; };
   const atLeaf = () => isLeaf(nodeAt(path));
 
+  /* ── 회사 이름 → 업종 (사용자 지시 2026-09-04) ────────────────────────────
+     '최근 본 회사' 타일이 업종 자리에 '다시 열기' 라는 **행동 안내**를 적고 있었다.
+     같은 타일의 다른 자리(많이 찾는 회사)는 거기에 업종을 적으니, 같은 모양의 칸이
+     줄마다 다른 뜻이 됐다. 트리에 이미 업종이 있으므로 거기서 찾아 적는다.
+
+     트리는 업종 대분류 → 업종 → [회사] 라, 회사가 든 리프의 **바로 위 키**가 업종이다.
+     한 번 걸어 두고 Map 으로 들고 있는다(트리는 3,900곳이라 타일마다 걷으면 낭비다).
+     트리를 다시 받으면(직무가 바뀌면) 캐시도 같이 버린다. */
+  let industryMap = null;
+  let industryMapFor = null;
+  function industryOf(name) {
+    if (!treeData?.tree) return '';
+    if (!industryMap || industryMapFor !== treeFor) {
+      industryMap = new Map();
+      industryMapFor = treeFor;
+      const walk = (node, label) => {
+        if (Array.isArray(node)) {
+          for (const c of node) if (c?.n && !industryMap.has(c.n)) industryMap.set(c.n, label);
+          return;
+        }
+        if (!node) return;
+        for (const k of Object.keys(node)) walk(node[k], k);
+      };
+      walk(treeData.tree, '');
+    }
+    return industryMap.get(name) || '';
+  }
+
   /* 지금 고른 업종 경로 **아래 전체** 회사(하위 리프까지 모두), 규모 필터 적용.
      결과 레인(하단)이 쓴다 — 아직 리프까지 안 내려가도 지금까지 좁힌 회사를 보여준다. */
   function companiesUnder(p) {
@@ -653,72 +683,25 @@ window.CompanyCover = (() => {
 
   /* 공공기관은 업종코드가 없어 축이 다르다. 단계 이름도 달라야 한다 —
      공공기관에 '업종' 을 물으면 답이 없다(company-sectors.js publicOrgs 주석). */
+  /* 단계 이름만 둔다 — 이름 아래 설명 줄('어느 분야를 볼까요' 같은)은 지웠다
+     (사용자 지시 2026-09-04). 단계 이름이 이미 그 말을 하고 있었다. */
   const STEPS_PRIVATE = [
-    { t: '업종 대분류', s: '어느 분야를 볼까요' },
-    { t: '업종',        s: '게임·반도체·제약처럼 실제로 쓰는 말' },
-    { t: '회사',        s: '누르면 기업 리포트가 열립니다' },
+    { t: '업종 대분류' },
+    { t: '업종' },
+    { t: '회사' },
   ];
   const STEPS_PUBLIC = [
-    { t: '업종 대분류', s: '어느 분야를 볼까요' },
-    { t: '기관 유형',   s: '채용 일정과 경쟁률이 여기서 갈립니다' },
-    { t: '소관·지역',   s: '중앙은 소관부처, 지방은 시·도' },
-    { t: '기관',        s: '누르면 기업 리포트가 열립니다' },
+    { t: '업종 대분류' },
+    { t: '기관 유형' },
+    { t: '소관·지역' },
+    { t: '기관' },
   ];
   const stepsNow = () => (path[0] === '기관·공공' ? STEPS_PUBLIC : STEPS_PRIVATE);
 
-  /* ── 기업 형태 필터 ──────────────────────────────────────────
-     목록을 상장사 전체로 넓히면서 중소기업도 생겼다(사용자 지시 2026-08-26) — 명단
-     (공정위·고용24)에 없는 상장사를 중소로 보기 때문이다. 그래서 이제 중소 칩도 만든다.
-     0곳인 칩은 여전히 안 만든다(눌러도 빈 화면이면 고장으로 읽힌다).
-
-     ── '규모 미확인' 칩이 사라진 이유 (2026-08-28) ──
-     명단 밖 상장사의 규모는 이제 DART 매출로 가른다. 매출을 못 받은 회사는 최근 3년
-     재무 공시가 없는 **상장폐지·휴면**이라 서버가 목록에서 뺀다(무작위 80곳을 천천히
-     재조회해도 0곳이 활성이었다). 그래서 counts.unknown 이 0 이 되고 칩이 자동으로
-     안 만들어진다 — 칩 정의는 남겨 둔다. 서버가 매출 표 없이 뜨면 다시 필요하다. */
-  function filterHtml() {
-    if (!treeData) return '';
-    const goal = Roadmap.corpType();
-    const counts = treeData.sizes || {};
-    const chips = [
-      { id: null,       label: '전체' },
-      { id: 'large',    label: '대기업',   n: counts.large },
-      { id: 'mid',      label: '중견기업', n: counts.mid },
-      { id: 'small',    label: '중소기업', n: counts.small },
-      { id: 'public',   label: '공공기관', n: counts.public },
-      /* 명단(대기업·중견·공공)에 없는 상장사. '중소'로 단정하지 않는다 —
-         실제 중견을 중소로 잘못 적는 일이 있어서다(리노공업 등). */
-      { id: 'unknown',  label: '규모 미확인', n: counts.unknown },
-    ].filter(c => c.id === null || c.n > 0);
-
-    /* 중소를 골라 온 학생에게는 '중소' 칩 숫자가 왜 작은지 한 줄로 일러 준다 —
-       여기 중소는 **매출로 확인된 활성 상장 중소**만이라 실제보다 적게 보인다.
-       '규모 미확인' 칩이 남아 있는 예외 상황(매출 표 없이 뜬 서버)도 같은 줄로 받는다. */
-    const note = (goal === 'small' || sizeFilter === 'unknown')
-      ? `<div class="co-note co-note--tight"><i class="ti ti-info-circle"></i>
-           <b>중소기업</b>은 DART 매출로 확인한 <b>상장 중소</b>만 세었어요 — 비상장
-           중소는 공시가 없어 여기 숫자에 안 들어갑니다. 공개채용을 하는 비상장 중견
-           ·대기업은 업종별로 같이 넣어 뒀고(업종을 못 찾은 곳만 <b>기타 업종</b>에
-           있어요), 재무 공시가 끊긴 상장폐지·휴면 회사는 지원할 수 없어 뺐습니다.
-           아는 회사는 <b>위 검색창</b>에 적으면 바로 열립니다.</div>`
-      : '';
-
-    return `
-      <section class="co-sizes">
-        <div class="co-filter">
-          <b>기업 형태</b>
-          ${chips.map(c => `
-            <button type="button" class="co-sizechip ${sizeFilter === c.id ? 'is-on' : ''}"
-                    data-size="${c.id || ''}">
-              ${esc(c.label)}${c.n ? `<b>${c.n.toLocaleString()}</b>` : ''}
-            </button>`).join('')}
-          <span class="co-filter-hint">${goal && goal !== 'small'
-            ? '1단계에서 고른 기업분류로 맞춰 뒀어요 — 여기서 바꿔도 됩니다'
-            : `지금 ${countAt(treeData.tree).toLocaleString()}곳이 보입니다`}</span>
-        </div>
-        ${note}
-      </section>`;
-  }
+  /* ── 기업 형태 필터는 여기 있었다 (사용자 지시로 이동 2026-09-04) ─────────────
+     맨 위 한 줄에 "대기업 545 · 중견 1,982 …" 를 먼저 묻던 자리다. 업종을 고르기
+     전의 전체 곳수라, 지금 보고 있는 목록과 축이 달라 고르는 데 도움이 되지 않았다.
+     이제 마지막 단계(회사) 안에서 **그 업종의 곳수로** 고른다 — stepSizeChipsHtml. */
 
   /* 진행 표시 — 지금 어디까지 왔는지. 자동으로 건너뛴 단계는 점선으로 남긴다.
      지우면 "내가 안 골랐는데 정해져 있다" 가 되어 고장으로 읽힌다.
@@ -771,7 +754,7 @@ window.CompanyCover = (() => {
       let body = '';
       if (isOpen) {
         body = isLast
-          ? `<div class="co-indlist">${companiesAt(path).map(companyChip).join('')}</div>`
+          ? companyStepHtml()
           : `<div class="co-indchips">${optionsAt(path.slice(0, i)).map(o => {
               const isFocus = optFocus(path.slice(0, i), o.id);
               return `<button type="button" class="co-indchip ${path[i] === o.id ? 'is-on' : ''} ${isFocus ? 'is-focus' : ''}"
@@ -783,7 +766,7 @@ window.CompanyCover = (() => {
       return `<div class="co-step-card ${isOpen ? 'is-open' : ''} ${locked ? 'is-locked' : ''} ${done ? 'is-done' : ''}">
         <button type="button" class="co-step-h" ${locked ? 'disabled' : `data-open="${i}"`}>
           <span class="co-step-n">${done && !isOpen ? '✓' : i + 1}</span>
-          <span class="co-step-t"><b>${esc(st.t)}</b><small>${esc(st.s)}</small></span>
+          <span class="co-step-t"><b>${esc(st.t)}</b></span>
           <span class="co-step-pick">${chosen ? esc(skipped[i] ? `${chosen} (자동)` : chosen) : ''}</span>
         </button>
         ${body ? `<div class="co-step-b">${body}</div>` : ''}
@@ -824,12 +807,70 @@ window.CompanyCover = (() => {
 
   /* 회사 칩 한 벌. 규모를 배지로 단다 — 이름만 늘어놓으면 학생이 고를 근거가 없다.
      **규모 필터가 켜져 있으면 배지를 뺀다.** 모든 칩에 '중견' 이 똑같이 붙어 있으면
-     정보가 아니라 잡음이고, 그 말은 이미 필터 칩이 하고 있다. */
+     정보가 아니라 잡음이고, 그 말은 이미 필터 칩이 하고 있다.
+     규모로 묶어 놓은 줄(companyStepHtml) 안에서도 같은 이유로 뺀다 — 묶음 제목이
+     이미 '대기업' 이라고 적혀 있다. */
   const SIZE_LABEL = { large: '대기업', mid: '중견', small: '중소', public: '공공', unknown: '규모 미확인' };
-  const companyChip = c => `<button type="button" class="co-chip" data-pick="${esc(c.n)}">
-      ${esc(c.n)}${!sizeFilter && c.s && SIZE_LABEL[c.s]
+  const companyChip = (c, hideSize) => `<button type="button" class="co-chip" data-pick="${esc(c.n)}">
+      ${esc(c.n)}${!sizeFilter && !hideSize && c.s && SIZE_LABEL[c.s]
         ? `<em class="co-chip-size co-chip-size--${esc(c.s)}">${SIZE_LABEL[c.s]}</em>` : ''}
     </button>`;
+
+  /* ── 마지막 단계(회사) — 규모로 묶어서 보여준다 (사용자 지시 2026-09-04) ─────────
+     예전에는 회사 이름 칩이 규모와 상관없이 한 덩이로 쏟아졌다. 학생이 이 화면에서
+     실제로 하는 일은 "이 업종에서 **내가 지원할 만한 규모**의 회사를 고르는 것"인데,
+     대기업과 중소가 뒤섞여 있으면 그 판단을 이름 옆 작은 배지로만 해야 했다.
+
+     그래서 위 '기업 형태' 필터를 걸지 않았을 때는 **대기업 · 중견 · 중소 · 공공**
+     순으로 묶어 제목을 붙인다. 필터를 걸었으면 이미 한 종류만 남으므로 묶지 않는다
+     — 제목이 하나뿐인 묶음은 줄만 늘린다. */
+  const SIZE_ORDER = ['large', 'mid', 'small', 'public', 'unknown'];
+
+  /* 기업 형태 고르기 — **이 업종 안에서** 고른다(사용자 지시 2026-09-04).
+     맨 위 한 줄에 있던 것을 여기로 옮겼다. 숫자도 전체 5,337곳이 아니라 이 업종의
+     곳수라, "게임에 대기업이 8곳" 처럼 지금 고르는 것과 같은 축의 값이 된다.
+     0곳인 형태는 칩을 만들지 않는다 — 눌러도 빈 목록이면 고장으로 읽힌다. */
+  function stepSizeChipsHtml() {
+    const all = (() => { const n = nodeAt(path); return isLeaf(n) ? n : []; })();
+    if (!all.length) return '';
+    const counts = {};
+    for (const c of all) counts[c.s] = (counts[c.s] || 0) + 1;
+    const kinds = SIZE_ORDER.filter(s => counts[s] > 0);
+    if (kinds.length < 2) return '';        // 한 종류뿐이면 고를 것이 없다
+
+    const chip = (id, label, n) => `<button type="button"
+        class="co-stepsize ${(sizeFilter || null) === id ? 'is-on' : ''}" data-size="${id || ''}">
+        ${esc(label)}${n ? `<b>${n.toLocaleString()}</b>` : ''}</button>`;
+    return `<div class="co-stepsizes">
+      <span class="co-stepsizes-l">기업 형태</span>
+      ${chip(null, '전체', all.length)}
+      ${kinds.map(s => chip(s, SIZE_LABEL[s], counts[s])).join('')}
+    </div>`;
+  }
+
+  function companyStepHtml() {
+    const chips = stepSizeChipsHtml();
+    const list = companiesAt(path);
+    if (!list.length) return `${chips}<div class="co-indlist"></div>`;
+    if (sizeFilter) return `${chips}<div class="co-indlist">${list.map(c => companyChip(c)).join('')}</div>`;
+
+    const groups = SIZE_ORDER
+      .map(s => ({ s, items: list.filter(c => c.s === s) }))
+      .filter(g => g.items.length);
+    /* 규모 판정이 아예 없는 회사(트리에 s 가 없는 옛 데이터)는 묶음 밖에 남는다.
+       버리면 목록에서 회사가 조용히 사라진다 — 묶음 하나로 받아 준다. */
+    const rest = list.filter(c => !SIZE_ORDER.includes(c.s));
+    if (rest.length) groups.push({ s: null, items: rest });
+    if (groups.length <= 1) return `${chips}<div class="co-indlist">${list.map(c => companyChip(c)).join('')}</div>`;
+
+    return chips + groups.map(g => `
+      <div class="co-sizegroup">
+        <div class="co-sizegroup-h">
+          <b>${esc(g.s ? SIZE_LABEL[g.s] : '그 밖')}</b><span>${g.items.length.toLocaleString()}곳</span>
+        </div>
+        <div class="co-indlist">${g.items.map(c => companyChip(c, true)).join('')}</div>
+      </div>`).join('');
+  }
 
   function suggestHtml() {
     if (!suggestions.length) return '<div class="co-suggest" hidden></div>';
@@ -960,12 +1001,18 @@ window.CompanyCover = (() => {
   /* ── 기업분석 5단계 카드 ─────────────────────────────────────
      카드 얼굴에는 그 칸의 '지금 값'을 하나만 올린다(매출·기사 수·경쟁사 수).
      자세한 내용은 눌러야 아래에 펼쳐진다 — 다섯 칸을 통째로 스크롤하지 않게. */
+  /* 칸 이름만 둔다. 예전에는 이름 아래에 '어떤 회사이고 규모는 어느 정도인가' 같은
+     질문 한 줄이 같이 있었는데, 칸 이름이 이미 같은 말을 해서 지웠다(사용자 지시 2026-09-04).
+
+     '경쟁사' → '같은 업종 회사'. 이 목록은 **업종코드가 같은 상장사**지 실제 경쟁
+     관계를 확인한 회사가 아니다(dart.js competitors 주석). 이름이 '경쟁사' 면
+     학생이 그 말을 그대로 믿고 자소서에 "경쟁사 A 와 달리" 라고 쓰게 된다. */
   const STEP_META = {
-    overview:   { label: '개요',        ask: '어떤 회사이고 규모는 어느 정도인가' },
-    financial:  { label: '재무·실적',   ask: '최근 3년이 어느 방향인가' },
-    issue:      { label: '최근 이슈',   ask: '지금 무엇을 하고 있는가' },
-    recruit:    { label: '채용공고',    ask: '이 직무에 무엇을 요구하는가' },
-    competitor: { label: '경쟁사',      ask: '같은 시장의 다른 회사는' },
+    overview:   { label: '개요' },
+    financial:  { label: '재무·실적' },
+    issue:      { label: '최근 이슈' },
+    recruit:    { label: '채용공고' },
+    competitor: { label: '같은 업종 회사' },
   };
 
   /* 3년치 꺾은선. 값 자체보다 방향이 자소서 재료라 눈금은 그리지 않는다. */
@@ -1018,7 +1065,7 @@ window.CompanyCover = (() => {
     }
     if (key === 'financial') {
       const rev = fin?.accounts?.revenue;
-      if (!rev) return `<div class="co-card-none">DART 공시 없음</div>`;
+      if (!rev) return `<div class="co-card-none">실적 자료 없음</div>`;
       const t = rev.trend;
       return `<div class="co-card-v">${esc(rev.series?.[0]?.readable || '—')}</div>
         ${t ? `<div class="co-card-d co-card-d--${t.direction}">${arrowOf(t.direction)} ${Math.abs(t.pct)}%</div>` : ''}
@@ -1047,13 +1094,12 @@ window.CompanyCover = (() => {
         <span class="co-src">칸을 누르면 아래에 자세히 나옵니다</span></div>
       <div class="co-cards">
         ${steps.map(s => {
-          const meta = STEP_META[s.key] || { label: s.label, ask: s.asks };
+          const meta = STEP_META[s.key] || { label: s.label };
           return `<button type="button" class="co-card ${s.key === step ? 'is-on' : ''}" data-step="${esc(s.key)}">
             <span class="co-card-top">
               <span class="co-card-n">0${s.no}</span>
               <span class="co-card-l">${esc(meta.label)}</span>
             </span>
-            <span class="co-card-ask">${esc(meta.ask)}</span>
             <span class="co-card-metric">${metricOf(s.key)}</span>
           </button>`;
         }).join('')}
@@ -1074,7 +1120,6 @@ window.CompanyCover = (() => {
     return `<div class="co-detail">
       <div class="co-detail-h">
         <h3>${esc(meta.label)}</h3>
-        <span>${esc(s.asks)}</span>
       </div>
       ${body ? body(s) : ''}
     </div>`;
@@ -1144,12 +1189,11 @@ window.CompanyCover = (() => {
           <div class="co-fact-v"><a href="${esc(p.irUrl)}" target="_blank" rel="noopener noreferrer">사업부문별 매출 보기</a></div></div>` : ''}
       </div>
       ${financeSnapshotHtml()}
-      ${businessHtml()}
-      <p class="jd-hint"><b>사업부별 매출 비중은 API 로 받을 수 없습니다</b> — 전자공시(DART)와
-        공공데이터포털 어느 쪽도 그 값을 열어두지 않았고, 사업보고서 본문에만 글로 적혀 있어요.
-        ${p.irUrl
-          ? '대신 위 <b>IR 자료</b> 링크에 그 표가 거의 항상 있습니다.'
-          : '홈페이지의 사업 소개나 사업보고서 「II. 사업의 내용」에서 직접 확인하세요.'}</p>`;
+      ${businessHtml()}`;
+      /* 예전에는 여기에 "사업부별 매출 비중은 API 로 받을 수 없습니다 — DART 도
+         공공데이터포털도 그 값을 열어두지 않았고…" 라는 문단이 있었다. 지웠다
+         (사용자 지시 2026-09-04): **우리 쪽 사정**이지 학생이 할 일이 아니다.
+         사업부문별 매출을 보러 갈 자리는 위 facts 의 'IR 자료' 링크가 이미 준다. */
   }
 
   /* 채용공고 — 우리가 회사별 공고를 들고 있지 않다. 있는 척하지 않고 찾는 경로를 준다.
@@ -1171,21 +1215,19 @@ window.CompanyCover = (() => {
      원하면 원문을 이어붙이라고. 되는 것처럼 말해 놓고 안 되면 그게 더 나쁘다. */
   const SOURCE_LABEL = { saramin: '사람인', worknet: '워크넷', alio: '공공기관 채용정보(잡알리오)' };
 
+  /* 안내는 **학생이 할 일**만 적는다 — 어디서 받아 오는지, 그 경로가 무엇까지
+     주는지는 우리 사정이다(사용자 지시 2026-09-04). */
   function jobsHint(jobs) {
-    const label = SOURCE_LABEL[jobs.source] || '채용 API';
+    const label = SOURCE_LABEL[jobs.source] || '채용 정보';
     const withBody = (jobs.items || []).filter(j => j.qualification || j.preference).length;
 
     if (withBody) {
-      return `<p class="jd-hint">${esc(label)} 기준입니다.
-        이 공고들은 <b>지원자격·우대사항이 함께</b> 담겨요 — 연령·학력·자격증 요건을
-        여기서 바로 확인할 수 있습니다.
-        다만 공공기관 공고는 <b>응시 요건 위주</b>라 요구 역량은 잘 드러나지 않아요.
-        역량까지 뽑으려면 공고를 열어 <b>본문을 이어붙이는 편</b>이 정확합니다.</p>`;
+      return `<p class="jd-hint">${esc(label)} 기준입니다. 지원자격·우대사항이 함께 담겨 있어요.
+        요구 역량까지 보려면 공고를 열어 <b>본문을 이어붙이세요</b>.</p>`;
     }
     return `<p class="jd-hint">${esc(label)} 기준입니다.
       공고를 <b>담으면</b> 자소서 코치로 그대로 넘어가요. 요구 역량까지 뽑으려면
-      공고를 열어 <b>본문을 복사해 붙여넣어야</b> 합니다 — 이 채용 API 는 제목·조건만 주고
-      본문은 주지 않습니다.</p>`;
+      공고를 열어 <b>본문을 복사해 붙여넣으세요</b>.</p>`;
   }
 
   function recruitDetail(s) {
@@ -1289,8 +1331,8 @@ window.CompanyCover = (() => {
             <a class="wf-btn wf-btn--primary" href="${esc(homepage)}" target="_blank" rel="noopener noreferrer">
               <i class="ti ti-external-link"></i> ${esc(selected.name)} 공식 홈페이지
             </a>
-            <small>전자공시(DART)에 등록된 회사 주소예요 — 첫 화면의 <b>채용·인재영입</b> 메뉴에서
-              공고를 확인하세요. 공채는 자사 사이트에만 올라오는 일이 많습니다.</small>
+            <small>첫 화면의 <b>채용·인재영입</b> 메뉴에서 공고를 확인하세요 —
+              공채는 자사 사이트에만 올라오는 일이 많아요.</small>
           </div>`
         : '';
     const hasOwn = own || homepage;

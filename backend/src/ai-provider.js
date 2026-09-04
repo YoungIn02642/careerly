@@ -41,7 +41,24 @@ const GROQ_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
    긴 출력(자소서 초안)에서는 몇 초씩 걸린다. */
 const TIMEOUT_MS = Number(process.env.CAS_AI_TIMEOUT_MS || 60000);
 
-function cfgError(msg) { const e = new Error(msg); e.status = 503; throw e; }
+/* ── 오류 문구는 읽는 사람이 둘이다 (사용자 지시 2026-09-04) ────────────────────
+   지금까지는 설정 오류 메시지가 그대로 학생 화면에 떴다 — "GROQ_API_KEY 가 없습니다.
+   console.groq.com/keys 에서 발급받아 backend/.env 에 넣어주세요." 는 **운영자가 할
+   일**이지 학생이 할 수 있는 일이 아니고, 학생 입장에서는 무슨 말인지도 모른다.
+
+   그래서 가른다: `message` 는 화면에 그대로 떠도 되는 말만 담고(라우트가 이걸
+   내려보낸다), 원인은 `detail` 로 서버 로그에 남긴다. 원인을 지우는 게 아니라
+   **읽을 사람 앞에만 놓는다** — 키가 빠졌을 때 운영자가 로그에서 못 찾으면 그게 더 나쁘다. */
+const AI_OFF_MSG = 'AI 기능을 지금 쓸 수 없어요. 잠시 후 다시 시도해 주세요.';
+
+function aiError(status, userMsg, detail) {
+  if (detail) console.error(`[ai:groq] ${detail}`);
+  const e = new Error(userMsg);
+  e.status = status;
+  e.detail = detail || '';
+  return e;
+}
+function cfgError(detail) { throw aiError(503, AI_OFF_MSG, detail); }
 
 /* 지금까지 어떤 모델로 답했는지 — 응답에 실어 화면에 표시한다. */
 const modelLabel = () => GROQ_MODEL;
@@ -71,6 +88,48 @@ const isConfigured = () => Boolean((process.env.GROQ_API_KEY || '').trim());
 const REASONING_MODEL = /gpt-oss|^o[13]|reason|qwen.*thinking|deepseek-r/i;
 const reasoningOpt = () => (REASONING_MODEL.test(GROQ_MODEL) ? { reasoning_effort: 'low' } : {});
 
+/* 호출 실패를 학생용 문구·운영자용 원인·상태코드로 옮긴다. 스트리밍이든 아니든
+   실패 종류는 같으므로 한 곳에 둔다 — 두 벌로 두면 한쪽만 고쳐진다. */
+function mapGroqError(e) {
+  const status = e?.status;
+  const detail = String(e?.error?.error?.message || e?.message || '').slice(0, 200);
+  /* msg = 학생이 볼 말, log = 운영자가 볼 원인(cfgError 주석 참고). */
+  let msg, out, log;
+
+  if (status === 401 || status === 403) {
+    msg = AI_OFF_MSG;
+    log = `인증 실패(HTTP ${status}) — GROQ_API_KEY 가 올바른지 확인하세요 (https://console.groq.com/keys)`;
+    out = 503;                                    // 키 문제 = 설정 문제
+  } else if (status === 429) {
+    msg = '지금 요청이 몰려 있어요. 잠시 뒤 다시 시도해 주세요.';
+    log = `무료 쿼터 초과(HTTP 429): ${detail}`;
+    out = 429;                                    // 재시도하면 되는 상황 — 503 과 구분한다
+  } else if (status === 404 || /decommission|not.*exist|model/i.test(detail)) {
+    msg = AI_OFF_MSG;
+    log = `모델 "${GROQ_MODEL}" 을(를) 쓸 수 없습니다(${detail}). 폐기된 모델일 수 있습니다 `
+        + `— .env 의 GROQ_MODEL 을 현행 모델로 바꾸세요 (https://console.groq.com/docs/models)`;
+    out = 503;
+  } else if (e?.name === 'APIConnectionTimeoutError' || /timeout/i.test(detail)) {
+    msg = `AI 응답이 ${Math.round(TIMEOUT_MS / 1000)}초 안에 오지 않았어요. 잠시 뒤 다시 시도해 주세요.`;
+    log = `타임아웃(${TIMEOUT_MS}ms): ${detail}`;
+    out = 504;
+  } else {
+    msg = 'AI 응답을 받지 못했어요. 잠시 뒤 다시 시도해 주세요.';
+    log = `호출 실패${status ? ` (HTTP ${status})` : ''}: ${detail}`;
+    out = 502;
+  }
+  return aiError(out, msg, log);
+}
+
+/* ── 스트리밍(stream:true)은 쓸 수 없다 — 실측 2026-09-04 ────────────────────
+   화면 작성률을 '실제로 써진 글자 수' 로 그리려고 토큰 스트리밍을 붙여 봤다가 걷어냈다.
+   `openai/gpt-oss-120b` 는 `response_format: json_object` 와 `stream: true` 를 같이 주면
+   **호출 자체가 깨진다**(`Failed to generate JSON`). 같은 프롬프트·같은 모델로:
+     stream=false → 2,190ms 성공 (1,087자, 파싱 성공)
+     stream=true  → 502 Failed to generate JSON
+   JSON 모드를 포기하면 스트리밍은 되지만, 초안 파이프라인 전체(parseDraft·빈칸 세기·
+   coach 필드)가 JSON 계약 위에 서 있어서 막대 하나 때문에 버릴 것이 아니다.
+   그래서 진행률은 **시간을 재서** 그린다(jd-coach.js startAiProgress). */
 async function callModel(text, system, { num_predict = 512 } = {}) {
   const key = (process.env.GROQ_API_KEY || '').trim();
   if (!key) {
@@ -79,54 +138,26 @@ async function callModel(text, system, { num_predict = 512 } = {}) {
   }
 
   const Groq = require('groq-sdk');
+  const client = new Groq({ apiKey: key, timeout: TIMEOUT_MS, maxRetries: 1 });
+  const req = {
+    model: GROQ_MODEL,
+    temperature: 0.2,
+    max_tokens: num_predict,
+    response_format: { type: 'json_object' },
+    ...reasoningOpt(),
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: text },
+    ],
+  };
 
   /* 오류 처리가 없던 시절엔 키 오타·무료쿼터 소진·모델 폐기가 전부
      "AI 분석에 실패했습니다"(500) 한 줄로 뭉개져, 사용자가 무엇을 해야 하는지
-     알 수 없었다. 상태코드별로 할 일이 다르므로 갈라 준다. */
-  let completion;
+     알 수 없었다. 상태코드별로 할 일이 다르므로 갈라 준다(mapGroqError). */
   try {
-    completion = await new Groq({ apiKey: key, timeout: TIMEOUT_MS, maxRetries: 1 })
-      .chat.completions.create({
-        model: GROQ_MODEL,
-        temperature: 0.2,
-        max_tokens: num_predict,
-        response_format: { type: 'json_object' },
-        ...reasoningOpt(),
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: text },
-        ],
-      });
-  } catch (e) {
-    const status = e?.status;
-    const detail = String(e?.error?.error?.message || e?.message || '').slice(0, 200);
-    let msg, out;
-
-    if (status === 401 || status === 403) {
-      msg = `Groq 인증에 실패했습니다(HTTP ${status}). GROQ_API_KEY 가 올바른지 확인해 주세요 `
-          + `— https://console.groq.com/keys`;
-      out = 503;                                    // 키 문제 = 설정 문제
-    } else if (status === 429) {
-      msg = 'Groq 무료 쿼터를 초과했습니다. 잠시 뒤 다시 시도해 주세요.';
-      out = 429;                                    // 재시도하면 되는 상황 — 503 과 구분한다
-    } else if (status === 404 || /decommission|not.*exist|model/i.test(detail)) {
-      msg = `Groq 모델 "${GROQ_MODEL}" 을(를) 쓸 수 없습니다(${detail}). `
-          + `폐기된 모델일 수 있습니다 — .env 의 GROQ_MODEL 을 현행 모델로 바꿔주세요 `
-          + `(목록: https://console.groq.com/docs/models).`;
-      out = 503;
-    } else if (e?.name === 'APIConnectionTimeoutError' || /timeout/i.test(detail)) {
-      msg = `AI 응답이 ${Math.round(TIMEOUT_MS / 1000)}초 안에 오지 않았습니다. `
-          + `잠시 뒤 다시 시도해 주세요.`;
-      out = 504;
-    } else {
-      msg = `Groq 호출 실패${status ? ` (HTTP ${status})` : ''}: ${detail}`;
-      out = 502;
-    }
-    const err = new Error(msg);
-    err.status = out;
-    throw err;
-  }
-  return completion.choices?.[0]?.message?.content || '{}';
+    const completion = await client.chat.completions.create(req);
+    return completion.choices?.[0]?.message?.content || '{}';
+  } catch (e) { throw mapGroqError(e); }
 }
 
 /* ── 자소서 AI 초안 프로바이더 라우팅 ──────────────────────────
@@ -144,8 +175,51 @@ const useGemini = () => GEMINI.isConfigured();
 const draftProvider = () => (useGemini() ? GEMINI.PROVIDER : PROVIDER);
 const draftModel = () => (useGemini() ? GEMINI.modelLabel() : modelLabel());
 
-async function callDraftModel(text, system, opts = {}) {
-  return useGemini() ? GEMINI.callModel(text, system, opts) : callModel(text, system, opts);
+/* ── Gemini 가 죽으면 Groq 로 넘긴다 (2026-09-03 운영 사고) ────────────────────
+   ── 무슨 일이 있었나 ──
+   Gemini 가 `HTTP 503 This model is currently experiencing high traffic` 를 내기
+   시작했고, **AI 초안이 통째로 죽었다.** 화면에는 504 만 보였다. 그런데 같은 순간
+   Groq 는 멀쩡했다(같은 프롬프트로 4.7초·494자 정상). 앱의 나머지 AI 기능은 전부
+   Groq 로 돌고 있었으니, 초안만 살릴 수 있는데 안 살린 것이다.
+
+   원인은 라우팅이 **키의 존재 하나로만** 갈렸다는 것이다. 키가 있으면 무조건 Gemini 고,
+   429(쿼터)·503(과부하)·타임아웃 어느 쪽이든 되돌아갈 길이 없었다. 검증 중에 쿼터가
+   소진돼 같은 증상을 두 번 봤는데도 '나중에' 로 미뤄 뒀다가 운영에서 터졌다.
+
+   ── 왜 '조용한 폴백' 이 여기서는 맞나 ──
+   이 파일 위 주석이 명시적 라우팅을 고집하는 이유는 옛 Ollama 사고 때문이다 —
+   환경변수가 안 읽혀 **안 켜진 로컬 도구**로 조용히 떨어졌다. 여기는 다르다.
+   되돌아가는 곳이 이미 설정돼 돌아가는 Groq 이고, 무엇으로 썼는지는 응답의
+   provider·model 이 딱 잘라 말한다(화면이 그걸 그대로 보여준다).
+
+   ── 두 번 부르는 시간을 감당할 수 있나 ──
+   Gemini 실패는 대개 즉시 온다(503·429 는 5초 안쪽). 최악은 타임아웃(60초) + Groq(5초)
+   인데, 라우트가 외국어·베낌으로 최대 두 번 더 부를 수 있어 그대로 두면 프록시가
+   먼저 끊는다. 그래서 **폴백이 가능할 때는 Gemini 쪽 상한을 짧게 준다** — 어차피
+   60초를 기다려 봐야 나오지 않을 응답이다. */
+const GEMINI_FIRST_TRY_MS = Number(process.env.DRAFT_GEMINI_TIMEOUT_MS || 25000);
+
+/* used 를 넘기면 **실제로 쓴 프로바이더**를 적어 준다. 폴백했는데 응답에 'gemini' 라고
+   적히면 화면이 거짓말을 한다 — 어느 모델이 쓴 글인지가 이 기능의 판단 근거다. */
+async function callDraftModel(text, system, opts = {}, used = null) {
+  const mark = (provider, model) => { if (used) { used.provider = provider; used.model = model; } };
+  if (!useGemini()) { mark(PROVIDER, modelLabel()); return callModel(text, system, opts); }
+  try {
+    const out = await GEMINI.callModel(text, system, { ...opts, timeoutMs: GEMINI_FIRST_TRY_MS });
+    mark(GEMINI.PROVIDER, GEMINI.modelLabel());
+    return out;
+  } catch (e) {
+    /* 키가 잘못됐으면 Groq 로 넘겨도 같은 글을 못 쓴다 — 는 아니지만, 설정이 틀린 것을
+       조용히 덮으면 영영 못 고친다. 그래도 사용자 앞에서 기능이 죽는 것보다는 낫다:
+       넘기되 **로그에는 남긴다.** 무엇으로 썼는지는 응답의 provider 가 말해 준다. */
+    /* 로그에는 **원인**(detail)을 적는다 — message 는 학생에게 보여줄 말이라
+       "잠시 뒤 다시 시도해 주세요" 뿐이고, 그건 운영자가 볼 이유가 없다. */
+    console.warn('[초안] Gemini 실패 → Groq 로 넘어갑니다 —',
+      String(e?.detail || e?.message || e).slice(0, 160));
+    if (!isConfigured()) throw e;          // Groq 도 없으면 원래 오류를 그대로 올린다
+    mark(PROVIDER, modelLabel());
+    return callModel(text, system, opts);
+  }
 }
 
 module.exports = {

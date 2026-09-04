@@ -324,6 +324,65 @@
     localStorage.setItem(LS_CPICK, JSON.stringify(all));
     return true;
   }
+  /* ── 문항마다 분량 상한을 사용자가 정한다 (사용자 지시 2026-09-03) ──────────────
+     자소서 문항은 회사마다 상한이 다르다 — "1,000자 이내", "2,000 byte" 처럼 공고에
+     적혀 있다. 지금까지는 초안 요청이 `limit: 600` 으로 **고정**이라, 1,000자짜리
+     문항에 600자짜리 초안이 나오고 사용자가 다시 늘려 써야 했다.
+
+     ── 글자와 byte 를 다 받는다 ──
+     국내 자소서 상한은 두 가지로 적힌다. byte 로 적는 곳은 관행적으로 **한글 2byte**
+     (EUC-KR 기준)로 센다 — UTF-8(한글 3byte)이 아니다. 잡코리아·사람인 계열이 그렇다.
+     UTF-8 로 세면 같은 글이 1.5배로 잡혀 사용자가 쓸 수 있는 분량을 깎아먹는다.
+
+     ── 안 정하면 1,000자 ──
+     사용자 지정 기본값이다. 예전 기본(600자)보다 크다 — 실제 공고에서 가장 흔한 상한이고,
+     모자란 초안을 늘리는 것보다 긴 초안을 줄이는 편이 사용자에게 쉽다. */
+  const LS_LIMIT = 'careerly_jd_limit_v1';
+  const LIMIT_DEFAULT = 1000;
+  const LIMIT_MIN = 200;
+  const LIMIT_MAX_CHAR = 3000;          // 서버 clamp 와 맞춘다
+  const LIMIT_MAX_BYTE = LIMIT_MAX_CHAR * 2;
+
+  /* 한글·전각은 2byte, 나머지는 1byte. 국내 자소서 byte 상한의 관행이다. */
+  function byteLen(str) {
+    let n = 0;
+    for (const ch of String(str || '')) n += /[ᄀ-ᇿ㄰-㆏가-힯　-〿＀-￯]/.test(ch) ? 2 : 1;
+    return n;
+  }
+
+  function loadLimits() {
+    try { return JSON.parse(localStorage.getItem(LS_LIMIT)) || {}; } catch { return {}; }
+  }
+  /* 이 문항의 상한. 안 정했으면 기본값(1,000자)을 돌려준다 — null 을 돌려주면
+     부르는 쪽마다 기본값을 따로 적게 되고, 그러면 화면과 초안이 갈린다. */
+  function limitOf(qKey) {
+    const v = loadLimits()[draftScope()]?.[qKey];
+    const unit = v?.unit === 'byte' ? 'byte' : 'char';
+    const max = unit === 'byte' ? LIMIT_MAX_BYTE : LIMIT_MAX_CHAR;
+    const n = Number(v?.n);
+    if (!Number.isFinite(n) || n <= 0) return { n: LIMIT_DEFAULT, unit: 'char', custom: false };
+    return { n: Math.min(Math.max(Math.round(n), LIMIT_MIN), max), unit, custom: true };
+  }
+  function setLimit(qKey, n, unit) {
+    const all = loadLimits();
+    const scope = draftScope();
+    const byQ = all[scope] || (all[scope] = {});
+    const num = Number(n);
+    /* 비우면 '기본값으로 돌아간다' 는 뜻이다 — 0 을 저장해 두면 다음에 못 고친다. */
+    if (!Number.isFinite(num) || num <= 0) delete byQ[qKey];
+    else byQ[qKey] = { n: Math.round(num), unit: unit === 'byte' ? 'byte' : 'char' };
+    if (!Object.keys(byQ).length) delete all[scope];
+    localStorage.setItem(LS_LIMIT, JSON.stringify(all));
+    return limitOf(qKey);
+  }
+  /* 지금 글이 상한 대비 얼마인지. 화면 카운터와 초과 판정이 같은 함수를 본다. */
+  function usageOf(text, lim) {
+    const used = lim.unit === 'byte' ? byteLen(text) : String(text || '').length;
+    return { used, over: used > lim.n, unitLabel: lim.unit === 'byte' ? 'byte' : '자' };
+  }
+  /* 서버에 넘길 목표 글자 수. byte 상한은 한글 2byte 기준이라 절반이 대략의 글자 수다. */
+  const charTarget = lim => (lim.unit === 'byte' ? Math.round(lim.n / 2) : lim.n);
+
   /* ── 역량 분석 결과를 자소서(회사)마다 보관한다 (사용자 지시 2026-09-01) ──────
      ── 무엇이 문제였나 ──
      역량 분석 결과는 `_last` 라는 **메모리 변수**에만 있었다. 그래서 보관함에서
@@ -1607,9 +1666,10 @@
   function reqListHtml(r, qMap) {
     const ok = r.items.filter(hasMine).length;
     const f = r.items[_focused];
-    /* ── 이 문항에 쓸 역량을 여기서 고른다 (사용자 지시 2026-09-01) ──────────────
-       줄을 누르면 상세가 열리고(예전 그대로), 오른쪽 토글을 누르면 **지금 보고 있는
-       문항**에 넣거나 뺀다. 초안은 이 선택을 그대로 쓴다(tabsOf → resolveComps). */
+    /* ── 이 문항에 쓸 역량을 여기서 고른다 (사용자 지시 2026-09-01·04) ──────────────
+       줄을 누르면 상세가 열리면서 **지금 보고 있는 문항**에 넣거나 빠진다 — 골랐다는
+       표시는 별도 버튼이 아니라 줄 색(.is-picked)이다. 초안은 이 선택을 그대로
+       쓴다(tabsOf → resolveComps). */
     const tab = (_lastTabs || [])[_tab];
     const onQ = tab?.kind === 'question';
     const picked = new Set((onQ ? (tab.comps || []) : []).map(c => c.label));
@@ -1620,20 +1680,18 @@
         <span class="jd-reqs-sub">근거 ${ok} · 없음 ${r.items.length - ok}</span>
       </div>
       ${onQ ? `<p class="jd-reqs-pick-note">${tab.label}에 쓸 역량 <b>${picked.size}</b>/${C_PICK_MAX}
-        — 오른쪽 <b>+</b> 로 고르세요. ${picked.size ? '' : '<b>0개</b>면 문항 골격만으로 씁니다.'}</p>` : ''}
+        — 역량을 눌러 고르세요. ${picked.size ? '' : '<b>0개</b>면 문항 골격만으로 씁니다.'}</p>` : ''}
       <div class="jd-reqs-list">
         ${r.items.map((it, i) => `
           <div class="jd-req-row">
-            <button type="button" class="jd-req ${i === _focused ? 'is-on' : ''}" data-key="${i}">
+            <button type="button" class="jd-req ${i === _focused ? 'is-on' : ''} ${onQ && picked.has(it.label) ? 'is-picked' : ''}"
+              data-key="${i}" data-cshown="${esc(shown.join('|'))}"
+              ${onQ ? `aria-pressed="${picked.has(it.label)}"` : ''}>
               <span class="jd-req-dot ${hasMine(it) ? 'is-ok' : 'is-gap'}"></span>
               <span class="jd-req-name">${esc(it.label)}</span>
               ${(qMap[i] || []).length ? `<span class="jd-req-q">문항 ${(qMap[i]).join('·')}</span>` : ''}
               ${it.market ? `<span class="jd-req-n">${it.market.pct}%</span>` : ''}
             </button>
-            ${onQ ? `<button type="button" class="jd-req-pick ${picked.has(it.label) ? 'is-picked' : ''}"
-              data-cpick="${esc(it.label)}" data-cshown="${esc(shown.join('|'))}"
-              title="${picked.has(it.label) ? '이 문항에서 빼기' : '이 문항에 쓰기'}"
-              aria-pressed="${picked.has(it.label)}">${picked.has(it.label) ? '✓' : '+'}</button>` : ''}
           </div>`).join('')}
       </div>
       ${f ? reqDetailHtml(f) : ''}
@@ -1662,6 +1720,21 @@
     </div>`;
   }
 
+  /* 이 문항에 고른 역량 칩 한 줄 (사용자 지시 2026-09-04).
+     '이 문항 경험' 과 같은 모양으로 **고른 것만** 보여 준다 — 예전에는 "AI 초안 기준
+     역량 X — 왼쪽 목록에서 다른 역량을 누르면 바뀝니다" 라는 문장 한 줄이었는데,
+     ① 한 개만 말하면서 실제로는 두 개까지 쓰이고 ② 바꾸는 법을 매번 설명했다.
+     고르고 빼는 일은 오른쪽 요구 역량 목록에서 하므로 여기는 **표시만** 한다. */
+  function qCompChipsHtml(tab) {
+    if (tab?.kind !== 'question') return '';
+    const comps = (tab.comps || []).filter(Boolean);
+    if (!comps.length) return '';
+    return `<div class="jd-dspec">
+      <span class="jd-dspec-lab">이 문항 역량</span>
+      ${comps.map(c => `<span class="jd-dspec-chip is-on is-static">${esc(c.label)}</span>`).join('')}
+    </div>`;
+  }
+
   /* 초안 영역의 정성스펙 칩 한 줄 — 이 문항에 고른 경험(0~3)을 압축해 보이고, 눌러 바꾼다.
      STAR 편집은 위 문항 칸에서(레퍼런스 A: 초안 옆엔 칩만). */
   function qSpecChipsHtml(qKey) {
@@ -1678,7 +1751,6 @@
           data-dqpick="${esc(k)}" data-dqkey="${esc(qKey)}" ${full ? 'disabled' : ''}>
           <i class="ti ti-${on ? 'check' : 'plus'}"></i>${esc(actTitle(a))}</button>`;
       }).join('')}
-      <span class="jd-dspec-note">STAR는 역량 분석 전 ‘정성스펙 STAR’에서 적어요</span>
     </div>`;
   }
 
@@ -2013,6 +2085,8 @@
       return `<div class="jd-draft-pane"><div class="jd-empty">쓸 문항이 없어요.
         위 <b>자소서 문항</b> 칸에 문항을 한 줄에 하나씩 넣으면 문항별로 쓸 수 있습니다.</div></div>`;
     }
+    /* 이 문항의 분량 상한(사용자 지시 2026-09-03). 안 정했으면 기본 1,000자다. */
+    const lim = limitOf(tab.key);
 
     const company = valueOf('#jd-company');
     /* 지원동기 문항은 공고가 아니라 **회사 근거**가 재료다. 담아 온 것 중 이 문항
@@ -2022,16 +2096,15 @@
     const isMotive = tab.type?.pick === 'news';
     const ev = tab.type ? Roadmap.evidenceFor(company, tab.type.label) : [];
 
-    const focused = r.items[_focused] || tab.comps?.[0] || r.items[0];
-
-    /* 문항 아래 맥락 한 줄. 지원동기는 담아 온 회사 근거로, 그 밖은 왼쪽에서 고른 역량으로
-       초안을 쓴다는 것을 알린다(레퍼런스 A: 초안 버튼은 아래 에디터 머리에 있다). */
+    /* 지원동기만 맥락 한 줄을 남긴다 — 담아 온 근거가 몇 건인지는 화면 어디에도 없다.
+       그 밖의 문항에 있던 "AI 초안 기준 역량 X — 왼쪽 목록에서 다른 역량을 누르면
+       바뀝니다" 는 지웠다(사용자 지시 2026-09-04). 고른 역량은 아래 칩 줄이
+       '이 문항 경험' 과 같은 모양으로 보여 주므로, 같은 말을 문장으로 또 할 이유가 없다. */
     const ctx = isMotive
       ? `<div class="jd-qctx">${ev.length
            ? `담아 온 회사 근거 <b>${ev.length}건</b>으로 지원동기를 씁니다`
            : `<span class="jd-qctx-warn"><i class="ti ti-info-circle"></i> 회사 리포트에서 근거를 담으면 지원동기가 정확해져요</span>`}</div>`
-      : (focused ? `<div class="jd-qctx">AI 초안 기준 역량 <b>${esc(focused.label)}</b>
-           <span class="jd-qctx-sub">— 왼쪽 목록에서 다른 역량을 누르면 바뀝니다</span></div>` : '');
+      : '';
 
     const draft = getDraft(tab.key);
 
@@ -2039,10 +2112,8 @@
       <!-- 문항 큰 탭 -->
       <div class="jd-qtabs">
         ${tabs.map((t, i) => {
-          const len = getDraft(t.key).length;
           return `<button type="button" class="jd-qtab ${i === _tab ? 'is-on' : ''}" data-tab="${i}">
             <span class="jd-qtab-lab">${esc(t.label)}</span>
-            <span class="jd-qtab-n">${len ? len.toLocaleString() : '0'}</span>
           </button>`;
         }).join('')}
       </div>
@@ -2053,6 +2124,7 @@
         ${tab.kind === 'question' ? `<p class="jd-qprompt-how">${tab.type
           ? esc(tab.type.how)
           : '문항 유형을 알아보지 못했어요. 왼쪽 역량 중 이 문항과 가까운 것을 직접 고르세요.'}</p>` : ''}
+        ${qCompChipsHtml(tab)}
         ${qSpecChipsHtml(tab.key)}
         ${isMotive ? '<div data-motive-notes></div>' : ''}
         ${ctx}
@@ -2065,12 +2137,25 @@
         <div class="jd-draft-h">
           <b>내 초안</b>
           <span class="jd-draft-end">
-            <span class="jd-draft-state" id="jd-draft-state"></span>
+            <!-- 분량 상한 — 공고에 적힌 값을 그대로 넣는다(1,000자 / 2,000 byte).
+                 비우면 기본 1,000자. AI 초안이 이 값을 목표로 쓴다. -->
+            <label class="jd-limit" title="공고에 적힌 분량을 넣으세요. 비우면 1,000자입니다">
+              <span class="jd-limit-lab">분량</span>
+              <input type="number" class="jd-limit-n" id="jd-limit-n" inputmode="numeric"
+                min="${LIMIT_MIN}" step="100" placeholder="${LIMIT_DEFAULT}"
+                value="${lim.custom ? lim.n : ''}" aria-label="분량 상한">
+              <select class="jd-limit-u" id="jd-limit-u" aria-label="분량 단위">
+                <option value="char"${lim.unit === 'char' ? ' selected' : ''}>자</option>
+                <option value="byte"${lim.unit === 'byte' ? ' selected' : ''}>byte</option>
+              </select>
+            </label>
             <button type="button" class="wf-btn wf-btn--sm" data-ai-draft>
               <i class="ti ti-sparkles"></i> AI 초안 넣기</button>
             <button type="button" class="wf-btn wf-btn--sm wf-btn--primary" data-save-draft>
               <i class="ti ti-device-floppy"></i> 저장하기</button>
           </span>
+          <!-- 상태·진행률은 버튼 줄 아래 한 줄을 통째로 쓴다 (사용자 지적 2026-09-04) -->
+          <span class="jd-draft-state" id="jd-draft-state"></span>
         </div>
         <div class="jd-draft-wrap">
           <textarea class="jd-draft-text" id="jd-draft" data-key="${esc(tab.key)}"
@@ -2119,7 +2204,7 @@
       <div class="wf-card">
         <ul class="jd-list">${r.checklist.map(c => `<li>${esc(c)}</li>`).join('')}</ul>
         <p class="jd-hint">위에서부터 순서대로 봅니다 — 앞이 걸리면 뒤를 볼 필요가 없어요.
-          상투 표현·AI 흔적은 작성칸 아래에서 <b>브라우저 안에서만</b> 검사합니다(초안은 서버로 보내지 않아요).</p>
+          상투 표현·AI 흔적은 작성칸 아래에서 검사합니다 — 초안은 <b>이 브라우저 밖으로 나가지 않아요</b>.</p>
       </div>
     </div>`;
   }
@@ -2266,6 +2351,13 @@
     if (picked && $('#jd-company')) {
       $('#jd-company').value = picked;
       localStorage.removeItem('careerly_selected_company');
+      /* ── 문항 1 부터 보여준다 (사용자 지시 2026-09-04) ──────────────────
+         `_tab` 은 모듈 변수라 **다른 자소서에서 보던 탭 번호가 그대로 남는다.**
+         renderWrite 는 탭 수에 맞게 자르기만 할 뿐(Math.min) 0 으로 되돌리지 않아서,
+         문항 3 을 쓰다 보관함으로 나갔다가 다른 회사로 이어쓰기하면 그 회사의
+         문항 3 이 열렸다 — 방금 고른 자소서를 처음부터 볼 것이라는 기대와 어긋난다.
+         이어쓰기는 '이 자소서를 새로 편다' 는 뜻이므로 맨 앞으로 돌린다. */
+      _tab = 0;
     }
     renderWrite();
   }
@@ -2373,23 +2465,30 @@
   }
 
   function bind(box, r, tabs) {
-    // 역량 키워드 칩 · 역량 머리줄 — 둘 다 같은 역량을 연다
-    box.querySelectorAll('[data-key]').forEach(el =>
-      el.addEventListener('click', () => focusItem(Number(el.dataset.key))));
-
-    /* 문항별 역량 고르기 — 상한에 걸리면 알리고, 아니면 화면을 다시 그린다.
-       다시 그리는 이유: 탭의 comps 가 바뀌면 초안 머리의 기준 역량 줄과 문항 배지가
-       같이 바뀌어야 한다. 에디터 내용은 회사별 저장이라 다시 그려도 안 잃는다. */
-    box.querySelectorAll('[data-cpick]').forEach(el => el.addEventListener('click', () => {
+    /* 역량 키워드 칩 · 역량 머리줄 — 둘 다 같은 역량을 연다.
+       문항 화면의 요구 역량 줄(.jd-req)은 여기에 더해 **이 문항에 쓸지**도 같이
+       정한다 — 예전엔 오른쪽 +/✓ 버튼이 따로 있었는데, 상세를 열 때 이미 줄
+       색이 바뀌니 그 색 변화를 선택 표시로 그대로 쓴다(사용자 지시 2026-09-04).
+       상한에 걸리면 알리고 화면을 다시 그린다 — comps 가 바뀌면 초안 머리의
+       기준 역량 줄과 문항 배지가 같이 바뀌어야 한다. 에디터 내용은 회사별
+       저장이라 다시 그려도 안 잃는다. */
+    box.querySelectorAll('[data-key]').forEach(el => el.addEventListener('click', () => {
+      const idx = Number(el.dataset.key);
       const tab = (_lastTabs || [])[_tab];
-      if (tab?.kind !== 'question') return;
-      const shown = (el.dataset.cshown || '').split('|').filter(Boolean);
-      if (!toggleCPick(tab.key, el.dataset.cpick, shown)) {
-        const s = document.getElementById('jd-draft-state');
-        if (s) s.innerHTML = `한 문항에 역량은 <b>${C_PICK_MAX}개</b>까지예요 — 하나를 빼고 고르세요`;
+      if (tab?.kind === 'question' && el.classList.contains('jd-req')) {
+        const it = r.items[idx];
+        if (!it) return;
+        const shown = (el.dataset.cshown || '').split('|').filter(Boolean);
+        if (!toggleCPick(tab.key, it.label, shown)) {
+          const s = document.getElementById('jd-draft-state');
+          if (s) s.innerHTML = `한 문항에 역량은 <b>${C_PICK_MAX}개</b>까지예요 — 하나를 빼고 고르세요`;
+          return;
+        }
+        _focused = idx;
+        if (_wsHost) renderWrite(); else render(_last);
         return;
       }
-      if (_wsHost) renderWrite(); else render(_last);
+      focusItem(idx);
     }));
     box.querySelectorAll('[data-comp]').forEach(el =>
       el.addEventListener('click', () => focusItem(Number(el.dataset.comp))));
@@ -2475,13 +2574,78 @@
       detail.replaceWith(document.createRange().createContextualFragment(reqDetailHtml(item)));
     }
 
-    /* 초안 머리의 '기준 역량' 줄을 바꾼다(지원동기 탭은 제외 — 거긴 회사 근거가 재료다). */
-    const tab = (_lastTabs || [])[_tab];
-    const ctx = box.querySelector('.jd-qctx');
-    if (ctx && item && !(tab?.type?.pick === 'news')) {
-      ctx.innerHTML = `AI 초안 기준 역량 <b>${esc(item.label)}</b>`
-        + ` <span class="jd-qctx-sub">— 왼쪽 목록에서 다른 역량을 누르면 바뀝니다</span>`;
-    }
+    /* 예전에는 여기서 초안 머리의 '기준 역량' 문장 줄을 같이 고쳤다. 그 줄은 없앴고
+       (사용자 지시 2026-09-04), 고른 역량은 '이 문항 역량' 칩이 보여 준다. 그 칩은
+       고를 때마다 화면을 다시 그리므로(bind 의 data-key 핸들러) 여기서 손댈 것이 없다. */
+  }
+
+  /* ── AI 초안 진행률 (사용자 지시 2026-09-04) ──────────────────────────────
+     처음 판은 시간만 보고 늘 같은 곡선으로 0→90% 를 기어갔다. 그래서 "고정값 같다"
+     는 말이 나왔다 — 실제로 서버가 어디까지 했는지와 아무 관계가 없었으니 맞는 지적이다.
+
+     ── 진짜 진행률(토큰 스트리밍)은 지금 모델로는 못 쓴다 (실측 2026-09-04) ──
+     서버가 글자를 쓰는 대로 흘려보내게 만들어 봤는데, 두 프로바이더 다 막혔다:
+       · Groq `openai/gpt-oss-120b` — `response_format: json_object` + `stream:true`
+         조합에서 호출 자체가 깨진다(`Failed to generate JSON`). 같은 프롬프트로
+         stream=false 는 2,190ms 성공, stream=true 는 502.
+       · Gemini `:streamGenerateContent?alt=sse` — JSON 모드에서 **본문 없이** 스트림이
+         닫힌다(조각 0개 → 25초 뒤 타임아웃).
+     JSON 모드를 버리면 스트리밍은 되지만 초안 파이프라인 전체(parseDraft·빈칸 세기·
+     coach 필드)가 그 계약 위에 서 있다. 막대 하나 때문에 버릴 것이 아니다.
+
+     ── 그래서 '시간' 을 쓰되, **재서** 쓴다 ──
+     고정 곡선 대신 **이 브라우저에서 실제로 걸린 시간**의 중앙값을 분모로 쓴다.
+     Groq 로 끝나면 2초대, Gemini 로 가면 20초대라 사람마다·때마다 크게 다른데,
+     지난 기록을 보면 그 차이가 막대에 그대로 반영된다. 예상보다 늦어지면 95% 에서
+     기다린다 — **100% 는 초안이 실제로 도착했을 때만** 찍는다. */
+  const LS_AI_MS = 'careerly_jd_ai_ms_v1';
+  const AI_MS_KEEP = 7;                  // 최근 7번만 본다 — 모델을 바꾸면 금방 따라가야 한다
+  const AI_MS_SEED = 12000;              // 기록이 없을 때의 첫 추정(Groq 2초 · Gemini 20초의 사이)
+
+  function aiDurations() {
+    try {
+      const v = JSON.parse(localStorage.getItem(LS_AI_MS));
+      return Array.isArray(v) ? v.filter(n => Number.isFinite(n) && n > 0) : [];
+    } catch { return []; }
+  }
+  /* 중앙값을 쓴다 — 한 번 크게 튄 값(재시도가 붙은 호출)이 평균을 끌고 가지 않게. */
+  function expectedAiMs() {
+    const all = aiDurations();
+    if (!all.length) return AI_MS_SEED;
+    const s = [...all].sort((a, b) => a - b);
+    return s[Math.floor(s.length / 2)];
+  }
+  function noteAiDuration(ms) {
+    if (!Number.isFinite(ms) || ms <= 0) return;
+    try {
+      localStorage.setItem(LS_AI_MS, JSON.stringify([...aiDurations(), ms].slice(-AI_MS_KEEP)));
+    } catch { /* 저장 못 해도 막대는 기본 추정으로 돈다 */ }
+  }
+
+  function startAiProgress(stateEl, label) {
+    if (!stateEl) return () => {};
+    const t0 = Date.now();
+    const expected = expectedAiMs();
+    let pct = 0;
+
+    const paint = () => {
+      stateEl.innerHTML = `<span class="jd-ai-prog"><span class="jd-ai-prog-bar" style="width:${pct}%"></span></span>`
+        + `${esc(label)} <b class="jd-ai-prog-pct">${pct}%</b>`;
+    };
+    paint();
+
+    const timer = setInterval(() => {
+      /* 예상 시간까지는 그 비율대로, 넘어서면 95% 에 붙어 기다린다. */
+      pct = Math.min(95, Math.round(((Date.now() - t0) / expected) * 100));
+      paint();
+    }, 200);
+
+    /* 끝나면 걸린 시간을 기록해 **다음 번 분모**로 쓴다. 실패한 호출은 넘기지 않는다 —
+       중간에 죽은 시간을 '보통 이만큼 걸린다' 로 배우면 막대가 거꾸로 부정확해진다. */
+    return ok => {
+      clearInterval(timer);
+      if (ok) noteAiDuration(Date.now() - t0);
+    };
   }
 
   /* ── AI 초안 ──────────────────────────────────────────────
@@ -2519,7 +2683,7 @@
     const hasStar = picks.length > 0;
 
     btn.disabled = true;
-    if (stateEl) stateEl.textContent = '초안을 쓰는 중… (1분 이상 걸릴 수 있어요)';
+    const stopProgress = startAiProgress(stateEl, '초안을 쓰는 중');
 
     try {
       const out = await DB.draftJd({
@@ -2533,7 +2697,8 @@
         reads: list.map(c => c.reads).filter(Boolean).join(' / '),
         frame: list[0]?.frame || '',
         picks,
-        limit: 600,
+        /* 사용자가 정한 분량 상한. byte 면 한글 2byte 기준으로 글자 수로 환산한다. */
+        limit: charTarget(limitOf(tab?.key)),
       });
 
       const at = ta.selectionStart ?? ta.value.length;
@@ -2544,22 +2709,32 @@
       ta.setSelectionRange(at + text.length, at + text.length);
       ta.dispatchEvent(new Event('input'));
 
+      stopProgress(true);
       if (stateEl) {
         const blanks = out.blankCount
           ? `<b>빈칸 ${out.blankCount}개</b>를 본인 사실로 채우세요`
           : '넣었어요';
         /* STAR 없이 만든 문단이 뻔하다는 것을 **결과를 보여준 뒤에** 말한다.
            만들기 전에 말하면 경고이고, 만든 뒤에 말하면 다음에 할 일이 된다. */
-        stateEl.innerHTML = hasStar ? blanks
+        const doneHtml = `<i class="ti ti-circle-check-filled jd-ai-done"></i> ` + (hasStar ? blanks
           : `${blanks} · 위 <b>자소서 문항</b> 칸에서 이 문항에 <b>정성스펙</b>을 고르면 내 경험(STAR)으로 더 구체적으로 나와요 `
-            + '<button type="button" class="jd-inline-link" data-open-star>고르러 가기</button>';
-        const goStar = stateEl.querySelector('[data-open-star]');
-        if (goStar) goStar.addEventListener('click', () => {
-          openStep(3, true);   // 자소서 문항 칸을 열고 그리로 스크롤한다
-        });
+            + '<button type="button" class="jd-inline-link" data-open-star>고르러 가기</button>');
+        /* 위 dispatchEvent('input') 이 작성칸의 자동저장 표시줄(같은 stateEl)을 같이 켜서,
+           600ms 뒤 '저장됨' 으로 이 완료 표시를 덮어쓴다. 그 시점이 지난 뒤 한 번 더
+           그려서 완료 표시가 이기게 한다. */
+        const paintDone = () => {
+          stateEl.innerHTML = doneHtml;
+          const goStar = stateEl.querySelector('[data-open-star]');
+          if (goStar) goStar.addEventListener('click', () => {
+            openStep(3, true);   // 자소서 문항 칸을 열고 그리로 스크롤한다
+          });
+        };
+        paintDone();
+        setTimeout(paintDone, 700);
       }
       paintAiNotes(i, out);
     } catch (e) {
+      stopProgress();
       if (stateEl) stateEl.textContent = e.message;
     } finally {
       btn.disabled = false;
@@ -2593,7 +2768,7 @@
     const picks = tab?.kind === 'question' ? qPickList(tab.key) : [];
 
     btn.disabled = true;
-    if (stateEl) stateEl.textContent = '담은 근거를 읽고 쓰는 중… (1분 이상 걸릴 수 있어요)';
+    const stopProgress = startAiProgress(stateEl, '담은 근거를 읽고 쓰는 중');
 
     try {
       const out = await DB.motiveJd({
@@ -2604,7 +2779,8 @@
            보내 봤자 프롬프트만 길어져 뒤쪽 규칙이 밀린다. */
         evidence: ev.map(e => ({ kind: e.kind, text: e.text, source: e.source || '' })),
         picks,
-        limit: 600,
+        /* 사용자가 정한 분량 상한. byte 면 한글 2byte 기준으로 글자 수로 환산한다. */
+        limit: charTarget(limitOf(tab?.key)),
       });
 
       const at = ta.selectionStart ?? ta.value.length;
@@ -2618,13 +2794,19 @@
       /* 빈칸 0개는 '완성됐다' 가 아니라 **그대로 내면 안 되는 상태**다.
          대괄호가 대필 방지 장치라, 없으면 그 장치가 안 걸린 문단이다(16-2).
          '넣었어요' 로 끝내면 학생은 다 됐다고 읽는다. */
+      stopProgress(true);
       if (stateEl) {
-        stateEl.innerHTML = out.blankCount
+        const doneHtml = `<i class="ti ti-circle-check-filled jd-ai-done"></i> ` + (out.blankCount
           ? `<b>빈칸 ${out.blankCount}개</b>를 본인 사실로 채우세요`
-          : '<b>빈칸 없이 나왔어요</b> — 수치·상황을 본인 사실로 바꿔 쓰세요';
+          : '<b>빈칸 없이 나왔어요</b> — 수치·상황을 본인 사실로 바꿔 쓰세요');
+        /* insertAiDraft 와 같은 이유로 한 번 더 그린다 — 자동저장 '저장됨' 이 이 완료
+           표시를 덮어쓰는 것을 이긴다. */
+        stateEl.innerHTML = doneHtml;
+        setTimeout(() => { stateEl.innerHTML = doneHtml; }, 700);
       }
       paintMotiveNotes(out);
     } catch (e) {
+      stopProgress();
       if (stateEl) stateEl.textContent = e.message;
     } finally {
       btn.disabled = false;
@@ -2699,8 +2881,13 @@
     const key = ta.dataset.key;
     let timer = null;
 
+    /* 카운터는 **상한 대비**로 보여준다 — 자소서는 '몇 자 썼나' 보다 '넘었나' 가 중요하다.
+       단위가 byte 면 byte 로 센다(한글 2byte, limitOf 주석 참고). */
     const paint = () => {
-      countEl.textContent = ta.value.length ? `${ta.value.length.toLocaleString()}자` : '0자';
+      const lim = limitOf(key);
+      const u = usageOf(ta.value, lim);
+      countEl.textContent = `${u.used.toLocaleString()} / ${lim.n.toLocaleString()}${u.unitLabel}`;
+      countEl.classList.toggle('is-over', u.over);
       paintCheck(chkEl, ta.value);
     };
     paint();
@@ -2713,9 +2900,6 @@
       timer = setTimeout(() => {
         saveDraft(key, ta.value);
         stateEl.textContent = '저장됨';
-        // 탭 글자수도 같이 갱신 — 어느 문항이 얼마나 찼는지가 탭에 보인다
-        const tab = box.querySelector(`[data-tab="${_tab}"] span`);
-        if (tab) tab.textContent = ta.value.length.toLocaleString();
       }, 600);
     });
     // 탭을 옮기거나 페이지를 뜨면 대기 중인 저장을 흘려보내지 않는다
@@ -2728,13 +2912,33 @@
     /* '저장하기' — 자동저장(입력 600ms·blur)과 별개로 **지금 바로** 저장하는 버튼
        (사용자 지시 2026-09-01). 자동저장을 못 믿는 사람이 눌러 확인하는 자리라, 눌렀을 때
        분명히 '저장됨'을 보여준다. 탭 글자수도 같이 갱신한다. */
+    /* ── 분량 상한 입력 (사용자 지시 2026-09-03) ────────────────────────────
+       바꾸면 곧바로 저장하고 카운터를 다시 그린다. 화면을 통째로 다시 그리지 않는다 —
+       입력 중인 초안의 커서·스크롤을 잃지 않으려는 것이다(focusItem 과 같은 판단). */
+    const limN = box.querySelector('#jd-limit-n');
+    const limU = box.querySelector('#jd-limit-u');
+    const applyLimit = () => {
+      const saved = setLimit(key, limN?.value, limU?.value);
+      if (limN) {
+        /* 상한을 지우면 기본값으로 돌아간다 — placeholder 가 그 값을 보여주므로 칸은 비운다. */
+        if (!saved.custom) limN.value = '';
+        /* 범위를 벗어난 값은 잘린다(200 미만·3,000자 초과). **잘린 값을 칸에 되돌려
+           적는다** — 안 그러면 칸에는 100 이 보이는데 실제로는 200 으로 도는, 화면이
+           거짓말하는 상태가 된다. */
+        else if (String(saved.n) !== String(limN.value)) limN.value = saved.n;
+      }
+      if (limU) limU.value = saved.unit;
+      paint();
+    };
+    limN?.addEventListener('change', applyLimit);
+    limN?.addEventListener('blur', applyLimit);
+    limU?.addEventListener('change', applyLimit);
+
     const saveBtn = box.querySelector('[data-save-draft]');
     if (saveBtn) saveBtn.addEventListener('click', () => {
       clearTimeout(timer);
       saveDraft(key, ta.value);
       stateEl.textContent = '저장됨';
-      const tab = box.querySelector(`[data-tab="${_tab}"] span`);
-      if (tab) tab.textContent = ta.value.length.toLocaleString();
       if (typeof toast === 'function') toast('저장했어요', { icon: false });
     });
   }
@@ -2779,6 +2983,8 @@
     classifyQuestion, competenciesFor, parseQuestions, questionDraftKey, QUESTION_TYPES,
     starGate, actKeyOf,
     checkDraft,
+    /* 문항별 분량 상한 (test/draft-limit.test.js) */
+    limitOf, setLimit, usageOf, byteLen, charTarget, LIMIT_DEFAULT,
     /* 문항별 역량 고르기 (test/comp-pick.test.js) */
     cPicks, toggleCPick, resolveComps, quotesFor, C_PICK_MAX,
     /* 회사별 분석 보관 (test/jd-analysis.test.js) */

@@ -402,13 +402,11 @@ window.CASHero = (() => {
         <div class="cas-two-lab">직무 적합도</div>
         <div class="cas-two-num">${esc(fitVal.num)}<span>/ 1000</span></div>
         <div class="cas-two-sub">${esc(fitVal.sub)}</div>
-        <div class="cas-two-q">이 일에 내가 맞나</div>
       </div>
       <div class="cas-two-item">
         <div class="cas-two-lab">CAS 점수</div>
         <div class="cas-two-num">${esc(casVal.num)}<span>/ 1000</span></div>
         <div class="cas-two-sub">${esc(casVal.sub)}</div>
-        <div class="cas-two-q">선배들 사이에서 내가 어디쯤인가</div>
       </div>`;
   }
 
