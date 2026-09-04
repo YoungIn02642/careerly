@@ -216,7 +216,10 @@ function starOf(v) {
   return Object.keys(out).length ? out : null;
 }
 
-router.post('/draft', async (req, res) => {
+/* 초안 만들기. 라우트에서 떼어 둔 이유는 오류를 상태코드와 함께 **던져서** 한 곳에서
+   받기 위해서다 — 예전에는 성공·400·502 가 함수 안 세 곳에서 각각 res 를 건드렸다. */
+async function buildDraft(body) {
+  const req = { body };
   /* ── 역량은 0~2개다 (사용자 지시 2026-09-01) ─────────────────────────────
      지원동기·성격 장단점처럼 역량 축이 필요 없는 문항이 있어서 0개를 연다.
      competency(단수)는 옛 호출 호환용으로 남긴다. */
@@ -224,7 +227,10 @@ router.post('/draft', async (req, res) => {
     ?? (req.body?.competency ? [req.body.competency] : []);
   const comps = competencies.map(c => String(c || '').trim()).filter(Boolean).slice(0, 2);
 
-  const limit = Math.min(Math.max(Number(req.body?.limit) || 600, 200), 1500);
+  /* 문항 상한은 사용자가 정한다(프론트 limitOf). byte 로 적힌 공고는 한글 2byte 기준으로
+     환산돼 오므로 3,000자까지 받는다 — 6,000byte 짜리 문항까지 덮는다.
+     기본값 1,000 은 프론트와 같아야 한다. 갈리면 화면이 말한 분량과 초안이 어긋난다. */
+  const limit = Math.min(Math.max(Number(req.body?.limit) || 1000, 200), 3000);
   /* ── 문항마다 고른 정성스펙(0~3개) (사용자 지시 2026-08-31) ────────────
      고른 게 있으면 그 STAR 가 본문 재료다. 0개면 STAR 를 강요하지 않고 문항 골격만 쓴다.
      2~3개면 draft-coach 가 공통점으로 묶는다. star(단일)는 옛 호환용으로 남겨 둔다.
@@ -256,9 +262,9 @@ router.post('/draft', async (req, res) => {
      조건이 프롬프트에 들어와 '무엇을 쓸지' 가 정해지기 때문이다. */
   const typed = Boolean(QF.classify(question));
   if (!comps.length && !quotes.length && !picks.length && !star && !typed) {
-    return res.status(400).json({
-      error: '무엇으로 쓸지 알려 주세요 — 역량을 고르거나, 자소서 문항을 넣어 주세요.',
-    });
+    throw Object.assign(
+      new Error('무엇으로 쓸지 알려 주세요 — 역량을 고르거나, 자소서 문항을 넣어 주세요.'),
+      { status: 400 });
   }
 
   const prompt = DRAFT.buildPrompt({
@@ -275,11 +281,15 @@ router.post('/draft', async (req, res) => {
     limit,
   });
 
-  try {
+  {
     /* num_predict 를 넉넉히 준다 — 문단 + 빈칸 안내 + 검토까지 한 응답에 담기므로
        기본값(512)이면 JSON 이 중간에 잘려서 파싱이 통째로 실패한다. */
+    /* Gemini 가 죽으면 Groq 로 넘어간다(ai-provider callDraftModel). 무엇으로 썼는지를
+       여기 담아 응답에 싣는다 — draftProvider() 는 '무엇으로 보내려 했나' 라서 폴백하면
+       거짓말이 된다. 재시도마다 덮어써서 **마지막으로 쓴 것**이 남는다. */
+    const used = {};
     const ask = async () => DRAFT.parseDraft(
-      await callDraftModel(prompt, DRAFT.SYSTEM, { num_ctx: 8192, num_predict: 1100 }));
+      await callDraftModel(prompt, DRAFT.SYSTEM, { num_ctx: 8192, num_predict: 1100 }, used));
 
     let out = await ask();
     /* 한국어가 아닌 글자가 섞이면 한 번만 다시 부른다. 실측으로 8회 중 1회꼴이라
@@ -306,22 +316,35 @@ router.post('/draft', async (req, res) => {
       else copied = DRAFT.copiedFromExample((retry || out).draft, ownStar);
     }
     if (copied) {
-      return res.status(502).json({
-        error: 'AI 가 안내 예시를 그대로 베껴 와서 초안을 버렸어요. 다시 눌러 주세요.',
-        detail: `예시(${copied.key})와 겹침: ${copied.chunk}`,
-      });
+      throw Object.assign(
+        new Error('AI 가 안내 예시를 그대로 베껴 와서 초안을 버렸어요. 다시 눌러 주세요.'),
+        { status: 502, detail: `예시(${copied.key})와 겹침: ${copied.chunk}` });
     }
-    res.json({ ...out, model: draftModel(), provider: draftProvider() });
+    return { ...out, model: used.model || draftModel(), provider: used.provider || draftProvider() };
+  }
+}
+
+/* 오류를 화면에 내보낼 모양으로 바꾼다 — buildDraft 가 던진 것을 여기서 한 번에 받는다. */
+function draftErrorBody(e) {
+  const status = e?.status || 502;
+  return {
+    status,
+    error: (status === 400 || status === 429 || status === 502 || status === 503 || status === 504)
+      ? e.message
+      : 'AI 초안을 만들지 못했어요. 잠시 후 다시 시도해 주세요.',
+    detail: e?.detail || e?.message || '',
+  };
+}
+
+router.post('/draft', async (req, res) => {
+  try {
+    res.json(await buildDraft(req.body));
   } catch (e) {
-    const status = e?.status || 502;
-    res.status(status).json({
-      error: (status === 503 || status === 429)
-        ? e.message
-        : 'AI 초안을 만들지 못했어요. 잠시 후 다시 시도해 주세요.',
-      detail: e.message,
-    });
+    const body = draftErrorBody(e);
+    res.status(body.status).json({ error: body.error, detail: body.detail });
   }
 });
+
 
 /* POST /api/jd/motive
    지원동기 문단 초안 — 3단계에서 담아 온 회사 근거로 쓴다.
@@ -356,7 +379,10 @@ router.post('/motive', async (req, res) => {
     });
   }
 
-  const limit = Math.min(Math.max(Number(req.body?.limit) || 600, 200), 1500);
+  /* 문항 상한은 사용자가 정한다(프론트 limitOf). byte 로 적힌 공고는 한글 2byte 기준으로
+     환산돼 오므로 3,000자까지 받는다 — 6,000byte 짜리 문항까지 덮는다.
+     기본값 1,000 은 프론트와 같아야 한다. 갈리면 화면이 말한 분량과 초안이 어긋난다. */
+  const limit = Math.min(Math.max(Number(req.body?.limit) || 1000, 200), 3000);
   /* 지원동기도 '고른 정성스펙(0~3개)' 을 재료로 받는다(사용자 지적 2026-09-01).
      안 고르면(0개) 회사 근거만으로 쓰고 지원자 경험은 지어내지 않는다. /draft 와 같은 규약. */
   const picks = (Array.isArray(req.body?.picks) ? req.body.picks : [])
@@ -372,9 +398,11 @@ router.post('/motive', async (req, res) => {
     limit,
   });
 
+  /* 폴백으로 프로바이더가 바뀔 수 있다 — 실제로 쓴 것을 담아 응답에 싣는다. */
+  const used = {};
   try {
     const ask = async () => DRAFT.parseDraft(
-      await callDraftModel(prompt, DRAFT.SYSTEM, { num_ctx: 8192, num_predict: 1100 }));
+      await callDraftModel(prompt, DRAFT.SYSTEM, { num_ctx: 8192, num_predict: 1100 }, used));
 
     let out = await ask();
     /* 외국어 혼입은 /draft 와 같은 규칙으로 막는다 — 같은 모델·같은 출력 형식이라
@@ -387,7 +415,7 @@ router.post('/motive', async (req, res) => {
 
     /* 담아 온 근거를 그대로 돌려준다 — 화면이 "이 초안은 이 근거로 썼다" 를
        초안 옆에 적을 수 있어야 한다. 출처 없이 나온 문단은 검증할 방법이 없다. */
-    res.json({ ...out, usedEvidence: evidence, model: draftModel(), provider: draftProvider() });
+    res.json({ ...out, usedEvidence: evidence, model: used.model || draftModel(), provider: used.provider || draftProvider() });
   } catch (e) {
     const status = e?.status || 502;
     res.status(status).json({
