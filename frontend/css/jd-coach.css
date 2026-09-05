@@ -2104,6 +2104,49 @@ a.wf-btn { text-decoration: none; }
 .write-side-b:hover i { color: var(--wf-ink); }
 .write-side-note { margin: 4px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--wf-mute); }
 
+/* ── 내 AI 프롬프트 (사용자 지시 2026-09-05) ────────────────────────────────
+   켠 것 하나에만 불이 들어온다. 자소서 관리 버튼들과 같은 폭·같은 여백에 세워
+   사이드바가 두 덩이(자소서 / 프롬프트)로 읽히게 한다. */
+.write-side-prompts { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--wf-hairline); }
+.wp-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.wp-add {
+  margin-left: auto; width: 22px; height: 22px; display: grid; place-items: center;
+  border: 1px solid var(--wf-hairline); border-radius: 6px; background: var(--wf-canvas);
+  color: var(--wf-body-mid); cursor: pointer;
+}
+.wp-add:hover { border-color: var(--wf-ink); color: var(--wf-ink); }
+.wp-list { display: flex; flex-direction: column; gap: 4px; }
+.wp-item {
+  display: flex; align-items: center; gap: 2px;
+  border-radius: 7px; background: var(--wf-fill, #f4f5f7);
+}
+.wp-item.is-on { background: #f0ebff; }
+.wp-pick {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px;
+  padding: 7px 8px; border: 0; background: transparent; cursor: pointer;
+  font-family: var(--font); font-size: 12.5px; color: var(--wf-body-mid); text-align: left;
+}
+.wp-item.is-on .wp-pick { color: #5a26e8; font-weight: 700; }
+.wp-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-edit, .wp-del {
+  flex: none; width: 24px; height: 28px; display: grid; place-items: center;
+  border: 0; background: transparent; color: var(--wf-mute); cursor: pointer; font-size: 13px;
+}
+.wp-edit:hover { color: var(--wf-ink); }
+.wp-del:hover { color: var(--wf-error, #e2564d); }
+.wp-note { margin: 8px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--wf-mute); }
+
+/* 모달 안 — 이름 한 줄, 규칙 여러 줄 */
+.wp-field { display: block; margin-bottom: 14px; }
+.wp-label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 700; color: var(--wf-ink); }
+.wp-field input, .wp-field textarea {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--wf-hairline); border-radius: 8px;
+  font-family: var(--font); font-size: 13.5px; color: var(--wf-ink); background: var(--wf-canvas);
+}
+.wp-field textarea { line-height: 1.65; resize: vertical; min-height: 220px; }
+.wp-field input:focus, .wp-field textarea:focus { outline: 2px solid var(--wf-purple, #7a3dff); outline-offset: -1px; }
+.wp-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
 /* 가운데: 에디터. draftHtml 이 그린 .jd-draft-pane 을 카드로 감싼다. */
 .write-main {
   border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-md);

@@ -153,7 +153,7 @@ function starLines(star) {
 }
 
 /* ── 프롬프트 조립 (P.C.R.O) ──────────────────────────────── */
-function buildPrompt({ company, jobTitle, competency, competencies, quotes, reads, frame, activities, question, limit, star, picks }) {
+function buildPrompt({ company, jobTitle, competency, competencies, quotes, reads, frame, activities, question, limit, star, picks, customRules }) {
   /* ── 역량은 0~2개다 (사용자 지시 2026-09-01) ──────────────────────────────
      예전에는 문자열 하나만 받았고 라우트가 없으면 400 을 냈다. 그런데 지원동기·성격
      장단점처럼 **역량 축이 필요 없는 문항**이 있다(question-prompts.js 의 starMode).
@@ -418,7 +418,36 @@ function buildPrompt({ company, jobTitle, competency, competencies, quotes, read
     '}',
   ].join('\n');
 
-  return `# Context\n${context}\n\n# Restriction\n${restriction}\n\n# Output\n아래 JSON 형식으로만 답하라.\n${output}`;
+  /* ── 사용자가 만든 규칙으로 갈아 끼운다 (사용자 지시 2026-09-05) ──────────────
+     세 덩이 중 **Restriction(규칙)만** 바뀐다. 나머지 둘은 바꿀 수 있는 물건이 아니다:
+       Context — 회사·문항·내 STAR 다. 사용자 데이터라 매번 코드가 새로 만든다.
+                 여기를 손대도 다음 호출에서 통째로 덮여 쓰나 마나다.
+       Output  — JSON 계약이다. 이걸 바꾸면 parseDraft 가 응답을 못 읽어 기능이 죽는다.
+     즉 '전문 편집' 이라 해도 실제로 편집할 수 있는 것은 규칙뿐이고, 규칙이 프롬프트에서
+     실제로 힘을 갖는 유일한 덩이이기도 하다.
+
+     안전장치(지어내기 금지·빈칸 강제)도 규칙에 있으므로 **사용자가 지울 수 있다.**
+     사용자가 그렇게 정했다(2026-09-05). 분량 상한만은 라우트가 코드로 다시 지킨다 —
+     그건 취향이 아니라 "넘으면 제출이 막힌다" 는 사실이라서다. */
+  const rules = String(customRules || '').trim() || restriction;
+
+  return `# Context\n${context}\n\n# Restriction\n${rules}\n\n# Output\n아래 JSON 형식으로만 답하라.\n${output}`;
+}
+
+/* 기본 규칙 전문 — 사용자가 '내 프롬프트' 를 만들 때 출발점으로 준다.
+   빈 칸에서 시작하면 무엇을 적어야 하는지 알 수 없고, 지우고 싶은 규칙이 무엇인지도
+   보이지 않는다. 맥락(회사·문항·STAR)은 사람마다 다르므로 대표값으로 한 벌 만든다. */
+function defaultRules({ limit = 1000, questionType = 'competency' } = {}) {
+  const t = QF.frameFor(questionType) || QF.frameFor('competency');
+  const prompt = buildPrompt({
+    company: '(지원 회사)', jobTitle: '(지원 직무)', competencies: ['(이 문항에 고른 역량)'],
+    quotes: ['(채용공고에서 뽑은 문장)'], reads: '', frame: '',
+    activities: [], question: t.label, limit,
+    picks: [{ name: '(고른 경험)', star: { S: '(상황)', T: '(과제)', A: '(행동)', R: '(결과)' } }],
+  });
+  /* Restriction 덩이만 잘라 준다 — 위 주석대로 Context·Output 은 편집 대상이 아니다. */
+  const m = prompt.match(/# Restriction\n([\s\S]*?)\n\n# Output/);
+  return m ? m[1] : '';
 }
 
 /* ══ 지원동기 문단 ══════════════════════════════════════════
@@ -660,5 +689,5 @@ function hasForeign(out) {
 module.exports = {
   buildPrompt, buildMotivePrompt, parseDraft, activityLine, starLines, starRules,
   hasForeign, copiedFromExample, COPY_MIN, SYSTEM, KIND_LABEL,
-  fitToLimit, lenOf,
+  fitToLimit, lenOf, defaultRules,
 };

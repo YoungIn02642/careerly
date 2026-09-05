@@ -286,7 +286,8 @@ window.DB = (() => {
   /* 보낼 몸통 한 벌. draftJd(한 번에)와 draftJdStream(진행률)이 **같은 것**을 보내야
      한다 — 두 곳에서 따로 만들면 스트리밍일 때만 재료가 빠지는 식으로 갈린다. */
   function draftBody({ competency, competencies = null, company = '', jobTitle = '', question = '',
-                       quotes = [], reads = '', frame = '', limit = 600, star = null, picks = null } = {}) {
+                       quotes = [], reads = '', frame = '', limit = 600, star = null, picks = null,
+                       customRules = '' } = {}) {
     /* 활동 목록은 고른 경험이 있을 때만 함께 보낸다 — 안 골랐는데 보내면 서버 프롬프트가
        그 활동을 끌어다 성취담을 지어냈다(사용자 지적 2026-09-01). 서버도 hasStar 로 한 번
        더 거르지만, 안 보내면 프롬프트가 짧아지고 의도도 분명해진다. */
@@ -301,7 +302,14 @@ window.DB = (() => {
       picks: Array.isArray(picks) ? picks : undefined,
       star,
       activities: hasExp ? (_mySpec?.activities || []) : [],
+      /* 사용자가 켜 둔 '내 프롬프트'. 없으면 서버가 기본 규칙을 쓴다. */
+      customRules: customRules || undefined,
     };
+  }
+
+  /* '내 프롬프트' 를 만들 때 출발점으로 쓸 기본 규칙 전문. */
+  async function jdPromptTemplate({ limit = 1000, type = 'competency' } = {}) {
+    return api('GET', `/api/jd/prompt-template?limit=${encodeURIComponent(limit)}&type=${encodeURIComponent(type)}`);
   }
 
   async function draftJd(args = {}) {
@@ -549,7 +557,7 @@ window.DB = (() => {
     createUser, login, logout, withdraw, changePassword, completeOnboarding, confirmPayment, updateUser, requestRoleChange, upsertSpec, saveActivityStar, getProfile, updateProfile,
     classifyCompany, suggestCompanies, suggestCerts, recommendCerts, suggestMajors, suggestUniversities, classifyMajor, jobCatalog,
     mentors,
-    analyzeCas, casFit, specFingerprint, coachJd, draftJd, motiveJd, guideJd, companyAnalysis, companyBusiness, companyIndustryTree, jdPosting,
+    analyzeCas, casFit, specFingerprint, coachJd, draftJd, motiveJd, guideJd, jdPromptTemplate, companyAnalysis, companyBusiness, companyIndustryTree, jdPosting,
     donationMeta, donate, donationStats, donationsMine,
     specupExams, specupActivities,
     insightCategories, insightFeatured, listInsights, getInsight, createInsight, updateInsight, deleteInsight,
