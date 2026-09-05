@@ -2127,6 +2127,11 @@ a.wf-btn { text-decoration: none; }
   border-radius: 7px; background: var(--wf-fill, #f4f5f7);
 }
 .wp-item.is-on { background: #f0ebff; }
+/* '기본 프롬프트' 줄 — 고치기·삭제 버튼이 없어 그 자리가 비므로 오른쪽 여백을 채운다.
+   우리가 들고 있는 규칙이라는 것을 옅은 점선 테두리로만 알린다(색을 더 쓰면 켠 줄과 헷갈린다). */
+.wp-item--builtin { border: 1px dashed var(--wf-hairline); background: transparent; }
+.wp-item--builtin.is-on { border-style: solid; border-color: transparent; background: #f0ebff; }
+.wp-item--builtin .wp-pick { padding-right: 12px; }
 .wp-pick {
   flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px;
   padding: 7px 8px; border: 0; background: transparent; cursor: pointer;

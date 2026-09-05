@@ -313,6 +313,10 @@
   const LS_PROMPTS = 'careerly_jd_prompts_v1';
   const PROMPT_MAX = 20;               // 목록이 길어지면 고르는 것이 일이 된다
   const PROMPT_LEN_MAX = 8000;         // 서버가 자르는 길이와 같게 — 갈리면 조용히 잘린다
+  /* '기본 프롬프트' 줄의 자리표. 저장되는 값은 여전히 activeId=null 이다 — 화면에만
+     한 줄로 세운다. 저장값을 이 문자열로 바꾸면 옛 저장(null)과 두 가지가 되어,
+     "무엇이 기본인가" 를 읽는 곳마다 갈린다. */
+  const DEFAULT_PROMPT_ID = '__default__';
 
   function loadPrompts() {
     try {
@@ -1775,37 +1779,54 @@
   }
 
   /* ── 사이드바의 '내 AI 프롬프트' 칸 (사용자 지시 2026-09-05) ────────────────
-     켠 것 하나에만 불이 들어온다. 다시 누르면 꺼져서 기본 규칙으로 돌아간다 —
-     끄는 방법이 따로 없으면 한번 만든 프롬프트에 갇힌다. */
+     ── '기본 프롬프트' 도 목록의 한 줄이다 (사용자 지시) ──────────────────────
+     예전에는 기본이 **목록에 없는 상태**(아무것도 안 켠 것)였다. 그래서 지금 무엇으로
+     쓰는지 알려면 아래 안내문을 읽어야 했고, 기본으로 돌아가려면 켜 둔 것을 '다시 눌러
+     끄는' 숨은 동작을 알아야 했다. 기본을 첫 줄로 올려 **라디오처럼 하나를 고르는**
+     목록으로 만든다 — 무엇이 켜져 있는지가 목록만 봐도 보이고, 되돌아갈 길도 보인다.
+
+     기본 줄은 고치기·삭제가 없다. 우리가 들고 있는 규칙이라 지울 수 있는 물건이 아니고,
+     고치고 싶으면 `+` 가 그 내용을 그대로 복사해 새 프롬프트로 만들어 준다.
+
+     ── 고른 것은 그대로 유지된다 ──
+     activeId 는 localStorage 에 남아 있고 이 변경은 **그리는 방법만** 바꾼다.
+     쓰던 프롬프트가 있으면 그것이 계속 켜진 채로 보인다(기본으로 되돌리지 않는다). */
   function paintPrompts() {
     const host = document.getElementById('write-prompts');
     if (!host) return;
     const { items, activeId } = loadPrompts();
-    const active = items.find(p => p.id === activeId);
+    /* activeId 가 지워진 것을 가리키면 기본이 켜진 것으로 본다 — 화면과 실제가 갈리지 않게. */
+    const active = items.find(p => p.id === activeId) || null;
+    const onDefault = !active;
+
+    const row = (on, id, name, builtin) => `
+      <div class="wp-item ${on ? 'is-on' : ''} ${builtin ? 'wp-item--builtin' : ''}">
+        <button type="button" class="wp-pick" data-prompt-pick="${esc(id)}"
+          title="${on ? '지금 이 프롬프트로 씁니다' : '이 프롬프트로 쓰기'}"
+          aria-pressed="${on}">
+          <i class="ti ti-${on ? 'circle-check-filled' : 'circle'}"></i>
+          <span class="wp-name">${esc(name)}</span>
+        </button>
+        ${builtin ? '' : `
+          <button type="button" class="wp-edit" data-prompt-edit="${esc(id)}" title="고치기">
+            <i class="ti ti-pencil"></i></button>
+          <button type="button" class="wp-del" data-prompt-del="${esc(id)}" title="삭제">
+            <i class="ti ti-x"></i></button>`}
+      </div>`;
 
     host.innerHTML = `
       <div class="wp-head">
-        <span class="wf-eyebrow">내 AI 프롬프트</span>
-        <button type="button" class="wp-add" data-prompt-new title="새 프롬프트 만들기">
+        <span class="wf-eyebrow">AI 프롬프트</span>
+        <button type="button" class="wp-add" data-prompt-new title="기본 프롬프트를 복사해 새로 만들기">
           <i class="ti ti-plus"></i></button>
       </div>
-      ${items.length ? `<div class="wp-list">
-        ${items.map(p => `
-          <div class="wp-item ${p.id === activeId ? 'is-on' : ''}">
-            <button type="button" class="wp-pick" data-prompt-pick="${esc(p.id)}"
-              title="${p.id === activeId ? '끄고 기본 규칙으로' : '이 프롬프트로 쓰기'}">
-              <i class="ti ti-${p.id === activeId ? 'circle-check-filled' : 'circle'}"></i>
-              <span class="wp-name">${esc(p.name)}</span>
-            </button>
-            <button type="button" class="wp-edit" data-prompt-edit="${esc(p.id)}" title="고치기">
-              <i class="ti ti-pencil"></i></button>
-            <button type="button" class="wp-del" data-prompt-del="${esc(p.id)}" title="삭제">
-              <i class="ti ti-x"></i></button>
-          </div>`).join('')}
-      </div>` : ''}
-      <p class="wp-note">${active
-        ? `<b>${esc(active.name)}</b> 로 초안을 씁니다.`
-        : '기본 규칙으로 초안을 씁니다. <b>+</b> 로 내 규칙을 만들 수 있어요.'}</p>`;
+      <div class="wp-list">
+        ${row(onDefault, DEFAULT_PROMPT_ID, '기본 프롬프트', true)}
+        ${items.map(p => row(p.id === activeId, p.id, p.name, false)).join('')}
+      </div>
+      <p class="wp-note">${onDefault
+        ? '<b>+</b> 를 누르면 기본 프롬프트를 복사해 내 규칙을 만들 수 있어요.'
+        : `<b>${esc(active.name)}</b> 로 초안을 씁니다.`}</p>`;
   }
 
   /* ── 프롬프트 만들기·고치기 모달 ────────────────────────────────────────────
@@ -2649,8 +2670,10 @@
       if (pick) {
         const state = loadPrompts();
         const id = pick.dataset.promptPick;
-        /* 같은 것을 다시 누르면 끈다 — 끄는 방법이 없으면 기본 규칙으로 못 돌아간다. */
-        state.activeId = state.activeId === id ? null : id;
+        /* 라디오처럼 하나만 켠다. '기본 프롬프트' 줄이 목록에 있으므로 **다시 눌러
+           끄는 동작은 없앴다** — 되돌아갈 길이 화면에 보이는데 숨은 토글까지 두면,
+           고른 것을 다시 눌렀을 때 꺼지는 것이 실수로 읽힌다. */
+        state.activeId = id === DEFAULT_PROMPT_ID ? null : id;
         savePrompts(state);
         paintPrompts();
       }
