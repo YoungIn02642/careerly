@@ -1849,11 +1849,6 @@
       </label>
       ${failed ? `<div class="co-note co-note--tight"><i class="ti ti-info-circle"></i>
         기본 규칙을 불러오지 못했어요. 빈 칸에서 직접 적으셔도 됩니다.</div>` : ''}
-      <div class="co-note co-note--tight"><i class="ti ti-info-circle"></i>
-        <b>회사·문항·내 STAR</b>와 <b>응답 형식</b>은 여기서 못 바꿔요 — 그 둘은 초안을 만들 때
-        코드가 늘 붙입니다. 여기서 정하는 것은 <b>AI 가 지킬 규칙</b>이에요.
-        <b>지어내기 금지·빈칸 남기기</b> 규칙을 지우면 그대로 제출할 수 있는 글이 나올 수 있어요.
-        분량 상한은 규칙과 상관없이 항상 지켜집니다.</div>
       <div class="wp-actions">
         <button type="button" class="wf-btn" data-prompt-close>취소</button>
         <button type="button" class="wf-btn wf-btn--primary" data-prompt-save>
