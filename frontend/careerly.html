@@ -919,6 +919,22 @@
   </div>
 </div>
 
+<!-- ══ 내 AI 프롬프트 만들기 모달 (사용자 지시 2026-09-05) ══
+     기본 규칙 대신 쓸 규칙을 사용자가 직접 적는다. 본문은 js/jd-coach.js 가
+     #jd-prompt-body 에 그린다 — 기본 규칙 전문을 미리 채워 출발점으로 준다.
+     Context(회사·문항·내 STAR)와 Output(JSON 계약)은 코드가 늘 붙이므로 여기 없다. -->
+<div class="modal-overlay" id="jd-prompt-modal">
+  <div class="modal modal--wide">
+    <div class="modal-head">
+      <div class="modal-head-l">
+        <div class="modal-title" id="jd-prompt-title">내 AI 프롬프트</div>
+      </div>
+      <button class="modal-close" data-prompt-close><i class="ti ti-x"></i></button>
+    </div>
+    <div class="modal-body" id="jd-prompt-body"></div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <!-- ══ 커리어 인사이트 (커뮤니티 게시판) ══
