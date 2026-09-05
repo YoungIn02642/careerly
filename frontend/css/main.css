@@ -1247,6 +1247,18 @@ input[readonly]:focus { border-color: var(--border); box-shadow: none; }
 }
 .mp-time:hover { border-color: var(--brand); color: var(--brand); }
 .mp-time.on { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 600; }
+/* 여러 날을 함께 고르면 '일부 날짜만 열린 시간' 이 생긴다 (사용자 지시 2026-09-05).
+   on 으로 뭉개면 한 번 눌렀을 때 열리는지 닫히는지 알 수 없어서 중간 상태를 따로 둔다 —
+   브랜드색을 옅게 깔고 테두리로만 채운 것과 구분한다. */
+.mp-time.some {
+  background: var(--brand-soft); border-color: var(--brand);
+  color: var(--brand-dark, var(--brand)); font-weight: 600;
+}
+/* 여러 날 선택 안내 — 시간 칸이 어디에 적용되는지 못 박는다 */
+.mp-times-note {
+  margin: -8px 0 12px; font-size: 12.5px; color: var(--brand-dark, var(--brand));
+}
+.mp-times-tip { margin: 10px 0 0; font-size: 12px; color: var(--text-m); }
 
 /* 달력만으로는 '다음 달에 뭘 열었더라'를 알 수 없어 아래에 목록으로 한 번 더 */
 .mp-avail-summary { margin-top: 16px; }

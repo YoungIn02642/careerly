@@ -37,7 +37,15 @@ window.MentorProfile = (() => {
   let mfMajors = [];      // KECO 1차 분류 목록 (칩으로 그린다)
   let availState = new Map();   // 'YYYY-MM-DD' → Set(시간)
   let calCursor = null;         // 달력이 보고 있는 달 (매월 1일)
-  let pickedDate = null;        // 시간대를 고르는 중인 날짜
+  /* ── 날짜를 여러 개 잡는다 (사용자 지시 2026-09-05) ────────────────────────────
+     예전에는 `pickedDate` 하나였다. 그런데 멘토가 실제로 하는 일은 "이번 달 평일
+     저녁을 다 연다" 처럼 **같은 시간대를 여러 날에 반복해 여는 것**인데, 날짜를 하나씩
+     골라 시간을 매번 다시 찍어야 했다. 10일이면 같은 일을 10번 한다.
+     이제 날짜를 여러 개 잡고 시간을 한 번만 찍으면 고른 날 전부에 적용된다.
+     마지막으로 누른 날짜(anchor)는 Shift 로 범위를 잡을 때의 시작점이다. */
+  let pickedDates = new Set();  // 시간대를 고르는 중인 날짜들 'YYYY-MM-DD'
+  let anchorDate = null;        // Shift 범위 선택의 기준점 (날짜·시간 각각)
+  let anchorTime = null;
 
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -77,7 +85,8 @@ window.MentorProfile = (() => {
       .filter(s => s?.date >= todayStr())
       .forEach(s => availState.set(s.date, new Set(s.times || [])));
     calCursor = firstOfMonth(new Date());
-    pickedDate = null;
+    pickedDates = new Set();
+    anchorDate = anchorTime = null;
 
     container.innerHTML = `
       <div class="sf-head">
@@ -138,7 +147,8 @@ window.MentorProfile = (() => {
            요일 반복이 아니라 날짜를 콕 집는 방식이다(profiles.availability 주석 참고). -->
       <div class="sf-section">
         <div class="sf-section-title"><i class="ti ti-calendar-event"></i>멘토링 가능 일정</div>
-        <p class="sf-sub">날짜를 고르고 가능한 시간을 선택하세요. 후배는 여기서 연 시간에만 신청할 수 있어요.</p>
+        <p class="sf-sub">날짜를 고르고 가능한 시간을 선택하세요. <b>여러 날·여러 시간을 한 번에</b>
+          고를 수 있어요(Shift 로 범위 선택). 후배는 여기서 연 시간에만 신청할 수 있어요.</p>
         <div class="mp-sched">
           <div class="mp-cal" id="mp-cal"></div>
           <div class="mp-times" id="mp-times"></div>
@@ -188,6 +198,20 @@ window.MentorProfile = (() => {
     return addMonths(firstOfMonth(new Date()), MONTHS_AHEAD);
   }
 
+  /* 지금 달력에서 고를 수 있는 날짜(오늘 이후)를 순서대로. Shift 범위가 이 목록을 쓴다 —
+     달력에 안 보이는 날이 범위에 섞이면 선택 목록에만 남고 화면에는 안 나온다. */
+  function calendarDates() {
+    const y = calCursor.getFullYear(), m = calCursor.getMonth();
+    const days = new Date(y, m + 1, 0).getDate();
+    const today = todayStr();
+    const out = [];
+    for (let d = 1; d <= days; d++) {
+      const date = ymd(new Date(y, m, d));
+      if (date >= today) out.push(date);
+    }
+    return out;
+  }
+
   // ── 달력 ────────────────────────────────────────────────────
   function paintCalendar() {
     const host = document.getElementById('mp-cal');
@@ -210,7 +234,7 @@ window.MentorProfile = (() => {
       const cls = ['mp-cal-day'];
       if (past) cls.push('past');
       if (n) cls.push('has');
-      if (date === pickedDate) cls.push('on');
+      if (pickedDates.has(date)) cls.push('on');
       /* 몇 시간 열었는지는 점 하나로만 알린다. 숫자를 겹쳐 쓰면 날짜와 섞여 읽힌다 —
          정확한 개수는 아래 '열어 둔 일정' 목록에서 본다.
          title 로는 남겨서 마우스를 올리면 알 수 있게 한다. */
@@ -242,29 +266,65 @@ window.MentorProfile = (() => {
     const host = document.getElementById('mp-times');
     if (!host) return;
 
-    if (!pickedDate) {
+    if (!pickedDates.size) {
       host.innerHTML = `<div class="mp-times-empty">
         <i class="ti ti-calendar-plus"></i>
-        <span>왼쪽 달력에서 날짜를 먼저 골라주세요.</span>
+        <span>왼쪽 달력에서 날짜를 골라주세요. 여러 날을 함께 고를 수 있어요.</span>
       </div>`;
       return;
     }
-    const picked = availState.get(pickedDate) || new Set();
-    const d = new Date(pickedDate);
+
+    const dates = [...pickedDates].sort();
+    /* 고른 날이 여럿이면 시간 칸은 세 상태다 — 전부 열림(on) · 일부만 열림(some) · 안 열림.
+       'some' 을 'on' 으로 뭉개면 한 번 눌렀을 때 열리는지 닫히는지 알 수 없다. */
+    const countOf = t => dates.filter(d => availState.get(d)?.has(t)).length;
+    const label = dates.length === 1
+      ? (() => { const d = new Date(dates[0]);
+          return `${d.getMonth() + 1}월 ${d.getDate()}일 (${WEEKDAYS[d.getDay()]})`; })()
+      : `${dates.length}일 선택됨`;
+    const openTotal = dates.reduce((n, d) => n + (availState.get(d)?.size || 0), 0);
 
     host.innerHTML = `
       <div class="mp-times-head">
-        <b>${d.getMonth() + 1}월 ${d.getDate()}일 (${WEEKDAYS[d.getDay()]})</b>
+        <b>${esc(label)}</b>
         <span class="mp-times-sep">|</span>
-        <span class="mp-times-sub">${picked.size ? `${picked.size}개 선택됨` : '시간을 선택해주세요'}</span>
+        <span class="mp-times-sub">${openTotal ? `시간 ${openTotal}칸 열림` : '시간을 선택해주세요'}</span>
         <button type="button" class="sf-link-btn" id="mp-times-clear"
-          ${picked.size ? '' : 'hidden'}>전부 해제</button>
+          ${openTotal ? '' : 'hidden'}>전부 해제</button>
       </div>
+      ${dates.length > 1
+        ? `<p class="mp-times-note">고른 <b>${dates.length}일 전부</b>에 함께 적용돼요.</p>` : ''}
       <div class="mp-time-grid">
-        ${HOURS.map(t => `
-          <button type="button" class="mp-time${picked.has(t) ? ' on' : ''}" data-time="${t}">${t}</button>
-        `).join('')}
-      </div>`;
+        ${HOURS.map(t => {
+          const n = countOf(t);
+          const cls = n === 0 ? '' : (n === dates.length ? ' on' : ' some');
+          return `<button type="button" class="mp-time${cls}" data-time="${t}"
+            ${n && n < dates.length ? `title="${n}/${dates.length}일 열림"` : ''}>${t}</button>`;
+        }).join('')}
+      </div>
+      <p class="mp-times-tip">Shift 를 누른 채 누르면 범위로 한 번에 고를 수 있어요.</p>`;
+  }
+
+  /* 시간 하나를 고른 날짜 **전부**에 적용한다. 하나라도 안 열린 날이 있으면 전부 열고,
+     전부 열려 있으면 전부 닫는다 — 부분 상태에서 한 번 눌렀을 때 '맞추는' 쪽이
+     기대에 가깝다(체크박스 트리의 관행과 같다). */
+  function applyTimes(times, dates = [...pickedDates]) {
+    if (!dates.length || !times.length) return;
+    const allOn = times.every(t => dates.every(d => availState.get(d)?.has(t)));
+    for (const d of dates) {
+      const set = availState.get(d) || new Set();
+      for (const t of times) { if (allOn) set.delete(t); else set.add(t); }
+      /* 시간이 하나도 안 남으면 날짜 자체를 지운다 — 빈 날짜가 남으면
+         달력에 표시만 되고 신청은 못 하는 날이 된다(서버도 같은 규칙). */
+      if (set.size) availState.set(d, set); else availState.delete(d);
+    }
+  }
+
+  /* 두 값 사이(양끝 포함)를 목록 순서대로 잘라 준다 — Shift 범위 선택이 쓴다. */
+  function rangeOf(list, a, b) {
+    const i = list.indexOf(a), j = list.indexOf(b);
+    if (i < 0 || j < 0) return [b].filter(Boolean);
+    return list.slice(Math.min(i, j), Math.max(i, j) + 1);
   }
 
   /* 아래 요약 — 어느 날 몇 시간을 열어뒀는지 한눈에. 달력만으로는
@@ -394,26 +454,34 @@ window.MentorProfile = (() => {
 
       const day = e.target.closest('[data-date]');
       if (day && !day.disabled) {
-        /* 같은 날을 다시 누르면 닫는다 — 시간표를 치우는 방법이 따로 없으면 답답하다. */
-        pickedDate = pickedDate === day.dataset.date ? null : day.dataset.date;
+        const date = day.dataset.date;
+        /* Shift 는 기준점부터 여기까지를 한 번에 잡는다. 지난 날짜는 고를 수 없으므로
+           범위 안에서도 걸러 낸다 — 안 그러면 달력에 없는 날이 선택 목록에 남는다. */
+        if (e.shiftKey && anchorDate) {
+          const all = calendarDates();
+          for (const d of rangeOf(all, anchorDate, date)) pickedDates.add(d);
+        } else if (pickedDates.has(date)) {
+          /* 같은 날을 다시 누르면 선택에서 뺀다 — 시간표를 치우는 방법이 따로 없으면 답답하다. */
+          pickedDates.delete(date);
+        } else {
+          pickedDates.add(date);
+        }
+        anchorDate = date;
         paintCalendar(); paintTimes();
         return;
       }
 
       const time = e.target.closest('[data-time]');
-      if (time && pickedDate) {
-        const set = availState.get(pickedDate) || new Set();
+      if (time && pickedDates.size) {
         const t = time.dataset.time;
-        if (set.has(t)) set.delete(t); else set.add(t);
-        /* 시간이 하나도 안 남으면 날짜 자체를 지운다 — 빈 날짜가 남으면
-           달력에 표시만 되고 신청은 못 하는 날이 된다(서버도 같은 규칙). */
-        if (set.size) availState.set(pickedDate, set); else availState.delete(pickedDate);
+        applyTimes(e.shiftKey && anchorTime ? rangeOf(HOURS, anchorTime, t) : [t]);
+        anchorTime = t;
         paintSchedule();
         return;
       }
 
-      if (e.target.closest('#mp-times-clear') && pickedDate) {
-        availState.delete(pickedDate);
+      if (e.target.closest('#mp-times-clear') && pickedDates.size) {
+        for (const d of pickedDates) availState.delete(d);
         paintSchedule();
       }
     });
@@ -423,7 +491,8 @@ window.MentorProfile = (() => {
       if (!btn) return;
       const date = btn.dataset.availRemove;
       availState.delete(date);
-      if (pickedDate === date) pickedDate = null;
+      pickedDates.delete(date);
+      if (anchorDate === date) anchorDate = null;
       paintSchedule();
     });
 
