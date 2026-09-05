@@ -46,6 +46,7 @@ const COLUMNS = [
   ['profiles',   'timeline',    `JSON NULL COMMENT '경력 타임라인'`],
   ['profiles',   'modes',       `JSON NULL COMMENT '멘토링 가능 형식'`],
   ['insight_posts', 'is_notice', `BOOLEAN NOT NULL DEFAULT FALSE COMMENT '공지글 — 관리자만, 목록 최상단 고정'`],
+  ['insight_posts', 'prompt_text', `TEXT NULL COMMENT 'AI 프롬프트 글의 프롬프트 원문 (다른 카테고리는 NULL)'`],
 ];
 
 const INDEXES = [

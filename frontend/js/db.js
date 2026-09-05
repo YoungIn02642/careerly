@@ -421,11 +421,18 @@ window.DB = (() => {
     return api('GET', '/api/insights/' + encodeURIComponent(id));
   }
   /* isNotice 는 관리자만 의미가 있다 — 서버가 권한을 확인하고, 아니면 조용히 무시한다. */
-  async function createInsight({ category, title, body, isNotice = false }) {
-    return api('POST', '/api/insights', { category, title, body, isNotice });
+  /* promptText 는 'AI 프롬프트' 카테고리에서만 뜻이 있다 — 서버가 다른 카테고리면
+     버린다(insight-prompt.js normalizePrompt). */
+  async function createInsight({ category, title, body, isNotice = false, promptText }) {
+    return api('POST', '/api/insights', { category, title, body, isNotice, promptText });
   }
-  async function updateInsight(id, { title, body, isNotice }) {
-    return api('PUT', '/api/insights/' + encodeURIComponent(id), { title, body, isNotice });
+  async function updateInsight(id, { title, body, isNotice, promptText }) {
+    return api('PUT', '/api/insights/' + encodeURIComponent(id), { title, body, isNotice, promptText });
+  }
+  /* '내 프롬프트로 담기' — 실제 담기는 브라우저(JdCoach.addPrompt)가 하고,
+     서버는 '가져간 사람 수'만 센다. 같은 사람이 다시 담아도 한 번이다. */
+  async function copyInsightPrompt(id) {
+    return api('POST', '/api/insights/' + encodeURIComponent(id) + '/copy');
   }
   async function deleteInsight(id) {
     return api('DELETE', '/api/insights/' + encodeURIComponent(id));
@@ -576,6 +583,7 @@ window.DB = (() => {
     donationMeta, donate, donationStats, donationsMine,
     specupExams, specupActivities,
     insightCategories, insightFeatured, listInsights, getInsight, createInsight, updateInsight, deleteInsight,
+    copyInsightPrompt,
     addInsightComment, deleteInsightComment,
     seedDemo, seedRandom, clearAll, deleteUser,
   };

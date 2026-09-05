@@ -36,6 +36,13 @@ window.Insight = (() => {
   let currentPostId = null;
   let detailData = null;    // { post, comments }
   let writeError = '';
+  /* 글쓰기 칸에 적던 값. 오류가 나면 화면을 다시 그리는데, 그때 사라지면 안 된다 —
+     프롬프트 원문은 수천 자짜리라 다시 붙여넣게 하면 그 자리에서 포기한다. */
+  let writeDraft = { category: '', title: '', body: '', promptText: '' };
+
+  /* AI 프롬프트 카테고리 — 서버(routes/insight.js CATEGORIES)와 같은 id 여야 한다.
+     라벨은 서버에서 받은 것을 쓰고, 여기서는 '이 글이 프롬프트인가' 만 본다. */
+  const PROMPT_CAT = 'prompt';
 
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const fmtDate = d => (d || '').slice(0, 16);
@@ -147,6 +154,8 @@ window.Insight = (() => {
             <i class="ti ti-x"></i> 검색 해제</button>
         </div>` : ''}
 
+      ${category === PROMPT_CAT ? promptIntroHtml() : ''}
+
       <div class="insight-list">
         ${listData.posts.length ? listData.posts.map(postRowHtml).join('') : emptyListHtml()}
       </div>
@@ -173,8 +182,25 @@ window.Insight = (() => {
           <span>${esc(p.authorName)}</span>
           <span>${fmtDate(p.createdAt)}</span>
           <span><i class="ti ti-eye"></i> ${p.viewCount}</span>
+          <!-- 담아 간 사람 수. 조회수와 달리 '실제로 써 보겠다'는 뜻이라
+               프롬프트를 고르는 근거가 된다. 0이면 안 보여준다 — 새 글마다
+               '0'이 붙어 있으면 목록이 실패한 것들의 나열처럼 보인다. -->
+          ${p.hasPrompt && p.copyCount
+            ? `<span title="담아 간 사람"><i class="ti ti-download"></i> ${p.copyCount}</span>` : ''}
         </span>
       </button>`;
+  }
+
+  /* 프롬프트 게시판이 무엇을 하는 곳인지 한 번 말해 준다. 다른 카테고리와 달리
+     '글을 읽는 곳'이 아니라 **가져다 쓰는 곳**이라, 모르면 그냥 글로만 읽고 나간다. */
+  function promptIntroHtml() {
+    return `<div class="insight-prompt-intro">
+      <b><i class="ti ti-sparkles"></i> AI 프롬프트 공유</b>
+      <p>자소서 초안을 쓸 때 AI 에게 주는 <b>규칙</b>을 서로 나누는 칸이에요.
+        마음에 드는 글에서 <b>내 프롬프트로 담기</b>를 누르면
+        <b>회사·자소서 → 자소서 코치</b>의 ‘내 AI 프롬프트’ 목록에 그대로 들어가고,
+        AI 초안이 그 규칙으로 나옵니다.</p>
+    </div>`;
   }
 
   function emptyListHtml() {
@@ -236,6 +262,7 @@ window.Insight = (() => {
              아는 문법만 태그로 바꾼다 — 여기서 esc() 를 한 번 더 씌우면 태그가 글자로 보인다.
              안전성의 근거는 test/markdown.test.js 의 XSS 절이다. -->
         <div class="insight-post-body insight-md">${Markdown.render(post.body)}</div>
+        ${promptBoxHtml(post, user)}
         ${mine ? `<div class="insight-post-actions">
           <button class="topbar-link" id="insight-delete-post"><i class="ti ti-trash"></i> 삭제</button>
         </div>` : ''}
@@ -255,6 +282,35 @@ window.Insight = (() => {
     `;
   }
 
+  /* ── 프롬프트 원문 상자 ────────────────────────────────────────
+     본문(설명)과 **다른 칸**이다. 여기 있는 글자가 그대로 AI 규칙이 되므로
+     마크다운으로 그리지 않고 원문 그대로 보여준다 — `**굵게**` 가 굵어져 버리면
+     담아 간 규칙과 화면에 보이던 글이 달라진다.
+
+     담기는 로그인한 사람만 — 담아 간 수를 '사람 수'로 세기 때문이다
+     (routes/insight.js /copy 주석). 비로그인은 복사만 한다. */
+  function promptBoxHtml(post, user) {
+    if (!post.promptText) return '';
+    return `
+      <section class="insight-prompt-box">
+        <div class="insight-prompt-head">
+          <b><i class="ti ti-terminal-2"></i> 프롬프트 원문</b>
+          <span class="insight-prompt-count">${post.promptText.length.toLocaleString()}자${
+            post.copyCount ? ` · ${post.copyCount}명이 담아 갔어요` : ''}</span>
+        </div>
+        <pre class="insight-prompt-text" id="insight-prompt-text">${esc(post.promptText)}</pre>
+        <div class="insight-prompt-actions">
+          ${user
+            ? `<button class="btn-brand" id="insight-prompt-take">
+                 <i class="ti ti-download"></i> 내 프롬프트로 담기</button>`
+            : `<span class="insight-login-hint">로그인하면 내 프롬프트로 담을 수 있어요</span>`}
+          <button class="topbar-link" id="insight-prompt-copy"><i class="ti ti-copy"></i> 복사</button>
+        </div>
+        <p class="insight-prompt-note">담으면 <b>지금부터 쓰는 모든 자소서 초안</b>에 이 규칙이 적용돼요
+          (자소서 코치 사이드바에서 언제든 끄거나 바꿀 수 있어요).</p>
+      </section>`;
+  }
+
   function commentHtml(c, user) {
     const mine = user && user.id === c.authorId;
     return `
@@ -272,7 +328,23 @@ window.Insight = (() => {
     if (!DB.currentUser()) return;
     view = 'write';
     writeError = '';
+    /* 지금 보고 있던 카테고리로 시작한다 — 프롬프트 탭에서 글쓰기를 누른 사람은
+       프롬프트를 올리려는 것이다. '전체'였으면 목록의 첫 카테고리로 떨어진다. */
+    writeDraft = { category: category || (categories[0]?.id || ''), title: '', body: '', promptText: '' };
     render();
+  }
+
+  /* 화면에 적힌 값을 state 로 걷어 온다. 다시 그리기 전에 부른다 —
+     안 그러면 오류 한 번에 쓰던 글이 통째로 사라진다. */
+  function readWriteForm() {
+    const g = id => document.getElementById(id);
+    writeDraft = {
+      category: g('insight-write-cat')?.value || writeDraft.category,
+      title: g('insight-write-title')?.value ?? writeDraft.title,
+      body: g('insight-write-body')?.value ?? writeDraft.body,
+      promptText: g('insight-write-prompt')?.value ?? writeDraft.promptText,
+    };
+    return writeDraft;
   }
 
   function writeHtml() {
@@ -283,10 +355,16 @@ window.Insight = (() => {
       </div>
       <div class="insight-write">
         <select id="insight-write-cat">
-          ${categories.map(c => `<option value="${esc(c.id)}">${esc(c.label)}</option>`).join('')}
+          ${categories.map(c => `<option value="${esc(c.id)}" ${
+            writeDraft.category === c.id ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}
         </select>
-        <input type="text" id="insight-write-title" maxlength="200" placeholder="제목" />
-        <textarea id="insight-write-body" rows="10" placeholder="내용을 적어주세요"></textarea>
+        <input type="text" id="insight-write-title" maxlength="200" placeholder="제목"
+               value="${esc(writeDraft.title)}" />
+        <textarea id="insight-write-body" rows="10"
+          placeholder="${writeDraft.category === PROMPT_CAT
+            ? '이 프롬프트를 왜 만들었는지, 어떤 문항에 잘 듣는지 적어주세요. (원문은 아래 칸에)'
+            : '내용을 적어주세요'}">${esc(writeDraft.body)}</textarea>
+        ${writeDraft.category === PROMPT_CAT ? promptFieldHtml() : ''}
         <!-- 쓸 수 있는 문법을 적어 둔다. 마크다운이 되는지 모르면 아무도 안 쓰고,
              모르고 쓴 별표가 굵게로 바뀌면 그건 그것대로 놀란다. -->
         <p class="insight-md-hint">
@@ -308,18 +386,83 @@ window.Insight = (() => {
     `;
   }
 
+  /* 프롬프트 원문 칸. 본문과 가르는 이유는 insight-prompt.js 머리주석에 있다 —
+     여기 적은 글자가 그대로 AI 규칙이 되므로 설명과 섞이면 안 된다.
+
+     ── 내 것부터 꺼내 오게 한다 ──
+     공유하려면 자기 프롬프트를 어딘가에서 복사해 와야 하는데, 그것은 자소서 코치
+     사이드바에 있다(localStorage). 목록에서 골라 채우면 그 왕복이 없어진다. */
+  function promptFieldHtml() {
+    const mine = (window.JdCoach?.myPrompts?.() || []);
+    const max = window.JdCoach?.PROMPT_LEN_MAX || 8000;
+    return `
+      <div class="insight-prompt-field">
+        <div class="insight-prompt-field-h">
+          <b>프롬프트 원문</b>
+          ${mine.length ? `
+            <select id="insight-prompt-mine" class="insight-prompt-mine">
+              <option value="">내 프롬프트에서 불러오기…</option>
+              ${mine.map((p, i) => `<option value="${i}">${esc(p.name)}${p.active ? ' (지금 켜짐)' : ''}</option>`).join('')}
+            </select>` : ''}
+        </div>
+        <textarea id="insight-write-prompt" rows="12" maxlength="${max}"
+          placeholder="AI 가 초안을 쓸 때 지킬 규칙을 그대로 붙여넣어 주세요.">${esc(writeDraft.promptText)}</textarea>
+        <p class="insight-md-hint">이 칸은 <b>있는 그대로</b> 보이고, 담아 가는 사람의
+          ‘내 AI 프롬프트’에 그대로 들어갑니다 — 마크다운으로 꾸미지 않아도 돼요.</p>
+      </div>`;
+  }
+
   async function submitPost() {
-    const cat = document.getElementById('insight-write-cat').value;
-    const title = document.getElementById('insight-write-title').value.trim();
-    const body = document.getElementById('insight-write-body').value.trim();
+    const d = readWriteForm();
     const isNotice = Boolean(document.getElementById('insight-write-notice')?.checked);
     try {
-      const { post } = await DB.createInsight({ category: cat, title, body, isNotice });
+      const { post } = await DB.createInsight({
+        category: d.category,
+        title: d.title.trim(),
+        body: d.body.trim(),
+        isNotice,
+        promptText: d.promptText.trim(),
+      });
       await openPost(post.id);
     } catch (e) {
       writeError = e.message;
       render();
     }
+  }
+
+  /* ── 담기 ────────────────────────────────────────────────────
+     localStorage 는 JdCoach 가 소유한다 — 여기서 키를 직접 만지지 않는다
+     (jd-coach.js addPrompt 머리주석). 서버에는 '가져간 사람'만 적는다.
+
+     세는 것이 실패해도 담기는 성공이다. 담긴 건 이미 브라우저에 들어갔는데
+     '실패' 라고 말하면 사용자가 한 번 더 누른다. */
+  async function takePrompt() {
+    const post = detailData?.post;
+    if (!post?.promptText) return;
+    /* 스크립트 순서상 있어야 정상이다(careerly.html 에서 jd-coach.js 가 먼저 뜬다).
+       그래도 없을 때 조용히 아무 일도 안 하면 버튼이 고장 난 것으로 보인다. */
+    if (!window.JdCoach?.addPrompt) {
+      alert('지금은 담을 수 없어요. 새로고침한 뒤 다시 시도해 주세요.');
+      return;
+    }
+    const r = window.JdCoach.addPrompt({ name: post.title, text: post.promptText });
+    if (!r.ok) {
+      alert(r.reason === 'full'
+        ? `내 프롬프트는 ${r.max}개까지예요. 자소서 코치에서 안 쓰는 것을 지우고 다시 담아주세요.`
+        : '담지 못했어요.');
+      return;
+    }
+    const msg = r.reason === 'exists'
+      ? `이미 담아 둔 프롬프트예요 — ‘${r.name}’ 을 켰습니다.`
+      : `‘${r.name}’ 으로 담았어요. 지금부터 AI 초안이 이 규칙으로 나옵니다.`;
+    if (typeof toast === 'function') toast(msg, { icon: false });
+    else alert(msg);
+
+    try {
+      const { copyCount } = await DB.copyInsightPrompt(post.id);
+      detailData.post.copyCount = copyCount;
+      render();
+    } catch { /* 세는 데 실패해도 담긴 건 담긴 것이다 */ }
   }
 
   // ── 이벤트 위임 ─────────────────────────────────────────────
@@ -360,6 +503,53 @@ window.Insight = (() => {
       if (n >= 1) { page = n; loadList(); }
     }));
     box.querySelectorAll('[data-open]').forEach(btn => btn.addEventListener('click', () => openPost(btn.dataset.open)));
+
+    /* 카테고리를 바꾸면 화면이 바뀐다(프롬프트 칸이 생기고 사라진다). 다시 그리기
+       전에 적던 값을 걷어 온다 — 카테고리를 잘못 골랐다가 되돌릴 때 제목·본문이
+       사라지면 안 된다. 프롬프트 원문은 칸이 없어져도 state 에 남겨 두고, 프롬프트가
+       아닌 카테고리로 저장하면 서버가 버린다(normalizePrompt). */
+    box.querySelector('#insight-write-cat')?.addEventListener('change', () => {
+      readWriteForm();
+      render();
+    });
+
+    /* 내 프롬프트에서 불러오기 — 적어 둔 것이 있으면 덮기 전에 묻는다. */
+    box.querySelector('#insight-prompt-mine')?.addEventListener('change', e => {
+      const mine = window.JdCoach?.myPrompts?.() || [];
+      const pick = mine[Number(e.target.value)];
+      e.target.value = '';
+      if (!pick) return;
+      const ta = document.getElementById('insight-write-prompt');
+      if (!ta) return;
+      if (ta.value.trim() && !confirm('프롬프트 칸에 적어 둔 글이 있어요. 불러온 것으로 바꿀까요?')) return;
+      ta.value = pick.text;
+      /* 제목이 비어 있으면 프롬프트 이름을 넣어 준다 — 제목을 안 적어 저장이
+         막히는 일이 흔하고, 이름이 곧 그 프롬프트를 부르는 말이다. */
+      const title = document.getElementById('insight-write-title');
+      if (title && !title.value.trim()) title.value = pick.name;
+      readWriteForm();
+    });
+
+    box.querySelector('#insight-prompt-take')?.addEventListener('click', takePrompt);
+    box.querySelector('#insight-prompt-copy')?.addEventListener('click', async () => {
+      const text = detailData?.post?.promptText || '';
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        if (typeof toast === 'function') toast('프롬프트를 복사했어요', { icon: false });
+      } catch {
+        /* 클립보드를 막아 둔 브라우저(비 HTTPS·권한 거부)가 있다. 조용히 실패하면
+           눌러도 아무 일이 없는 것으로 보이므로, 직접 고를 수 있게 선택해 준다. */
+        const pre = document.getElementById('insight-prompt-text');
+        if (pre) {
+          const r = document.createRange();
+          r.selectNodeContents(pre);
+          const sel = window.getSelection();
+          sel.removeAllRanges(); sel.addRange(r);
+        }
+        alert('브라우저가 복사를 막았어요. 선택해 둔 글을 Ctrl+C 로 복사해 주세요.');
+      }
+    });
 
     document.getElementById('insight-write-open')?.addEventListener('click', openWrite);
     document.getElementById('insight-write-cancel')?.addEventListener('click', () => { view = 'list'; loadList(); });

@@ -345,6 +345,53 @@
     return '내 프롬프트';
   }
 
+  /* ── 남이 공유한 프롬프트를 내 목록에 담는다 (사용자 지시 2026-09-05) ────────
+     커리어 인사이트의 'AI 프롬프트' 게시판이 부른다.
+
+     ── 왜 게시판이 localStorage 를 직접 안 만지나 ──
+     저장 형식(items/activeId·이름 규칙·개수 상한)을 아는 곳은 여기 하나여야 한다.
+     같은 키를 두 파일이 각자 파싱하면 형식을 바꿀 때 한쪽만 고쳐진다 —
+     초안 저장소를 drafts.js 로 옮길 때 겪은 그대로다(draftStore 머리주석).
+
+     ── 같은 글을 두 번 담아도 하나다 ──
+     본문이 똑같으면 이미 있는 것을 켜고 끝낸다. 목록에 같은 규칙이 여러 줄 쌓이면
+     어느 것이 무엇인지 알 수 없게 된다.
+
+     ── 담으면 켠다 ──
+     담는 이유가 '쓰려고' 라서다(만들기와 같은 규칙). 다만 프롬프트는 **전역**이라
+     모든 자소서에 걸린다 — 부르는 쪽이 그 사실을 사용자에게 말해야 한다. */
+  function addPrompt({ name, text } = {}) {
+    const body = String(text || '').trim();
+    if (!body) return { ok: false, reason: 'empty' };
+
+    const state = loadPrompts();
+    const same = state.items.find(p => p.text.trim() === body.slice(0, PROMPT_LEN_MAX).trim());
+    if (same) {
+      state.activeId = same.id;
+      savePrompts(state);
+      paintPrompts();
+      return { ok: true, reason: 'exists', id: same.id, name: same.name };
+    }
+    if (state.items.length >= PROMPT_MAX) return { ok: false, reason: 'full', max: PROMPT_MAX };
+
+    const id = `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    const label = String(name || '').trim().slice(0, 40) || nextPromptName(state.items);
+    state.items.push({ id, name: label, text: body.slice(0, PROMPT_LEN_MAX) });
+    state.activeId = id;
+    savePrompts(state);
+    /* 작성 화면이 떠 있으면 사이드바를 그 자리에서 고쳐 그린다. 없으면 아무 일도
+       안 한다(paintPrompts 가 host 없으면 그냥 나간다) — 다음에 들어갈 때 그려진다. */
+    paintPrompts();
+    return { ok: true, reason: 'added', id, name: label };
+  }
+
+  /* 지금 내가 가진 프롬프트 목록(이름·본문). 게시판의 '내 프롬프트 불러오기' 가
+     읽는다 — 공유하려면 먼저 자기 것을 꺼내 와야 한다. */
+  function myPrompts() {
+    const { items, activeId } = loadPrompts();
+    return items.map(p => ({ id: p.id, name: p.name, text: p.text, active: p.id === activeId }));
+  }
+
   function loadCPicks() {
     try { return JSON.parse(localStorage.getItem(LS_CPICK)) || {}; } catch { return {}; }
   }
@@ -3357,6 +3404,8 @@
     cPicks, toggleCPick, resolveComps, quotesFor, C_PICK_MAX,
     /* 회사별 분석 보관 (test/jd-analysis.test.js) */
     saveAnalysis, analysisOf, forgetAnalysis, ANALYSIS_MAX,
+    /* 프롬프트 공유 게시판(insight.js)이 쓰는 두 개 — 저장 형식을 아는 곳은 여기뿐이다 */
+    addPrompt, myPrompts, PROMPT_LEN_MAX,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;   // node 테스트용

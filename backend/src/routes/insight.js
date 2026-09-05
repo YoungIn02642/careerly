@@ -6,6 +6,7 @@ const express = require('express');
 const { nanoid } = require('nanoid');
 const { query, queryOne } = require('../mysql');
 const FEATURED = require('../insight-featured');
+const PROMPT = require('../insight-prompt');
 
 const router = express.Router();
 
@@ -14,6 +15,10 @@ const CATEGORIES = [
   { id: 'jobinfo', label: '취업정보' },
   { id: 'review',  label: '후기' },
   { id: 'qna',     label: '질문' },
+  /* AI 프롬프트 공유 (사용자 지시 2026-09-05). 다른 카테고리와 달리 글이
+     **프롬프트 원문**을 같이 싣고, 읽는 사람은 그것을 자소서 코치의
+     '내 AI 프롬프트'로 바로 담아 간다 — insight-prompt.js 머리주석. */
+  { id: PROMPT.PROMPT_CATEGORY, label: 'AI 프롬프트' },
 ];
 const categoryIds = new Set(CATEGORIES.map(c => c.id));
 
@@ -39,6 +44,11 @@ function toPostSummary(r) {
     viewCount: r.view_count,
     commentCount: Number(r.comment_count || 0),
     isNotice: Boolean(r.is_notice),
+    /* 목록에서는 원문을 안 보낸다 — 8,000자짜리 규칙이 스무 줄이면 목록 응답이
+       그것만으로 수십만 자가 된다. '프롬프트 글인가'와 '몇 사람이 담아 갔나'만
+       실어서 줄에 배지를 붙인다. */
+    hasPrompt: Boolean(r.prompt_text),
+    copyCount: Number(r.copy_count || 0),
     createdAt: r.created_at,
   };
 }
@@ -53,6 +63,11 @@ function toPostDetail(r) {
     authorName: displayName(r),
     viewCount: r.view_count,
     isNotice: Boolean(r.is_notice),
+    /* 원문은 상세에서만 내려간다. null 이면 화면이 '담기' 칸을 아예 안 그린다 —
+       프롬프트 카테고리인데 원문이 없는 글은 만들 수 없지만(normalizePrompt),
+       옛 글이나 카테고리를 고친 글에서 빈 상자를 그리지 않게 하는 값이 이거다. */
+    promptText: r.prompt_text || null,
+    copyCount: Number(r.copy_count || 0),
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -182,7 +197,8 @@ router.get('/', ah(async (req, res) => {
 
   const rows = await query(
     `SELECT p.*, u.nickname AS author_nickname, u.name AS author_name,
-            (SELECT COUNT(*) FROM insight_comments c WHERE c.post_id = p.id) AS comment_count
+            (SELECT COUNT(*) FROM insight_comments c WHERE c.post_id = p.id) AS comment_count,
+            (SELECT COUNT(*) FROM insight_prompt_copies pc WHERE pc.post_id = p.id) AS copy_count
        FROM insight_posts p
        JOIN users u ON u.id = p.user_id
        ${where}
@@ -200,7 +216,8 @@ router.get('/', ah(async (req, res) => {
    '읽혔다'를 나타내는 값이 이거 하나다. 댓글은 오래된 순으로 같이 준다. */
 router.get('/:id', ah(async (req, res) => {
   const row = await queryOne(
-    `SELECT p.*, u.nickname AS author_nickname, u.name AS author_name
+    `SELECT p.*, u.nickname AS author_nickname, u.name AS author_name,
+            (SELECT COUNT(*) FROM insight_prompt_copies pc WHERE pc.post_id = p.id) AS copy_count
        FROM insight_posts p JOIN users u ON u.id = p.user_id
       WHERE p.id=?`, [req.params.id]);
   if (!row) return res.status(404).json({ error: '글을 찾을 수 없습니다.' });
@@ -230,6 +247,11 @@ router.post('/', requireAuth, ah(async (req, res) => {
     return res.status(400).json({ error: '내용을 입력해주세요.' });
   }
 
+  /* 'AI 프롬프트' 글은 프롬프트 원문을 같이 받는다. 다른 카테고리면 null 로 떨어진다
+     — 검사와 문구는 insight-prompt.js 한 곳에 있다(만들기·고치기가 같은 말을 해야 한다). */
+  const p = PROMPT.normalizePrompt(category, req.body?.promptText);
+  if (!p.ok) return res.status(400).json({ error: p.error });
+
   /* 공지는 관리자만. 일반 회원이 isNotice 를 보내도 조용히 무시한다 —
      막았다고 오류를 돌려주면 "공지로 올릴 수 있는데 권한만 없다"는 정보를 주게 되고,
      화면에는 그 선택지가 아예 없어서 정상 경로로는 올 수 없는 값이다. */
@@ -237,8 +259,8 @@ router.post('/', requireAuth, ah(async (req, res) => {
 
   const id = nanoid();
   await query(
-    'INSERT INTO insight_posts (id, user_id, category, title, body, is_notice) VALUES (?,?,?,?,?,?)',
-    [id, req.user.id, category, t, b, isNotice]);
+    'INSERT INTO insight_posts (id, user_id, category, title, body, is_notice, prompt_text) VALUES (?,?,?,?,?,?,?)',
+    [id, req.user.id, category, t, b, isNotice, p.value]);
 
   const row = await queryOne(
     `SELECT p.*, u.nickname AS author_nickname, u.name AS author_name
@@ -264,8 +286,14 @@ router.put('/:id', requireAuth, ah(async (req, res) => {
     ? Boolean(req.body.isNotice)
     : Boolean(row.is_notice);
 
-  await query('UPDATE insight_posts SET title=?, body=?, is_notice=? WHERE id=?',
-    [t, b, isNotice, req.params.id]);
+  /* 카테고리는 여기서 안 바꾼다(원래도 못 바꿨다) — 지금 글의 카테고리로 검사한다.
+     안 보내면 지금 원문을 그대로 둔다: 제목만 고치려다 프롬프트가 날아가면 안 된다. */
+  const p = PROMPT.normalizePrompt(row.category,
+    req.body?.promptText === undefined ? row.prompt_text : req.body.promptText);
+  if (!p.ok) return res.status(400).json({ error: p.error });
+
+  await query('UPDATE insight_posts SET title=?, body=?, is_notice=?, prompt_text=? WHERE id=?',
+    [t, b, isNotice, p.value, req.params.id]);
   const updated = await queryOne(
     `SELECT p.*, u.nickname AS author_nickname, u.name AS author_name
        FROM insight_posts p JOIN users u ON u.id = p.user_id WHERE p.id=?`, [req.params.id]);
@@ -279,6 +307,30 @@ router.delete('/:id', requireAuth, ah(async (req, res) => {
   }
   await query('DELETE FROM insight_posts WHERE id=?', [req.params.id]);   // 댓글은 CASCADE
   res.json({ message: '삭제되었습니다.' });
+}));
+
+/* POST /:id/copy — '내 프롬프트로 담기'
+   실제 담기는 **브라우저에서** 일어난다(자소서 코치의 프롬프트 목록은 localStorage 다).
+   여기서 하는 일은 '몇 사람이 가져갔나'를 세는 것뿐이라, 원문을 돌려줄 필요도 없다
+   (화면은 이미 상세에서 받아 들고 있다).
+
+   ── 사람 단위로 센다 ──
+   같은 사람이 다시 담아도 한 번이다(PK 가 post_id+user_id). 그래서 이 숫자는
+   '눌린 횟수'가 아니라 '가져간 사람 수'다 — 목록에서 고르는 근거로 쓰려면 그래야 한다.
+   로그인을 요구하는 이유도 이것이다. 비로그인 사용자는 화면에서 복사만 한다. */
+router.post('/:id/copy', requireAuth, ah(async (req, res) => {
+  const row = await queryOne('SELECT id, category, prompt_text FROM insight_posts WHERE id=?',
+    [req.params.id]);
+  if (!row) return res.status(404).json({ error: '글을 찾을 수 없습니다.' });
+  if (!row.prompt_text) {
+    return res.status(400).json({ error: '이 글에는 담아 갈 프롬프트가 없어요.' });
+  }
+
+  await query('INSERT IGNORE INTO insight_prompt_copies (post_id, user_id) VALUES (?,?)',
+    [req.params.id, req.user.id]);
+  const [{ n }] = await query(
+    'SELECT COUNT(*) AS n FROM insight_prompt_copies WHERE post_id=?', [req.params.id]);
+  res.json({ copyCount: Number(n) });
 }));
 
 router.post('/:id/comments', requireAuth, ah(async (req, res) => {
