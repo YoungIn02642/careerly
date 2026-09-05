@@ -94,7 +94,15 @@ ok('S = 상황', letters.S === '상황' && compFrame.includes('상황(S)'));
 ok('T = 과제', letters.T === '과제' && compFrame.includes('과제(T)'));
 ok('A = 행동', letters.A === '행동' && compFrame.includes('행동(A)'));
 ok('R = 결과', letters.R === '결과' && compFrame.includes('결과(R)'));
-ok('직무경험 사양의 덩이 키도 STAR', QP.SPECS.competency.parts.map(p => p.key).join('') === 'STAR');
+/* ── 순서는 RSTA 다 (사용자 지시 2026-09-05) ────────────────────────────────
+   글자가 뜻하는 것(S=상황·T=과제·A=행동·R=결과)은 그대로지만 **쓰는 순서**가 바뀌었다.
+   결론을 맨 뒤에 두면 읽는 사람이 문단 끝까지 가야 무엇을 배웠는지 알 수 있어서,
+   R 을 앞으로 빼고 S·T·A 를 그 근거로 쓴다.
+   글자↔뜻이 어긋나면 coach 의 key 가 화면의 엉뚱한 STAR 칸에 붙으므로(위 네 줄) 그건
+   여전히 지킨다 — 여기서 보는 것은 **네 글자가 다 있는가와 R 이 맨 앞인가** 다. */
+const compKeys = QP.SPECS.competency.parts.map(p => p.key).join('');
+ok('직무경험 사양의 덩이 키는 RSTA', compKeys === 'RSTA', `→ ${compKeys}`);
+ok('결론(R)이 맨 앞', QP.SPECS.competency.parts[0].key === 'R');
 
 console.log('\n── 8. draft-coach 가 사양을 실제로 끼우는가 ──');
 const mk = (question, extra = {}) => DRAFT.buildPrompt({

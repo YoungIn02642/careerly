@@ -320,6 +320,30 @@ async function buildDraft(body) {
         new Error('AI 가 안내 예시를 그대로 베껴 와서 초안을 버렸어요. 다시 눌러 주세요.'),
         { status: 502, detail: `예시(${copied.key})와 겹침: ${copied.chunk}` });
     }
+
+    /* ── 분량 상한은 절대 넘기지 않는다 (사용자 지시 2026-09-05) ────────────────
+       모자란 것은 사용자가 채우면 되지만 **넘친 것은 제출이 막힌다** — 자소서 입력칸이
+       글자 수로 자르기 때문에 뒤가 통째로 날아간다. 그래서 상한만 단단히 지킨다.
+
+       ① 넘으면 얼마나 넘었는지 알려 주고 한 번 다시 부른다(모델이 스스로 줄이는 편이
+          문단이 온전하다). ② 그래도 넘으면 문장 단위로 잘라낸다 — 자르기는 마지막 수단이다.
+       하한은 걸지 않는다: 짧게 온 것을 다시 부르면 모델이 분량을 채우려고 지어낸다. */
+    if (DRAFT.lenOf(out.draft) > limit) {
+      const over = DRAFT.lenOf(out.draft) - limit;
+      const shorter = await DRAFT.parseDraft(await callDraftModel(
+        `${prompt}\n\n# 다시\n방금 쓴 초안이 ${limit}자를 ${over}자 넘겼다.`
+        + ` **${limit}자 안에 들어오게** 다시 써라 — 덩이를 지우지 말고 각 덩이를 고르게 줄인다.`
+        + ` 모자라게 끝나는 것은 괜찮지만 넘기는 것은 안 된다.`,
+        DRAFT.SYSTEM, { num_ctx: 8192, num_predict: 1100 }, used)).catch(() => null);
+      if (shorter && DRAFT.lenOf(shorter.draft) <= limit) out = shorter;
+      else if (shorter && DRAFT.lenOf(shorter.draft) < DRAFT.lenOf(out.draft)) out = shorter;
+    }
+    const fit = DRAFT.fitToLimit(out.draft, limit);
+    if (fit.trimmed) {
+      /* 자른 뒤에는 빈칸 수가 달라진다 — 화면이 세는 숫자와 어긋나지 않게 다시 만든다. */
+      out = { ...DRAFT.parseDraft(JSON.stringify({ ...out, draft: fit.draft })), trimmed: true };
+    }
+
     return { ...out, model: used.model || draftModel(), provider: used.provider || draftProvider() };
   }
 }
