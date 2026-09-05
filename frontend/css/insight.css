@@ -214,7 +214,6 @@
 /* ── 댓글 ─────────────────────────────────────────────────── */
 .insight-comments { margin-top: 26px; }
 .insight-comment-list { display: flex; flex-direction: column; gap: 14px; margin-top: 12px; }
-.insight-no-comment { padding: 20px 0; text-align: center; color: var(--text-s); font-size: 13px; }
 .insight-comment {
   padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: #fff;
 }
@@ -228,13 +227,35 @@
 }
 .insight-comment-del:hover { color: #dc2626; }
 .insight-comment-body { margin-top: 6px; font-size: 13.5px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
-.insight-comment-form { display: flex; gap: 10px; margin-top: 16px; align-items: flex-start; }
-.insight-comment-form textarea {
-  flex: 1; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px;
-  font-family: inherit; font-size: 13.5px; resize: vertical; min-height: 44px;
+/* ── 댓글 적는 칸 (사용자 지시 2026-09-05) ────────────────────
+   상자 하나로 보이게 한다 — 테두리는 **바깥 div** 가 갖고 textarea 는 테두리를
+   지운다. textarea 에 테두리를 두면 아이콘·버튼이 상자 밖에 붙은 별개의 물건으로
+   읽힌다. */
+.insight-comment-form {
+  display: flex; gap: 10px; margin-top: 16px; align-items: flex-start;
+  padding: 14px 16px; border: 1px solid var(--border); border-radius: 4px; background: #fff;
 }
-.insight-comment-form textarea:focus { outline: none; border-color: var(--brand); }
-.insight-comment-form .btn-brand { flex: none; }
+.insight-comment-form:focus-within { border-color: var(--brand); }
+.insight-comment-form > i { flex: none; margin-top: 2px; font-size: 18px; color: var(--text-m); }
+/* 높이는 main.css 의 `textarea { height: 100px }` 를 그대로 쓴다 — 이미지처럼
+   처음부터 몇 줄 들어가는 상자다. 세로로만 늘릴 수 있게 둔다(가로로 늘리면
+   상자 밖으로 나간다). */
+.insight-comment-form textarea {
+  flex: 1; padding: 0; border: 0; background: none;
+  font-family: inherit; font-size: 14px; line-height: 1.6; color: var(--text-p);
+  resize: vertical; min-height: 60px;
+}
+.insight-comment-form textarea:focus { outline: none; }
+.insight-comment-form textarea::placeholder { color: var(--text-s); }
+/* 적기 시작해야 나온다 — 빈 칸 옆에 늘 떠 있으면 '적는 칸' 하나로 안 보인다. */
+.insight-comment-send {
+  display: none; flex: none; align-self: flex-end;
+  padding: 7px 16px; border: 0; border-radius: 8px;
+  background: var(--brand); color: #fff; font: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer;
+}
+.insight-comment-form.has-text .insight-comment-send { display: inline-flex; }
+.insight-comment-send:hover { filter: brightness(1.06); }
 
 /* ── 글쓰기 ───────────────────────────────────────────────── */
 .insight-write { display: flex; flex-direction: column; gap: 12px; max-width: 720px; }

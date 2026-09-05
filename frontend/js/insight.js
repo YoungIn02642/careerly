@@ -268,16 +268,24 @@ window.Insight = (() => {
         </div>` : ''}
       </article>
 
+      <!-- 댓글 — 숫자와 적는 칸만 둔다 (사용자 지시 2026-09-05).
+           빼기로 한 두 줄:
+             · '아직 댓글이 없어요' — 빈 목록은 이미 '댓글 0' 이 말한다. 같은 말을
+               두 번 하면서 적는 칸을 아래로 밀어낸다.
+             · '로그인하면 댓글을 남길 수 있어요' — 안 그래도 로그인은 눌러 보면
+               안다. 비로그인에게 칸을 아예 안 보여주면 "여기서 뭘 할 수 있는지"가
+               사라지므로, 칸은 그대로 두고 누르는 순간 로그인으로 보낸다. -->
       <div class="insight-comments">
-        <div class="section-title">댓글 ${comments.length}개</div>
-        <div class="insight-comment-list">
-          ${comments.length ? comments.map(c => commentHtml(c, user)).join('') : `<div class="insight-no-comment">아직 댓글이 없어요.</div>`}
+        <div class="section-title">댓글 ${comments.length}</div>
+        ${comments.length ? `<div class="insight-comment-list">
+          ${comments.map(c => commentHtml(c, user)).join('')}
+        </div>` : ''}
+        <div class="insight-comment-form" id="insight-comment-form">
+          <i class="ti ti-message-2" aria-hidden="true"></i>
+          <textarea id="insight-comment-input" maxlength="1000"
+            placeholder="댓글을 남겨주세요."></textarea>
+          <button class="insight-comment-send" id="insight-comment-submit">등록</button>
         </div>
-        ${user ? `
-        <div class="insight-comment-form">
-          <textarea id="insight-comment-input" rows="2" maxlength="1000" placeholder="댓글을 남겨보세요"></textarea>
-          <button class="btn-brand" id="insight-comment-submit"><i class="ti ti-send"></i> 등록</button>
-        </div>` : `<div class="insight-login-hint">로그인하면 댓글을 남길 수 있어요</div>`}
       </div>
     `;
   }
@@ -564,7 +572,33 @@ window.Insight = (() => {
       } catch (e) { alert(e.message); }
     });
 
+    /* ── 댓글 칸 ────────────────────────────────────────────────
+       칸은 로그인 여부와 상관없이 늘 보인다. 비로그인 사용자가 쓰기 시작하면
+       그때 로그인으로 보낸다 — 안내문을 대신하는 자리다. */
+    const cInput = document.getElementById('insight-comment-input');
+    const cForm = document.getElementById('insight-comment-form');
+    const needLogin = () => {
+      if (DB.currentUser()) return false;
+      if (typeof navigate === 'function') navigate('login');
+      return true;
+    };
+    cInput?.addEventListener('focus', () => { if (needLogin()) cInput.blur(); });
+    /* 적기 시작해야 '등록' 이 나온다. 빈 칸 옆에 늘 떠 있으면 한 줄짜리 입력칸이
+       두 칸으로 보인다(사용자가 원한 모양은 '적는 칸' 하나다). */
+    cInput?.addEventListener('input', () => {
+      cForm?.classList.toggle('has-text', Boolean(cInput.value.trim()));
+    });
+    /* Ctrl+Enter 로도 등록된다. Enter 는 줄바꿈이다 — 한글 조합 중 Enter 는
+       글자를 확정하는 키라서, 그걸 등록으로 쓰면 쓰다 만 댓글이 올라간다. */
+    cInput?.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        document.getElementById('insight-comment-submit')?.click();
+      }
+    });
+
     document.getElementById('insight-comment-submit')?.addEventListener('click', async () => {
+      if (needLogin()) return;
       const input = document.getElementById('insight-comment-input');
       const body = input.value.trim();
       if (!body) return;
