@@ -87,5 +87,37 @@ ok('서버 기본값도 1000', SRC.includes('Number(req.body?.limit) || 1000'));
 ok('서버 상한도 3000', SRC.includes('), 3000)'));
 ok('서버 하한도 200', SRC.includes('|| 1000, 200)'));
 
+console.log('\n── 9. 상한을 절대 넘기지 않는가 (사용자 지시 2026-09-05) ──');
+/* 모자란 것은 사용자가 채우면 되지만 넘친 것은 제출이 막힌다 — 자소서 입력칸이
+   글자 수로 자르기 때문에 뒤가 통째로 날아간다. 그래서 상한만 단단히 지킨다. */
+const DRAFT = require('../backend/src/draft-coach.js');
+const long = '첫 문장입니다. 두 번째 문장입니다. 세 번째 문장은 조금 더 깁니다. 네 번째입니다.';
+
+[1000, 47, 40, 20, 8, 5, 1].forEach(lim => {
+  const r = DRAFT.fitToLimit(long, lim);
+  ok(`상한 ${String(lim).padStart(4)} 를 넘지 않는다`, DRAFT.lenOf(r.draft) <= lim,
+     `→ ${DRAFT.lenOf(r.draft)}자`);
+});
+ok('상한 안이면 손대지 않는다', DRAFT.fitToLimit(long, 1000).draft === long);
+ok('상한 안이면 trimmed 가 false', DRAFT.fitToLimit(long, 1000).trimmed === false);
+ok('넘치면 trimmed 가 true', DRAFT.fitToLimit(long, 20).trimmed === true);
+
+/* 글자로 뚝 자르면 "…했습니" 처럼 말이 끊긴다. 문장 단위로 남겨야 한다. */
+ok('문장 중간에서 끊지 않는다', /[.!?…]$/.test(DRAFT.fitToLimit(long, 40).draft));
+/* split 으로 공백을 버리면 "첫 문장입니다.두 번째" 가 된다(실측). */
+ok('문장 사이 공백이 살아 있다', !/[.!?]\S/.test(DRAFT.fitToLimit(long, 40).draft));
+/* 종결 부호가 없는 한 문장짜리도 빈 초안을 주면 안 된다. */
+const noStop = DRAFT.fitToLimit('종결부호가아예없는아주긴한문장', 10);
+ok('종결 부호가 없어도 빈 초안이 아니다', noStop.draft.length > 0);
+ok('그때도 상한을 넘지 않는다', DRAFT.lenOf(noStop.draft) <= 10, `→ ${DRAFT.lenOf(noStop.draft)}자`);
+/* 이모지·서러게이트 쌍을 두 글자로 세면 상한 계산이 어긋난다. */
+ok('서러게이트도 한 글자로 센다', DRAFT.lenOf('가나👍') === 3, `→ ${DRAFT.lenOf('가나👍')}`);
+
+console.log('\n── 10. 라우트가 상한을 강제하는가 ──');
+const RSRC = require('fs').readFileSync(
+  require('path').join(__dirname, '..', 'backend', 'src', 'routes', 'jdCoach.js'), 'utf8');
+ok('넘치면 다시 부른다', /lenOf\(out\.draft\) > limit/.test(RSRC));
+ok('마지막에 잘라낸다', RSRC.includes('DRAFT.fitToLimit(out.draft, limit)'));
+
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
 if (fail) process.exit(1);

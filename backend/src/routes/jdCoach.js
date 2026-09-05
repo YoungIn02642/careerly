@@ -76,6 +76,17 @@ function guidePayload({ company, competencies = [] } = {}) {
    지어서 주면 근거 없는 목록이 된다(직무 트렌드 집계는 워크넷 목록 API 가 막혀 있어
    캐시가 비어 있다 — job-trends.js 머리주석). 여기서는 **작성 기준과 검사 사전만**
    주고, 역량 칸은 "공고를 넣으면 나온다" 고 화면이 그대로 말한다. */
+/* GET /api/jd/prompt-template
+   '내 프롬프트' 를 만들 때 출발점으로 주는 **기본 규칙 전문**(사용자 지시 2026-09-05).
+   빈 칸에서 시작하면 무엇을 적어야 할지도, 무엇을 지우는지도 알 수 없다.
+   Context(회사·문항·내 STAR)와 Output(JSON 계약)은 코드가 늘 붙이므로 여기 없다 —
+   편집할 수 있는 것은 규칙뿐이다(draft-coach.js buildPrompt 머리주석). */
+router.get('/prompt-template', (req, res) => {
+  const limit = Math.min(Math.max(Number(req.query?.limit) || 1000, 200), 3000);
+  const type = String(req.query?.type || 'competency');
+  res.json({ rules: DRAFT.defaultRules({ limit, questionType: type }), limit, type });
+});
+
 router.get('/guide', (req, res) => {
   res.json({
     mode: 'company',
@@ -267,7 +278,15 @@ async function buildDraft(body) {
       { status: 400 });
   }
 
+  /* ── 사용자가 만든 규칙 (사용자 지시 2026-09-05) ────────────────────────────
+     '내 프롬프트' 를 켜 두면 기본 규칙 대신 이것이 들어간다. 안전장치를 지우는 것도
+     사용자 책임이다(그렇게 정했다) — 다만 **분량 상한은 아래에서 코드가 다시 지킨다.**
+     길이를 자른다: 프롬프트가 길어지면 뒤쪽 규칙이 모델 창에서 밀려 나가, 사용자가
+     적은 것과 실제 적용된 것이 달라진다. 그건 조용히 틀리는 쪽이다. */
+  const customRules = String(req.body?.customRules || '').trim().slice(0, 8000);
+
   const prompt = DRAFT.buildPrompt({
+    customRules,
     company: String(req.body?.company || '').trim(),
     jobTitle: String(req.body?.jobTitle || '').trim(),
     competencies: comps,
@@ -320,6 +339,37 @@ async function buildDraft(body) {
         new Error('AI 가 안내 예시를 그대로 베껴 와서 초안을 버렸어요. 다시 눌러 주세요.'),
         { status: 502, detail: `예시(${copied.key})와 겹침: ${copied.chunk}` });
     }
+
+    /* ── 분량 상한은 절대 넘기지 않는다 (사용자 지시 2026-09-05) ────────────────
+       모자란 것은 사용자가 채우면 되지만 **넘친 것은 제출이 막힌다** — 자소서 입력칸이
+       글자 수로 자르기 때문에 뒤가 통째로 날아간다. 그래서 상한만 단단히 지킨다.
+
+       ① 넘으면 얼마나 넘었는지 알려 주고 한 번 다시 부른다(모델이 스스로 줄이는 편이
+          문단이 온전하다). ② 그래도 넘으면 문장 단위로 잘라낸다 — 자르기는 마지막 수단이다.
+       하한은 걸지 않는다: 짧게 온 것을 다시 부르면 모델이 분량을 채우려고 지어낸다. */
+    if (DRAFT.lenOf(out.draft) > limit) {
+      const over = DRAFT.lenOf(out.draft) - limit;
+      /* parseDraft 는 **Promise 가 아니다** — 값을 그대로 돌려준다. 예전에 여기에
+         `.catch()` 를 붙였다가 초과가 났을 때만 TypeError 로 죽었다(실측 2026-09-05).
+         초과는 늘 나는 일이 아니라 이 경로는 조용히 숨어 있었다. try 로 감싼다. */
+      let shorter = null;
+      try {
+        shorter = DRAFT.parseDraft(await callDraftModel(
+          `${prompt}\n\n# 다시\n방금 쓴 초안이 ${limit}자를 ${over}자 넘겼다.`
+          + ` **${limit}자 안에 들어오게** 다시 써라 — 덩이를 지우지 말고 각 덩이를 고르게 줄인다.`
+          + ` 모자라게 끝나는 것은 괜찮지만 넘기는 것은 안 된다.`,
+          DRAFT.SYSTEM, { num_ctx: 8192, num_predict: 1100 }, used));
+      } catch { shorter = null; }
+      /* 다시 부른 것이 상한 안이면 그것을, 아니면 **둘 중 짧은 쪽**을 쓴다.
+         어느 쪽이든 아래 fitToLimit 이 마지막으로 상한을 보장한다. */
+      if (shorter && DRAFT.lenOf(shorter.draft) < DRAFT.lenOf(out.draft)) out = shorter;
+    }
+    const fit = DRAFT.fitToLimit(out.draft, limit);
+    if (fit.trimmed) {
+      /* 자른 뒤에는 빈칸 수가 달라진다 — 화면이 세는 숫자와 어긋나지 않게 다시 만든다. */
+      out = { ...DRAFT.parseDraft(JSON.stringify({ ...out, draft: fit.draft })), trimmed: true };
+    }
+
     return { ...out, model: used.model || draftModel(), provider: used.provider || draftProvider() };
   }
 }

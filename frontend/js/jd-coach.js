@@ -299,6 +299,52 @@
   const LS_CPICK = 'careerly_jd_cpick_v1';
   const C_PICK_MAX = 2;
 
+  /* ══ 내 AI 프롬프트 (사용자 지시 2026-09-05) ══════════════════════════════
+     기본 규칙 대신 쓸 규칙을 사용자가 직접 만든다. 여러 개를 이름 붙여 저장해 두고
+     그중 **하나만 켠다**(전역 — 모든 자소서·문항에 적용).
+
+     저장 위치는 초안·정성스펙과 같은 localStorage 다. 서버에 두면 계정·동기화·삭제
+     정책이 따라붙는데, 이건 그 사람의 글쓰기 취향이지 서비스가 들고 있을 데이터가 아니다.
+     (기기를 옮기면 안 따라온다는 것은 사이드바가 이미 적어 두고 있다.)
+
+     ── 켠 프롬프트가 없으면 기본 규칙 ──
+     activeId 가 null 이거나 가리키는 것이 지워졌으면 customRules 를 안 보낸다.
+     서버는 빈 값이면 기본 규칙을 쓴다(draft-coach.js buildPrompt). */
+  const LS_PROMPTS = 'careerly_jd_prompts_v1';
+  const PROMPT_MAX = 20;               // 목록이 길어지면 고르는 것이 일이 된다
+  const PROMPT_LEN_MAX = 8000;         // 서버가 자르는 길이와 같게 — 갈리면 조용히 잘린다
+  /* '기본 프롬프트' 줄의 자리표. 저장되는 값은 여전히 activeId=null 이다 — 화면에만
+     한 줄로 세운다. 저장값을 이 문자열로 바꾸면 옛 저장(null)과 두 가지가 되어,
+     "무엇이 기본인가" 를 읽는 곳마다 갈린다. */
+  const DEFAULT_PROMPT_ID = '__default__';
+
+  function loadPrompts() {
+    try {
+      const v = JSON.parse(localStorage.getItem(LS_PROMPTS));
+      return {
+        items: Array.isArray(v?.items) ? v.items.filter(p => p && p.id) : [],
+        activeId: v?.activeId || null,
+      };
+    } catch { return { items: [], activeId: null }; }
+  }
+  function savePrompts(state) {
+    try { localStorage.setItem(LS_PROMPTS, JSON.stringify(state)); } catch { /* 용량 초과 */ }
+  }
+  /* 지금 켜 둔 규칙 본문. 없으면 빈 문자열 → 서버가 기본 규칙을 쓴다. */
+  function activeRules() {
+    const { items, activeId } = loadPrompts();
+    return items.find(p => p.id === activeId)?.text || '';
+  }
+  /* 이름을 안 적으면 '내 프롬프트 1, 2, 3…'. 이미 쓴 번호는 건너뛴다. */
+  function nextPromptName(items) {
+    const used = new Set(items.map(p => p.name));
+    for (let i = 1; i <= PROMPT_MAX + 1; i++) {
+      const name = `내 프롬프트 ${i}`;
+      if (!used.has(name)) return name;
+    }
+    return '내 프롬프트';
+  }
+
   function loadCPicks() {
     try { return JSON.parse(localStorage.getItem(LS_CPICK)) || {}; } catch { return {}; }
   }
@@ -1251,6 +1297,18 @@
     if (scrim) scrim.addEventListener('click', closeFull);
     document.addEventListener('keydown', e => { if (e.key === 'Escape') closeFull(); });
 
+    /* ── 프롬프트 모달의 버튼 (사용자 지시 2026-09-05) ──────────────────────
+       모달은 작성 화면 바깥(careerly.html 맨 아래)에 있어서 bindWriteSide 의
+       위임이 닿지 않는다. 여기서 한 번만 건다 — 본문은 열 때마다 새로 그려지므로
+       버튼 하나하나가 아니라 모달 상자에 위임한다. */
+    const pm = document.getElementById('jd-prompt-modal');
+    pm?.addEventListener('click', e => {
+      if (e.target.closest('[data-prompt-save]')) { savePromptFromModal(); return; }
+      if (e.target.closest('[data-prompt-close]')) { closePromptModal(); return; }
+      /* 바깥(어둡게 깔린 곳)을 누르면 닫는다 — 다른 모달과 같은 규약이다. */
+      if (e.target === pm) closePromptModal();
+    });
+
     // 자라는 입력칸 + 진행도 갱신
     STEPS.forEach(step => {
       const el = $(step.input);
@@ -1718,6 +1776,144 @@
         ? `<div class="jd-gap"><i class="ti ti-alert-triangle"></i> ${esc(item.gap)}</div>`
         : mineHtml(item)}
     </div>`;
+  }
+
+  /* ── 사이드바의 '내 AI 프롬프트' 칸 (사용자 지시 2026-09-05) ────────────────
+     ── '기본 프롬프트' 도 목록의 한 줄이다 (사용자 지시) ──────────────────────
+     예전에는 기본이 **목록에 없는 상태**(아무것도 안 켠 것)였다. 그래서 지금 무엇으로
+     쓰는지 알려면 아래 안내문을 읽어야 했고, 기본으로 돌아가려면 켜 둔 것을 '다시 눌러
+     끄는' 숨은 동작을 알아야 했다. 기본을 첫 줄로 올려 **라디오처럼 하나를 고르는**
+     목록으로 만든다 — 무엇이 켜져 있는지가 목록만 봐도 보이고, 되돌아갈 길도 보인다.
+
+     기본 줄은 고치기·삭제가 없다. 우리가 들고 있는 규칙이라 지울 수 있는 물건이 아니고,
+     고치고 싶으면 `+` 가 그 내용을 그대로 복사해 새 프롬프트로 만들어 준다.
+
+     ── 고른 것은 그대로 유지된다 ──
+     activeId 는 localStorage 에 남아 있고 이 변경은 **그리는 방법만** 바꾼다.
+     쓰던 프롬프트가 있으면 그것이 계속 켜진 채로 보인다(기본으로 되돌리지 않는다). */
+  function paintPrompts() {
+    const host = document.getElementById('write-prompts');
+    if (!host) return;
+    const { items, activeId } = loadPrompts();
+    /* activeId 가 지워진 것을 가리키면 기본이 켜진 것으로 본다 — 화면과 실제가 갈리지 않게. */
+    const active = items.find(p => p.id === activeId) || null;
+    const onDefault = !active;
+
+    const row = (on, id, name, builtin) => `
+      <div class="wp-item ${on ? 'is-on' : ''} ${builtin ? 'wp-item--builtin' : ''}">
+        <button type="button" class="wp-pick" data-prompt-pick="${esc(id)}"
+          title="${on ? '지금 이 프롬프트로 씁니다' : '이 프롬프트로 쓰기'}"
+          aria-pressed="${on}">
+          <i class="ti ti-${on ? 'circle-check-filled' : 'circle'}"></i>
+          <span class="wp-name">${esc(name)}</span>
+        </button>
+        ${builtin ? '' : `
+          <button type="button" class="wp-edit" data-prompt-edit="${esc(id)}" title="고치기">
+            <i class="ti ti-pencil"></i></button>
+          <button type="button" class="wp-del" data-prompt-del="${esc(id)}" title="삭제">
+            <i class="ti ti-x"></i></button>`}
+      </div>`;
+
+    host.innerHTML = `
+      <div class="wp-head">
+        <span class="wf-eyebrow">AI 프롬프트</span>
+        <button type="button" class="wp-add" data-prompt-new title="기본 프롬프트를 복사해 새로 만들기">
+          <i class="ti ti-plus"></i></button>
+      </div>
+      <div class="wp-list">
+        ${row(onDefault, DEFAULT_PROMPT_ID, '기본 프롬프트', true)}
+        ${items.map(p => row(p.id === activeId, p.id, p.name, false)).join('')}
+      </div>
+      <p class="wp-note">${onDefault
+        ? '<b>+</b> 를 누르면 기본 프롬프트를 복사해 내 규칙을 만들 수 있어요.'
+        : `<b>${esc(active.name)}</b> 로 초안을 씁니다.`}</p>`;
+  }
+
+  /* ── 프롬프트 만들기·고치기 모달 ────────────────────────────────────────────
+     빈 칸에서 시작하면 무엇을 적어야 할지도, 무엇을 지우는지도 알 수 없다. 그래서
+     새로 만들 때는 **기본 규칙 전문**을 서버에서 받아 미리 채운다.
+     받지 못하면(오프라인·서버 오류) 빈 칸으로 열되 그 사실을 적는다 — 조용히 빈
+     칸을 주면 사용자는 원래 그런 줄 안다. */
+  let _promptEditId = null;
+
+  async function openPromptModal(id) {
+    _promptEditId = id || null;
+    const { items } = loadPrompts();
+    const cur = id ? items.find(p => p.id === id) : null;
+    const body = document.getElementById('jd-prompt-body');
+    const title = document.getElementById('jd-prompt-title');
+    if (!body) return;
+    if (title) title.textContent = cur ? '내 AI 프롬프트 고치기' : '내 AI 프롬프트 만들기';
+
+    body.innerHTML = `<div class="sf-hint-inline">기본 규칙을 불러오는 중…</div>`;
+    if (typeof openModal === 'function') openModal('jd-prompt-modal');
+
+    let base = cur?.text || '';
+    let failed = false;
+    if (!base) {
+      try { base = (await DB.jdPromptTemplate({ limit: 1000 }))?.rules || ''; }
+      catch { failed = true; }
+    }
+
+    body.innerHTML = `
+      <label class="wp-field">
+        <span class="wp-label">이름</span>
+        <input type="text" id="jd-prompt-name" maxlength="40"
+          placeholder="${esc(nextPromptName(items))}" value="${esc(cur?.name || '')}">
+        <span class="field-hint">안 적으면 <b>${esc(nextPromptName(items))}</b> 로 저장돼요.</span>
+      </label>
+      <label class="wp-field">
+        <span class="wp-label">규칙</span>
+        <textarea id="jd-prompt-text" rows="18" maxlength="${PROMPT_LEN_MAX}"
+          placeholder="AI 가 초안을 쓸 때 지킬 규칙을 적어주세요.">${esc(base)}</textarea>
+        <span class="field-hint"><span id="jd-prompt-count">0</span> / ${PROMPT_LEN_MAX}자</span>
+      </label>
+      ${failed ? `<div class="co-note co-note--tight"><i class="ti ti-info-circle"></i>
+        기본 규칙을 불러오지 못했어요. 빈 칸에서 직접 적으셔도 됩니다.</div>` : ''}
+      <div class="wp-actions">
+        <button type="button" class="wf-btn" data-prompt-close>취소</button>
+        <button type="button" class="wf-btn wf-btn--primary" data-prompt-save>
+          <i class="ti ti-device-floppy"></i> 저장하기</button>
+      </div>`;
+
+    const ta = document.getElementById('jd-prompt-text');
+    const cnt = document.getElementById('jd-prompt-count');
+    const paint = () => { if (cnt) cnt.textContent = (ta?.value || '').length.toLocaleString(); };
+    paint();
+    ta?.addEventListener('input', paint);
+    document.getElementById('jd-prompt-name')?.focus();
+  }
+
+  function closePromptModal() {
+    _promptEditId = null;
+    if (typeof closeModal === 'function') closeModal('jd-prompt-modal');
+  }
+
+  function savePromptFromModal() {
+    const name = (document.getElementById('jd-prompt-name')?.value || '').trim();
+    const text = (document.getElementById('jd-prompt-text')?.value || '').trim();
+    if (!text) {
+      if (typeof toast === 'function') toast('규칙을 적어주세요', { icon: false });
+      return;
+    }
+    const state = loadPrompts();
+    if (_promptEditId) {
+      const p = state.items.find(x => x.id === _promptEditId);
+      if (p) { p.name = name || p.name; p.text = text.slice(0, PROMPT_LEN_MAX); }
+    } else {
+      if (state.items.length >= PROMPT_MAX) {
+        if (typeof toast === 'function') toast(`프롬프트는 ${PROMPT_MAX}개까지예요`, { icon: false });
+        return;
+      }
+      const id = `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+      state.items.push({ id, name: name || nextPromptName(state.items), text: text.slice(0, PROMPT_LEN_MAX) });
+      /* 방금 만든 것을 바로 켠다 — 만들어 놓고 다시 골라야 하면 만든 뜻이 없다. */
+      state.activeId = id;
+    }
+    savePrompts(state);
+    closePromptModal();
+    paintPrompts();
+    if (typeof toast === 'function') toast('저장했어요', { icon: false });
   }
 
   /* 이 문항에 고른 역량 칩 한 줄 (사용자 지시 2026-09-04).
@@ -2414,6 +2610,10 @@
             <button type="button" class="write-side-b" data-write-export><i class="ti ti-download"></i> 내보내기</button>
           </div>
           <p class="write-side-note">이 브라우저에만 저장돼요. 기기를 옮기면 따라오지 않습니다.</p>
+
+          <!-- 내 AI 프롬프트 (사용자 지시 2026-09-05) — 기본 규칙 대신 쓸 규칙을
+               직접 만들어 두고 하나만 켠다. 켠 것이 모든 문항의 AI 초안에 적용된다. -->
+          <div class="write-side-prompts" id="write-prompts"></div>
         </aside>
 
         <div class="write-main">${draftHtml(r, tabs)}</div>
@@ -2441,6 +2641,43 @@
     host.querySelectorAll('[data-write-lib]').forEach(el => el.addEventListener('click', () => { if (window.Drafts) Drafts.open(); }));
     host.querySelectorAll('[data-write-new]').forEach(el => el.addEventListener('click', () => navigate('jd')));
     host.querySelectorAll('[data-write-export]').forEach(el => el.addEventListener('click', exportDrafts));
+
+    /* ── 내 AI 프롬프트 (사용자 지시 2026-09-05) ────────────────────────────
+       칸을 다시 그릴 때마다 버튼이 새로 생기므로 **바깥 상자에 한 번만** 위임한다. */
+    paintPrompts();
+    const box = host.querySelector('#write-prompts');
+    box?.addEventListener('click', e => {
+      if (e.target.closest('[data-prompt-new]')) { openPromptModal(null); return; }
+
+      const edit = e.target.closest('[data-prompt-edit]');
+      if (edit) { openPromptModal(edit.dataset.promptEdit); return; }
+
+      const del = e.target.closest('[data-prompt-del]');
+      if (del) {
+        const state = loadPrompts();
+        const p = state.items.find(x => x.id === del.dataset.promptDel);
+        if (p && !confirm(`'${p.name}' 을 지울까요?`)) return;
+        state.items = state.items.filter(x => x.id !== del.dataset.promptDel);
+        /* 켜 둔 것을 지웠으면 기본 규칙으로 돌아간다 — 없는 것을 가리킨 채 두면
+           화면은 '켜짐' 인데 초안은 기본으로 나가 서로 어긋난다. */
+        if (state.activeId === del.dataset.promptDel) state.activeId = null;
+        savePrompts(state);
+        paintPrompts();
+        return;
+      }
+
+      const pick = e.target.closest('[data-prompt-pick]');
+      if (pick) {
+        const state = loadPrompts();
+        const id = pick.dataset.promptPick;
+        /* 라디오처럼 하나만 켠다. '기본 프롬프트' 줄이 목록에 있으므로 **다시 눌러
+           끄는 동작은 없앴다** — 되돌아갈 길이 화면에 보이는데 숨은 토글까지 두면,
+           고른 것을 다시 눌렀을 때 꺼지는 것이 실수로 읽힌다. */
+        state.activeId = id === DEFAULT_PROMPT_ID ? null : id;
+        savePrompts(state);
+        paintPrompts();
+      }
+    });
   }
 
   /* '내보내기' — 이 회사의 모든 문항 초안을 하나로 이어 클립보드에 복사한다.
@@ -2701,6 +2938,8 @@
         picks,
         /* 사용자가 정한 분량 상한. byte 면 한글 2byte 기준으로 글자 수로 환산한다. */
         limit: charTarget(limitOf(tab?.key)),
+        /* 켜 둔 '내 프롬프트' 가 있으면 그 규칙으로 쓴다. 없으면 빈 값 → 서버가 기본 규칙. */
+        customRules: activeRules(),
       });
 
       const at = ta.selectionStart ?? ta.value.length;

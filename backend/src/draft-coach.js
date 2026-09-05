@@ -153,7 +153,7 @@ function starLines(star) {
 }
 
 /* ── 프롬프트 조립 (P.C.R.O) ──────────────────────────────── */
-function buildPrompt({ company, jobTitle, competency, competencies, quotes, reads, frame, activities, question, limit, star, picks }) {
+function buildPrompt({ company, jobTitle, competency, competencies, quotes, reads, frame, activities, question, limit, star, picks, customRules }) {
   /* ── 역량은 0~2개다 (사용자 지시 2026-09-01) ──────────────────────────────
      예전에는 문자열 하나만 받았고 라우트가 없으면 400 을 냈다. 그런데 지원동기·성격
      장단점처럼 **역량 축이 필요 없는 문항**이 있다(question-prompts.js 의 starMode).
@@ -298,9 +298,16 @@ function buildPrompt({ company, jobTitle, competency, competencies, quotes, read
        붙었다. 그런데 지원동기의 마지막 덩이는 **정의상 포부**이고 가장 큰 덩이(35%)다.
        모델이 반대 방향 지시를 동시에 받았다. 유형이 걸리면 닫는 법은 그 유형이 정한다.
        그리고 '안팎' 은 모델이 스스로 판정할 수 없는 말이라 셀 수 있게 바꾼다. */
+    /* ── 상한은 부탁이 아니라 선이다 (사용자 지시 2026-09-05) ─────────────────
+       "90~100%로 쓴다" 라고만 적었더니 넘겨서 왔다. 모자란 것은 사용자가 채우면 되지만
+       넘친 것은 **제출 자체가 막힌다**(자소서 입력칸이 글자 수를 자른다). 그래서 문구를
+       상한 쪽으로 못 박고, 넘어오면 서버가 문장 단위로 잘라낸다(fitToLimit). */
     qType
       ? `6. 전체 **${Math.round(limit * 0.9)}~${limit}자**로 쓴다. 위 분량표의 마지막 덩이로 닫는다.`
+        + ` **${limit}자를 절대 넘기지 마라 — 넘으면 뒤가 잘려 나가 문단이 끝나지 않는다.**`
+        + ` 모자라게 끝나는 편이 넘치는 것보다 낫다.`
       : `6. 전체 **${Math.round(limit * 0.9)}~${limit}자**로 쓴다.`
+        + ` **${limit}자를 절대 넘기지 마라 — 넘으면 뒤가 잘려 나가 문단이 끝나지 않는다.**`
         + ` 소감·다짐·포부로 끝내지 말고 결과와 배운 점으로 닫는다.`,
     `7. 존댓말 서술체(~했습니다)로 쓴다.`,
     /* 실측: 대괄호 안에 '[どこ에서]' 처럼 일본어가, review 에는 베트남어가 섞여 나왔다.
@@ -411,7 +418,36 @@ function buildPrompt({ company, jobTitle, competency, competencies, quotes, read
     '}',
   ].join('\n');
 
-  return `# Context\n${context}\n\n# Restriction\n${restriction}\n\n# Output\n아래 JSON 형식으로만 답하라.\n${output}`;
+  /* ── 사용자가 만든 규칙으로 갈아 끼운다 (사용자 지시 2026-09-05) ──────────────
+     세 덩이 중 **Restriction(규칙)만** 바뀐다. 나머지 둘은 바꿀 수 있는 물건이 아니다:
+       Context — 회사·문항·내 STAR 다. 사용자 데이터라 매번 코드가 새로 만든다.
+                 여기를 손대도 다음 호출에서 통째로 덮여 쓰나 마나다.
+       Output  — JSON 계약이다. 이걸 바꾸면 parseDraft 가 응답을 못 읽어 기능이 죽는다.
+     즉 '전문 편집' 이라 해도 실제로 편집할 수 있는 것은 규칙뿐이고, 규칙이 프롬프트에서
+     실제로 힘을 갖는 유일한 덩이이기도 하다.
+
+     안전장치(지어내기 금지·빈칸 강제)도 규칙에 있으므로 **사용자가 지울 수 있다.**
+     사용자가 그렇게 정했다(2026-09-05). 분량 상한만은 라우트가 코드로 다시 지킨다 —
+     그건 취향이 아니라 "넘으면 제출이 막힌다" 는 사실이라서다. */
+  const rules = String(customRules || '').trim() || restriction;
+
+  return `# Context\n${context}\n\n# Restriction\n${rules}\n\n# Output\n아래 JSON 형식으로만 답하라.\n${output}`;
+}
+
+/* 기본 규칙 전문 — 사용자가 '내 프롬프트' 를 만들 때 출발점으로 준다.
+   빈 칸에서 시작하면 무엇을 적어야 하는지 알 수 없고, 지우고 싶은 규칙이 무엇인지도
+   보이지 않는다. 맥락(회사·문항·STAR)은 사람마다 다르므로 대표값으로 한 벌 만든다. */
+function defaultRules({ limit = 1000, questionType = 'competency' } = {}) {
+  const t = QF.frameFor(questionType) || QF.frameFor('competency');
+  const prompt = buildPrompt({
+    company: '(지원 회사)', jobTitle: '(지원 직무)', competencies: ['(이 문항에 고른 역량)'],
+    quotes: ['(채용공고에서 뽑은 문장)'], reads: '', frame: '',
+    activities: [], question: t.label, limit,
+    picks: [{ name: '(고른 경험)', star: { S: '(상황)', T: '(과제)', A: '(행동)', R: '(결과)' } }],
+  });
+  /* Restriction 덩이만 잘라 준다 — 위 주석대로 Context·Output 은 편집 대상이 아니다. */
+  const m = prompt.match(/# Restriction\n([\s\S]*?)\n\n# Output/);
+  return m ? m[1] : '';
 }
 
 /* ══ 지원동기 문단 ══════════════════════════════════════════
@@ -594,6 +630,47 @@ function toCoach(v) {
   return out;
 }
 
+/* ── 분량 상한을 코드로 지킨다 (사용자 지시 2026-09-05) ────────────────────────
+   지금까지 상한은 **프롬프트로 부탁만** 하고 생성 뒤 확인을 안 했다. 그래서 넘겨서
+   나오면 그대로 나갔다. 모자란 것은 사용자가 채우면 되지만 넘친 것은 **제출이 막힌다** —
+   자소서 입력칸이 글자 수로 자르기 때문에 뒤가 통째로 날아간다.
+
+   ── 왜 문장 단위로 자르나 ──
+   글자 수로 뚝 자르면 "…했습니" 처럼 말이 끊긴다. 그건 초안이 아니라 사고다.
+   상한 안에 들어가는 **마지막 완결 문장까지만** 남긴다. 한국어 문장은 '다.' '요.' 로
+   끝나는 것이 대부분이라 종결 부호로 가른다.
+
+   ── 자르기는 마지막 수단이다 ──
+   라우트가 먼저 한 번 다시 부른다(짧게 쓰라고 알려서). 그래도 넘으면 그때 자른다.
+   자른 사실은 응답의 trimmed 로 알려서 화면이 "분량에 맞춰 줄였다" 고 말할 수 있게 한다. */
+const lenOf = s => [...String(s || '')].length;
+
+function fitToLimit(draft, limit) {
+  const max = Number(limit) > 0 ? Number(limit) : 0;
+  const text = String(draft || '');
+  if (!max || lenOf(text) <= max) return { draft: text, trimmed: false };
+
+  /* 종결 부호 뒤에서 끊는다. 부호를 문장에 붙여 둔 채 잘라야 '다' 만 남지 않는다.
+     **뒤따르는 공백·줄바꿈도 문장에 붙여서** 자른다 — split 으로 공백을 버리면
+     이어 붙일 때 "첫 문장입니다.두 번째" 처럼 사이가 사라진다(실측). */
+  const parts = text.match(/[^.!?…]*[.!?…]+[\s]*|[^.!?…]+$/g) || [text];
+  let out = '';
+  for (const p of parts) {
+    if (lenOf(out + p) > max) break;
+    out += p;
+  }
+  /* 첫 문장부터 상한을 넘는 극단(상한이 아주 짧거나 한 문장이 통째로 길다)에서는
+     빈 초안을 줄 수 없으므로 글자 수로 자르고 말줄임을 붙인다.
+     **말줄임표도 한 글자를 먹는다** — 상한이 1이면 붙일 자리가 없다(테스트가 잡았다).
+     라우트는 상한을 200 아래로 안 내리지만, 이 함수는 혼자서도 옳아야 한다. */
+  if (!out.trim()) {
+    out = max <= 1
+      ? [...text].slice(0, max).join('')
+      : [...text].slice(0, max - 1).join('') + '…';
+  }
+  return { draft: out.trim(), trimmed: true };
+}
+
 /* ── 한국어가 아닌 글자 감지 ──────────────────────────────────
    프롬프트로 "한국어로만" 을 못 박아도 완전히 막히지 않는다. 실측(8회 반복):
    일본어 '[どこ에서]', 베트남어 'cụ thể', 중국어 '活动' 이 8회 중 1회꼴로 섞였다.
@@ -612,4 +689,5 @@ function hasForeign(out) {
 module.exports = {
   buildPrompt, buildMotivePrompt, parseDraft, activityLine, starLines, starRules,
   hasForeign, copiedFromExample, COPY_MIN, SYSTEM, KIND_LABEL,
+  fitToLimit, lenOf, defaultRules,
 };

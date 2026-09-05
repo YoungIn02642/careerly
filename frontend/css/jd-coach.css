@@ -20,11 +20,17 @@
    → 라이선스 폰트가 들어오면 이 두 줄만 바꾸면 된다.
    ════════════════════════════════════════════════════════════ */
 
-/* 자소서 코치 팔레트. 작성 화면(#page-write)·보관함 모달 카드(#drafts-modal .modal)도
-   같은 토큰을 쓰므로 여기에 함께 건다 — 이 둘은 #page-jd 밖이라, 안 걸면 var(--wf-*) 가
+/* 자소서 코치 팔레트. 작성 화면(#page-write)·모달 카드(#drafts-modal · #jd-prompt-modal)도
+   같은 토큰을 쓰므로 여기에 함께 건다 — 이들은 #page-jd 밖이라, 안 걸면 var(--wf-*) 가
    전부 미정의(테두리는 검게, 빨강은 투명)로 깨진다. 모달은 **카드(.modal)** 에만 걸어
-   오버레이의 반투명 어둠 배경을 덮지 않는다. */
-#page-company, #page-jd, #page-write, #drafts-modal .modal {
+   오버레이의 반투명 어둠 배경을 덮지 않는다.
+
+   ── 모달을 새로 만들면 여기에 반드시 더한다 (실측 2026-09-05) ──
+   '내 AI 프롬프트' 모달을 만들고 이 목록에 안 넣었더니, 칸 테두리
+   `border: 1px solid var(--wf-hairline)` 이 **통째로 무효가 되어 선이 안 그려졌다.**
+   폴백을 적어 둔 것(var(--wf-fill, #f4f5f7))만 살아남아서 '일부만 맞는' 화면이 됐다 —
+   조용히 틀리는 쪽이라 더 나쁘다. */
+#page-company, #page-jd, #page-write, #drafts-modal .modal, #jd-prompt-modal .modal {
   /* ── 잉크 ── */
   --wf-ink:        #080808;
   --wf-ink-strong: #222222;
@@ -2103,6 +2109,71 @@ a.wf-btn { text-decoration: none; }
 .write-side-b:hover { background: var(--wf-fill); color: var(--wf-ink); }
 .write-side-b:hover i { color: var(--wf-ink); }
 .write-side-note { margin: 4px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--wf-mute); }
+
+/* ── 내 AI 프롬프트 (사용자 지시 2026-09-05) ────────────────────────────────
+   켠 것 하나에만 불이 들어온다. 자소서 관리 버튼들과 같은 폭·같은 여백에 세워
+   사이드바가 두 덩이(자소서 / 프롬프트)로 읽히게 한다. */
+.write-side-prompts { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--wf-hairline); }
+.wp-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.wp-add {
+  margin-left: auto; width: 22px; height: 22px; display: grid; place-items: center;
+  border: 1px solid var(--wf-hairline); border-radius: 6px; background: var(--wf-canvas);
+  color: var(--wf-body-mid); cursor: pointer;
+}
+.wp-add:hover { border-color: var(--wf-ink); color: var(--wf-ink); }
+.wp-list { display: flex; flex-direction: column; gap: 4px; }
+.wp-item {
+  display: flex; align-items: center; gap: 2px;
+  border-radius: 7px; background: var(--wf-fill, #f4f5f7);
+}
+.wp-item.is-on { background: #f0ebff; }
+/* '기본 프롬프트' 줄 — 고치기·삭제 버튼이 없어 그 자리가 비므로 오른쪽 여백을 채운다.
+   우리가 들고 있는 규칙이라는 것을 옅은 점선 테두리로만 알린다(색을 더 쓰면 켠 줄과 헷갈린다). */
+.wp-item--builtin { border: 1px dashed var(--wf-hairline); background: transparent; }
+.wp-item--builtin.is-on { border-style: solid; border-color: transparent; background: #f0ebff; }
+.wp-item--builtin .wp-pick { padding-right: 12px; }
+.wp-pick {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px;
+  padding: 7px 8px; border: 0; background: transparent; cursor: pointer;
+  font-family: var(--font); font-size: 12.5px; color: var(--wf-body-mid); text-align: left;
+}
+.wp-item.is-on .wp-pick { color: #5a26e8; font-weight: 700; }
+.wp-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-edit, .wp-del {
+  flex: none; width: 24px; height: 28px; display: grid; place-items: center;
+  border: 0; background: transparent; color: var(--wf-mute); cursor: pointer; font-size: 13px;
+}
+.wp-edit:hover { color: var(--wf-ink); }
+.wp-del:hover { color: var(--wf-error, #e2564d); }
+.wp-note { margin: 8px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--wf-mute); }
+
+/* ── 모달 안 — 이름 한 줄, 규칙 여러 줄 (사용자 지시 2026-09-05) ──────────────
+   예전에는 라벨·입력칸·글자수가 여백으로만 나뉘어 있어서 **어디부터 어디까지가 한 칸인지**
+   가 안 보였다(특히 규칙 칸이 길다). 칸마다 테두리를 두르고 라벨을 머리띠로 붙여 한 덩이로
+   묶는다. 입력칸 자체의 테두리는 뺀다 — 상자 안에 상자가 또 있으면 선이 두 겹이 된다. */
+.wp-field {
+  display: block; margin-bottom: 14px; overflow: hidden;
+  border: 1px solid var(--wf-hairline); border-radius: 10px; background: var(--wf-canvas);
+}
+/* 지금 쓰고 있는 칸이 어느 것인지 테두리로 알린다 — 라벨이 머리띠라 커서만으로는 흐리다. */
+.wp-field:focus-within { border-color: var(--wf-purple, #7a3dff); box-shadow: 0 0 0 3px rgba(122, 61, 255, .12); }
+.wp-label {
+  display: block; padding: 9px 14px;
+  background: var(--wf-fill, #f4f5f7); border-bottom: 1px solid var(--wf-hairline);
+  font-size: 12.5px; font-weight: 700; color: var(--wf-ink);
+}
+.wp-field input, .wp-field textarea {
+  display: block; width: 100%; padding: 12px 14px; border: 0; background: transparent;
+  font-family: var(--font); font-size: 13.5px; color: var(--wf-ink);
+}
+.wp-field input:focus, .wp-field textarea:focus { outline: none; }   /* 테두리가 대신 알린다 */
+.wp-field textarea { line-height: 1.7; resize: vertical; min-height: 260px; }
+/* 글자수·안내는 칸 안의 바닥에 붙인다 — 밖에 두면 다음 칸의 머리로 읽힌다. */
+.wp-field .field-hint {
+  display: block; padding: 8px 14px; border-top: 1px solid var(--wf-hairline);
+  background: var(--wf-fill, #f4f5f7); font-size: 11.5px; color: var(--wf-mute);
+}
+.wp-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 
 /* 가운데: 에디터. draftHtml 이 그린 .jd-draft-pane 을 카드로 감싼다. */
 .write-main {

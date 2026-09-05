@@ -317,5 +317,30 @@ ok('근거 종류 이름이 4가지 다 있다',
    ['job', 'biz', 'fact', 'news'].every(k => DRAFT.KIND_LABEL[k]),
    'frontend/js/roadmap.js EVIDENCE_KINDS 의 label 과 같은 말이어야 한다');
 
+console.log('\n── 내 AI 프롬프트 (사용자 지시 2026-09-05) ──');
+/* 켜 두면 기본 규칙 대신 사용자 규칙이 들어간다. 바뀌는 것은 Restriction 뿐이고
+   Context(사실)와 Output(JSON 계약)은 코드가 늘 붙인다 — 그 둘까지 사용자가 바꾸면
+   각각 '다음 호출에서 덮여 무의미' 하거나 '파싱이 깨져 기능이 죽는다'. */
+const cpBase = {
+  company: '테스트', jobTitle: '개발', competencies: ['협업'],
+  quotes: ['협업 경험 우대'], question: '협업 경험을 쓰시오', limit: 500,
+  picks: [{ name: '프로젝트', star: { S: '상황', T: '과제', A: '행동', R: '결과' } }],
+};
+const pDefault = DRAFT.buildPrompt(cpBase);
+const pCustom = DRAFT.buildPrompt({ ...cpBase, customRules: '1. 개조식으로 쓴다.' });
+
+ok('customRules 가 규칙 자리에 들어간다', pCustom.includes('1. 개조식으로 쓴다.'));
+ok('기본 규칙은 밀려난다', !pCustom.includes('아래 표현은 쓰지 마라'));
+ok('Context 는 그대로 붙는다', pCustom.includes('지원 회사: 테스트') && pCustom.includes('S(상황): 상황'));
+ok('Output(JSON 계약) 은 그대로 붙는다', pCustom.includes('"draft"') && pCustom.includes('"blanks"'));
+ok('빈 customRules 면 기본 규칙', DRAFT.buildPrompt({ ...cpBase, customRules: '   ' }) === pDefault);
+ok('안 주면 기본 규칙', DRAFT.buildPrompt(cpBase) === pDefault);
+
+/* 모달이 출발점으로 보여줄 기본 규칙 전문. 빈 칸에서 시작하면 무엇을 지우는지도 모른다. */
+const tpl = DRAFT.defaultRules({ limit: 1000 });
+ok('defaultRules 가 규칙을 돌려준다', tpl.length > 500, `→ ${tpl.length}자`);
+ok('규칙 번호가 붙어 있다', /^1\./m.test(tpl));
+ok('Context·Output 은 안 들어간다', !tpl.includes('# Output') && !tpl.includes('지원 회사:'));
+
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
 process.exit(fail ? 1 : 0);
