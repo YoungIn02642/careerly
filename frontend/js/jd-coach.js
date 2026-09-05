@@ -1243,6 +1243,119 @@
     }
   }
 
+  /* ── 고용24 직무별 자소서 작성가이드에서 채우기 (사용자 지시 2026-09-05) ──
+     3번 칸은 늘 비어 있었다. 직무기술서를 따로 공개하는 회사가 드물어서, 사용자가
+     "구해 오라" 는 말을 들어도 구할 데가 없었기 때문이다. 고용24 가 공채 기업의
+     직무 소개·주요 업무·필요 역량·우대 사항을 직무별로 공개해 두었으니 그걸 찾아 넣는다.
+
+     ── 공고 가져오기(fetchPostingUrl)와 다른 점 ──
+     저건 사용자가 주소를 안다는 전제다. 여기는 **주소를 모른다** — 그래서 검색이 먼저
+     오고, 고른 뒤에 채운다. 대신 가져온 뒤의 규칙은 같다: 채워 넣고 멈춘다(분석은
+     사람이 확인하고 누른다), 적어 둔 것이 있으면 묻고 덮는다. */
+  let _w24 = [];              // 지금 그려진 검색 결과 — 고를 때 번호를 여기서 찾는다
+
+  /* 링크를 붙일 수 있다는 것만 jd-url-msg 와 다르다 — 가져온 가이드의 원문 주소를
+     같이 줘야 "여기서 왔다" 를 사용자가 확인할 수 있다(근거를 보여주는 화면 규칙). */
+  function w24Msg(kind, text, link) {
+    const box = $('#jd-w24-msg');
+    if (!box) return;
+    box.hidden = !text;
+    box.className = `jd-url-msg${kind ? ` jd-url-msg--${kind}` : ''}`;
+    box.innerHTML = text
+      ? esc(text) + (link ? ` <a href="${esc(link)}" target="_blank" rel="noopener">고용24 원문 열기</a>` : '')
+      : '';
+  }
+
+  function paintW24(total = 0, q = '') {
+    const host = $('#jd-w24-list');
+    if (!host) return;
+    host.hidden = !_w24.length;
+    if (!_w24.length) { host.innerHTML = ''; return; }
+
+    /* 몇 건 중 몇 건을 보여주는지 적는다 — 검색어가 넓으면 원하는 회사가 아래에
+       있을 수 있는데, 목록만 보면 "없다" 고 오해한다. */
+    const more = total > _w24.length
+      ? `<p class="jd-w24-more">‘${esc(q)}’ 로 ${total.toLocaleString()}건 중 ${_w24.length}건. 회사명을 더 정확히 적으면 좁혀집니다.</p>`
+      : '';
+    host.innerHTML = _w24.map((r, i) => `
+      <button type="button" class="jd-w24-row" data-w24="${i}">
+        <b>${esc(r.company)}</b>
+        <span class="jd-w24-job">${esc(r.job)}</span>
+        <small>${esc([r.year, r.half].filter(Boolean).join(' '))}${r.open ? ' · 진행중' : ''}</small>
+      </button>`).join('') + more;
+  }
+
+  async function searchW24() {
+    const input = $('#jd-w24-q');
+    const btn = $('#jd-w24-go');
+    if (!input) return;
+    const q = input.value.trim();
+    if (!q) { w24Msg('warn', '기업명이나 직무명을 적어 주세요.'); input.focus(); return; }
+
+    if (btn) { btn.disabled = true; btn.textContent = '찾는 중…'; }
+    w24Msg('', '');
+    try {
+      const r = await DB.jdGuideSearch(q);
+      _w24 = r.rows || [];
+      paintW24(r.total || 0, q);
+      if (!_w24.length) {
+        w24Msg('warn', `‘${q}’ 로 나온 가이드가 없어요. 고용24에는 공채를 등록한 기업만 올라옵니다 — `
+          + '회사명 대신 직무명(예: 경영기획)으로도 찾아보세요.');
+      }
+    } catch (e) {
+      _w24 = [];
+      paintW24();
+      w24Msg('warn', e.message || '고용24를 부르지 못했어요.');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '찾기'; }
+    }
+  }
+
+  /* 고른 가이드를 칸에 채운다.
+
+     ── 무엇까지 채우나 ──
+     직무기술서는 늘 채운다(이 칸을 채우려고 부른 것이다). 회사명과 자소서 문항은
+     **비어 있을 때만** 채운다 — 사용자가 이미 적어 둔 것을 자동 입력이 지우면
+     되돌릴 방법이 없다(applyPickedJob 과 같은 규칙).
+
+     문항별 작성 가이드와 주요 Tip 은 가져오지 않는다. 저건 고용24 가 쓴 '작성 요령'
+     이라 직무기술서에 섞이면 이 회사의 요구 역량으로 잡힌다. 원문은 링크로 연다. */
+  async function applyW24(i) {
+    const row = _w24[i];
+    const ta = $('#jd-jd');
+    if (!row || !ta) return;
+    if (ta.value.trim() && !confirm('직무기술서 칸에 적어 둔 글이 있어요. 가져온 내용으로 바꿀까요?')) return;
+
+    w24Msg('', '');
+    try {
+      const g = await DB.jdGuide(row);
+      ta.value = g.jdText;
+
+      const filled = ['직무기술서'];
+      const co = $('#jd-company');
+      if (co && !co.value.trim() && g.company) { co.value = g.company; filled.push('회사'); }
+      /* 문항은 그 회사가 실제로 낸 문항이다 — 공고에서 못 얻는 것이라 값이 크다. */
+      if (!parseQuestions().length && g.questions?.length) {
+        setQBoxes(g.questions.map(q => q.text));
+        filled.push(`자소서 문항 ${g.questions.length}개`);
+      }
+
+      /* 채운 칸은 펼쳐서 보여준다 — 접힌 채로 "채웠다" 고만 하면 무엇이 들어갔는지
+         확인할 수 없다. */
+      STEPS.forEach(s => { if (filled.length) blockOf(s)?.classList.add('is-open'); paintBlock(s); });
+      document.querySelectorAll('#jd-doc [data-grow]').forEach(autoGrow);
+      paintProgress();
+      paintStepComps();
+
+      _w24 = [];
+      paintW24();
+      w24Msg('ok', `${g.company} ${g.job} 가이드에서 ${filled.join(' · ')}을(를) 채웠어요. `
+        + '내용을 확인하고 분석해 주세요. 문항별 작성 요령은 고용24 원문에 있습니다.', g.url);
+    } catch (e) {
+      w24Msg('warn', e.message || '가이드를 가져오지 못했어요.');
+    }
+  }
+
   function init() {
     const runBtn = $('#jd-run');
     if (runBtn) runBtn.addEventListener('click', run);
@@ -1254,6 +1367,20 @@
        직접 잡아 준다. */
     if (urlInput) urlInput.addEventListener('keydown', e => {
       if (e.key === 'Enter') { e.preventDefault(); fetchPostingUrl(); }
+    });
+
+    /* 고용24 가이드 찾기 — 검색은 Enter 로도 돈다(검색칸의 기본 기대). 결과 줄은
+       그릴 때마다 다시 생기므로 목록 자체에 한 번만 위임한다. */
+    const w24Btn = $('#jd-w24-go');
+    if (w24Btn) w24Btn.addEventListener('click', searchW24);
+    const w24Input = $('#jd-w24-q');
+    if (w24Input) w24Input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); searchW24(); }
+    });
+    const w24List = $('#jd-w24-list');
+    if (w24List) w24List.addEventListener('click', e => {
+      const row = e.target.closest('[data-w24]');
+      if (row) applyW24(Number(row.dataset.w24));
     });
 
     const sampleBtn = $('#jd-sample');
