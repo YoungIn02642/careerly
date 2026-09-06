@@ -1026,6 +1026,26 @@ a.wf-btn { text-decoration: none; }
 /* 가져왔다 / 못 가져왔다를 색으로 가른다 — 둘 다 회색이면 성공한 줄 알고 그냥 누른다 */
 .jd-url-msg--ok { border-color: var(--wf-ok); }
 .jd-url-msg--warn { border-color: var(--wf-error); }
+.jd-url-msg a { color: var(--wf-ink); }
+
+/* ── 고용24 직무별 자소서 작성가이드 검색 결과 ────────────────
+   목록이 길어도 입력칸을 화면 밖으로 밀지 않게 높이를 묶는다 — 이건 '고르는 자리'
+   일 뿐이고, 사용자가 보고 있어야 하는 것은 아래 직무기술서 칸이다. */
+.jd-w24-list {
+  margin-bottom: 8px; max-height: 260px; overflow-y: auto;
+  border: 1px solid var(--wf-hairline); border-radius: var(--wf-r-sm);
+}
+.jd-w24-row {
+  display: flex; align-items: baseline; gap: 8px; width: 100%;
+  padding: 8px 11px; border: 0; border-bottom: 1px solid var(--wf-hairline);
+  background: none; text-align: left; cursor: pointer; font: inherit;
+}
+.jd-w24-row:last-of-type { border-bottom: 0; }
+.jd-w24-row:hover, .jd-w24-row:focus-visible { background: var(--wf-fill); outline: none; }
+.jd-w24-row b { font-size: 13px; font-weight: 600; color: var(--wf-ink); white-space: nowrap; }
+.jd-w24-job { flex: 1; min-width: 0; font-size: 13px; color: var(--wf-body); }
+.jd-w24-row small { font-size: 11.5px; color: var(--wf-mute); white-space: nowrap; }
+.jd-w24-more { padding: 8px 11px; font-size: 12px; line-height: 1.6; color: var(--wf-mute); }
 
 .jd-hint b { font-weight: 500; color: var(--wf-body); }
 

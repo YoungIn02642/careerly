@@ -289,6 +289,11 @@ CREATE TABLE IF NOT EXISTS insight_posts (
   -- 공지글. 관리자만 올릴 수 있고 목록 맨 위에 고정된다.
   -- 카테고리와 별개다 — 운영방침은 '자유'에서도 '질문'에서도 보여야 한다.
   is_notice   BOOLEAN      NOT NULL DEFAULT FALSE,
+  -- 'AI 프롬프트' 카테고리 글이 같이 싣는 **프롬프트 원문**. 본문(body)은 설명이고
+  -- 이건 자소서 코치의 '내 AI 프롬프트'에 그대로 담기는 규칙이라 칸을 가른다
+  -- (섞으면 담아 갔을 때 감상문이 AI 규칙의 한 줄이 된다 — insight-prompt.js).
+  -- 다른 카테고리에서는 NULL 이다.
+  prompt_text TEXT         NULL,
   created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   -- 글쓴이가 탈퇴하면 글도 같이 지운다. 남의 글만 남고 작성자가 사라지면
@@ -299,6 +304,18 @@ CREATE TABLE IF NOT EXISTS insight_posts (
   KEY idx_ipost_user (user_id),
   -- 목록은 항상 '공지 먼저, 최신순'으로 읽는다
   KEY idx_ipost_notice (is_notice, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 프롬프트를 '내 프롬프트로 담아 간' 기록. 담아 간 수를 세는 데만 쓴다.
+-- 왜 카운터 컬럼(+1)이 아니라 표인가 — 같은 사람이 여러 번 눌러도 한 번으로 세야
+-- 목록의 숫자가 '몇 사람이 가져갔나'를 뜻한다. 컬럼 하나면 눌린 횟수일 뿐이다.
+CREATE TABLE IF NOT EXISTS insight_prompt_copies (
+  post_id     VARCHAR(32)  NOT NULL,
+  user_id     VARCHAR(32)  NOT NULL,
+  created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (post_id, user_id),
+  CONSTRAINT fk_ipcopy_post FOREIGN KEY (post_id) REFERENCES insight_posts(id) ON DELETE CASCADE,
+  CONSTRAINT fk_ipcopy_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS insight_comments (

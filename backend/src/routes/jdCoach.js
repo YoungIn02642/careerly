@@ -477,4 +477,62 @@ router.post('/motive', async (req, res) => {
   }
 });
 
+/* ── 고용24 직무별 자소서 작성가이드 (2026-09-05, 사용자 지시) ──
+   3번 칸(직무기술서)을 사용자가 어디선가 구해 오지 않아도 되게 하는 경로다.
+   무엇을 가져오고 무엇을 안 가져오는지는 work24-guide.js 머리주석에 있다.
+
+   ── 왜 로그인을 안 걸었나 ──
+   /api/jd/posting 은 **사용자가 준 주소**를 여는 기능이라 로그인을 건다(익명 프록시가
+   된다). 여기는 주소를 우리가 만든다 — 호스트·경로가 코드에 박혀 있고 사용자가 주는
+   것은 검색어와 숫자뿐이라 남의 서버를 부르게 만들 수 없다. 대신 횟수는 막는다.
+
+   ── 응답을 캐시하지 않는다 ──
+   공채는 시즌마다 바뀌고, 한 사람이 같은 가이드를 두 번 열 일이 드물다. 쌓아 두면
+   '고용24 사본' 이 되는데 그건 25-2 에서 안 하기로 한 것이다. */
+const W24 = require('../work24-guide');
+
+const w24Hits = new Map();                     // ip → { count, resetAt }
+const W24_WINDOW_MS = 5 * 60 * 1000;
+const W24_MAX_PER_WINDOW = 40;                 // 검색은 타자 치듯 여러 번 누른다
+
+function w24RateLimited(key) {
+  const now = Date.now();
+  const hit = w24Hits.get(key);
+  if (!hit || now > hit.resetAt) {
+    w24Hits.set(key, { count: 1, resetAt: now + W24_WINDOW_MS });
+    if (w24Hits.size > 1000) {
+      for (const [k, v] of w24Hits) if (now > v.resetAt) w24Hits.delete(k);
+    }
+    return false;
+  }
+  hit.count += 1;
+  return hit.count > W24_MAX_PER_WINDOW;
+}
+
+const w24Limit = (req, res, next) => (w24RateLimited(req.ip)
+  ? res.status(429).json({ error: '검색이 너무 잦아요. 잠시 후 다시 시도해 주세요.' })
+  : next());
+
+router.get('/work24/guides', w24Limit, async (req, res) => {
+  const q = String(req.query.q || '').trim();
+  /* 검색어 없이도 목록은 나온다(최근 공채 순). 다만 화면은 검색어를 받고 부른다 —
+     1,853건을 한 장씩 넘겨 보게 하는 건 이 칸이 할 일이 아니다. */
+  try {
+    const r = await W24.search({ q, year: req.query.year, page: req.query.page, size: 30 });
+    res.json({ ...r, query: q });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
+router.get('/work24/guide', w24Limit, async (req, res) => {
+  try {
+    const g = await W24.guide({ epa: req.query.epa, rcit: req.query.rcit, guid: req.query.guid });
+    res.json(g);
+  } catch (e) {
+    /* 번호가 틀린 것(400)과 고용24가 안 되는 것(502)은 사용자가 할 일이 다르다. */
+    res.status(/번호/.test(e.message) ? 400 : 502).json({ error: e.message });
+  }
+});
+
 module.exports = router;
