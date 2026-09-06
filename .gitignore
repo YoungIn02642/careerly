@@ -25,6 +25,25 @@ backend/data/dart-corps.json
 backend/data/alio-jobs.json
 backend/data/.alio-probe.json
 
+# 고용24 채용공고 — 공개 화면을 하루 한 번 긁어 둔 것이라 같은 이유로 커밋하지 않는다.
+# 계산해 만든 값이 없고(화면에서 읽은 필드 그대로), 없으면 공고 칸이 잡알리오로 물러난다.
+backend/data/work24-jobs.json
+
+# 회사 로고 캐시와 '회사명 → 홈페이지' 표. 둘 다 받아 두는 값이라 커밋하지 않는다.
+# 로고는 회사 홈페이지에서 받은 이미지고(남의 저작물을 저장소에 넣지 않는다),
+# 호스트 표는 DART 회사개황에서 다시 채워진다 — 없으면 로고만 이니셜로 물러난다.
+backend/data/logos/
+backend/data/company-logo-hosts.json
+
+# 공모전·대외활동(위비티) — 하루 한 번 받는 스냅샷이라 커밋하지 않는다.
+# 남의 사이트에서 받아 온 목록을 저장소에 넣어 두지 않는다는 뜻이기도 하다.
+# 없으면 스펙업이 온통청년 결과만 보여준다(화면은 그대로 돈다).
+backend/data/wevity.json
+
+# 공모전 모집 포스터 — 원문 사이트에서 받아 둔 그림이다. 저장소에 넣지 않는다
+# (남의 저작물을 커밋하지 않는다는 뜻이자, 캐시라서 언제든 다시 받을 수 있다).
+backend/data/posters/
+
 backend/data/users.json
 backend/data/profiles.json
 

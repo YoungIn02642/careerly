@@ -17,6 +17,7 @@ const certReco = require('./cert-reco');
 const ALIO = require('./alio-jobs');
 const sectors = require('./company-sectors');
 const POSTING = require('./posting-fetch');
+const dailyRefresh = require('./daily-refresh');
 const OAuth = require('./oauth');
 const NiceAuth = require('./nice-auth');
 const recommendationsRouter = require("./routes/recommendations");
@@ -1322,6 +1323,12 @@ assertConnection()
 
     app.listen(PORT, () => {
       console.log(`Careerly backend running on http://localhost:${PORT}`);
+
+      /* 채용공고 캐시를 하루 한 번 다시 받는다(daily-refresh.js).
+         listen 뒤에 켠다 — 포트를 잡기 전에 남의 서버를 부를 이유가 없다.
+         끄려면 .env 에 DAILY_REFRESH=off. */
+      dailyRefresh.start();
+
       /* 선택 기능은 키가 없으면 조용히 꺼진 채로 돈다. 화면에서는 '되는 것 같은데
          이상한' 모습으로만 나타나서(뉴스가 웹 폴백으로 빠지는 식) 원인을 찾기
          어렵다. 무엇이 켜졌는지 부팅할 때 한 줄로 남긴다. 키 값은 찍지 않는다. */

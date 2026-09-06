@@ -94,12 +94,45 @@ window.SpecUp = (() => {
 
   /* 카드 하나. 네 탭이 담는 것이 다르지만(자격증·어학·공고) 격자에서 높이와 정보
      위치가 어긋나면 훑을 수가 없어서, 뼈대는 한 곳에서 만든다. */
-  function card({ emoji, coverTag, palKey, badges = [], title, org, foot, url, cta }) {
+  /* ── 표지 그림 ────────────────────────────────────────────────
+     세 겹으로 쌓고 **안 되는 것만 걷어낸다.** 순서는 뒤에서 앞으로:
+
+       이모지(바닥) → 주관기관 로고 → 모집 포스터(맨 앞, 여백 없이 꽉)
+
+     · 포스터 — 사용자 지시(2026-09-07) "사이트 안에 모집 사진을 넣어줘.
+       여백없게 화면 맞춰서." `object-fit: cover` 로 표지를 덮는다
+     · 로고 — 포스터가 없는 공고의 자리(2026-09-06 결정)
+     · 이모지 — 둘 다 없을 때. 예전 모습 그대로다
+
+     ── 왜 갈아끼우지 않고 쌓아서 걷어내나 ──
+     처음에는 `onerror` 에서 `innerHTML` 을 통째로 바꿔치웠는데, 포스터→로고→이모지로
+     **두 단계** 물러나야 하니 바꿔 넣을 HTML 안에 또 따옴표 붙은 핸들러가 들어간다.
+     속성 안의 문자열 안의 속성이라 이스케이프가 세 겹이 되고, 한 겹만 어긋나도
+     **에러 없이 표지만 빈 칸**이 된다. 쌓아 두고 실패한 것을 `remove()` 하면
+     핸들러가 한 줄로 끝나고, 다음 겹이 저절로 드러난다.
+
+     서버가 그림을 못 찾으면 204 를 준다. 몸통이 없으니 `error` 가 뜨지만 그것만
+     믿지 않는다 — 0바이트가 200 으로 오면 `load` 가 뜨면서 아무것도 안 그려진다.
+     둘 다 본다(company-cover.js 의 공고 카드와 같은 규칙). */
+  function coverArt({ poster, logo, emoji }) {
+    const drop = sel => `this.closest('${sel}').remove()`;
+    const guard = sel => `onerror="${esc(drop(sel))}" onload="if(!this.naturalWidth){${esc(drop(sel))}}"`;
+
+    return (poster
+        ? `<img class="sup-cover-img" src="${esc(poster)}" alt="" loading="lazy" ${guard('.sup-cover-img')}>`
+        : '')
+      + (logo
+        ? `<span class="sup-cover-logo"><img src="${esc(logo)}" alt="" loading="lazy" ${guard('.sup-cover-logo')}></span>`
+        : '')
+      + `<span class="sup-cover-emoji">${emoji}</span>`;
+  }
+
+  function card({ emoji, poster, logo, coverTag, palKey, badges = [], title, org, foot, url, cta }) {
     const badgeHtml = badges.filter(Boolean)
       .map(b => `<span class="sup-badge ${b.cls || ''}">${esc(b.text)}</span>`).join('');
     const inner = `
       <div class="sup-cover" data-pal="${palOf(palKey ?? title)}">
-        <span class="sup-cover-emoji">${emoji}</span>
+        ${coverArt({ poster, logo, emoji })}
         ${coverTag ? `<span class="sup-cover-tag">${esc(coverTag)}</span>` : ''}
       </div>
       <div class="sup-card-body">
@@ -627,8 +660,25 @@ window.SpecUp = (() => {
 
     return chipBar + listHead(sorted.length, { sortable: true })
       + grid(sorted.slice(0, 24).map(actCard))
-      + `<div class="sup-src">출처: ${esc(st.source)} · 모집 공고에는 포스터 이미지가 없어
-           카드 표지는 이름에서 색만 정해 그립니다(없는 그림을 지어내지 않습니다).</div>`;
+      + srcLine(st);
+  }
+
+  /* ── 출처 줄 ────────────────────────────────────────────────
+     소스가 둘이 됐다(2026-09-06). **어디서 몇 건이 왔는지 적고 링크를 건다** —
+     위비티가 모아 편집한 목록을 우리가 모은 것처럼 보이면 안 된다. 원문을 읽는
+     자리도 그쪽이다.
+
+     표지 설명도 바뀌었다. 예전에는 "포스터 이미지가 없어 색만 정해 그린다"고 적었는데,
+     이제 주관기관 홈페이지에서 로고를 받아 붙인다. 다만 **여전히 없는 카드가 있다** —
+     그걸 숨기지 않고 그대로 적는다. */
+  function srcLine(st) {
+    const list = (st.sources || []).length
+      ? st.sources.map(x => x.url
+          ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.name)}</a> ${x.count}건`
+          : `${esc(x.name)} ${x.count}건`).join(' · ')
+      : esc(st.source || '');
+    return `<div class="sup-src">출처: ${list} · 표지는 주관기관 로고이고,
+      로고를 못 찾은 곳은 이름에서 색만 정해 그립니다(없는 그림을 지어내지 않습니다).</div>`;
   }
 
   function actCard(a) {
@@ -639,6 +689,10 @@ window.SpecUp = (() => {
 
     return card({
       emoji: '🏆',
+      /* 표지: 모집 포스터 → 주관기관 로고 → 이모지 순으로 물러난다.
+         포스터는 상세를 연 공고에만 있고, 로고는 홈페이지를 밝힌 기관에만 있다. */
+      poster: a.poster || null,
+      logo: a.logo || null,
       /* ── 표지에는 지역을 올린다 (사용자 지시) ────────────────────
          예전에는 키워드 첫 개를 올렸는데, 그 값은 정책 분류라('보조금'·
          '장기미취업청년') 공모전 카드에서 읽을 것이 못 됐다. 게다가 아래 배지가
@@ -647,10 +701,17 @@ window.SpecUp = (() => {
 
          지금 잡히는 정책은 지자체 것에 몰려 있다(광주·울산·인천…). 지역을 안 적으면
          학생이 남의 동네 공고를 열어 보고 나서야 안다 — 표지에서 바로 걸러지게 한다.
-         지역을 모르면 예전처럼 키워드로 물러선다(칸을 비우면 표지가 허전해진다). */
+         지역을 모르면 예전처럼 키워드로 물러선다(칸을 비우면 표지가 허전해진다).
+
+         ── 물러설 때 배지도 한 칸 밀어야 한다 (2026-09-06) ──
+         위비티 항목에는 지역이 없어서(그 사이트가 안 준다) 표지가 키워드로 물러나는데,
+         배지가 같은 배열을 처음부터 읽어 **첫 키워드가 또 두 번 찍혔다**
+         ('예체능/미술/음악 / 예체능/미술/음악'). 22-7 에서 고친 것과 똑같은 모양이
+         새 소스에서 되살아났다 — 그때는 지역이 늘 있어서 안 드러났을 뿐이다.
+         표지가 키워드를 가져갔으면 배지는 **그다음부터** 시작한다. */
       coverTag: a.region || (a.keywords || [])[0] || '',
       palKey: a.name,
-      badges: (a.keywords || []).slice(0, 2).map(k => ({ text: k })),
+      badges: (a.keywords || []).slice(a.region ? 0 : 1, a.region ? 2 : 3).map(k => ({ text: k })),
       title: a.name,
       org: a.org || '주관 미상',
       foot,

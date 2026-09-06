@@ -23,6 +23,8 @@ const GUIDE = require('../cover-guide');
 const SARAMIN = require('../saramin-jobs');
 const WORKNET = require('../worknet-jobs');
 const ALIO = require('../alio-jobs');
+const WORK24 = require('../work24-jobs-cache');
+const LOGO = require('../company-logo');
 const SECTORS = require('../company-sectors');
 const JOB = require('../job-industry');
 const CAREER = require('../career-pages');
@@ -124,8 +126,10 @@ function buildSteps({ news, dart, jobs }) {
       no: 4, key: 'recruit', label: '채용공고',
       asks: '이 직무에 무엇을 요구하는가',
       status: jobs?.items?.length ? 'ok' : 'link',
+      /* 여기도 '워크넷' 이 박혀 있었다. 소스가 넷이라 어디서 왔는지는 jobs.source 가
+         말한다 — 박아 두면 소스를 하나 더 붙일 때마다 조용히 틀린다. */
       note: jobs?.items?.length
-        ? '워크넷에 열려 있는 공고입니다. 공고 본문을 자소서 코치에 붙여넣으면 요구 역량이 나옵니다.'
+        ? `${SOURCE_LABEL[jobs.source] || '채용 정보'}에 열려 있는 공고입니다. 공고 본문을 자소서 코치에 붙여넣으면 요구 역량이 나옵니다.`
         : '채용 사이트에서 이 회사 공고를 찾아 자소서 코치에 붙여넣으면 요구 역량과 작성 지침이 나옵니다.',
     },
     {
@@ -153,22 +157,35 @@ function motiveFormula({ news, dart }) {
   ];
 }
 
-/* ── 채용공고: 사람인 → 잡알리오 → 워크넷 ──────────────────────
-   셋 다 companyJobs(회사명) 한 가지 모양이라 순서대로 부르고 **처음 잡히는 것**을 쓴다.
+/* ── 채용공고: 사람인 → 고용24 → 잡알리오 → 워크넷 ──────────────
+   넷 다 companyJobs(회사명) 한 가지 모양이라 순서대로 부르고 **처음 잡히는 것**을 쓴다.
    전부 부르면 느려지기만 하고 같은 공고가 두 번 나올 수도 있다.
 
    ── 이 순서인 이유 ──
    · 사람인  : 민간 공고가 실제로 여기 올라온다. 다만 **승인이 심사**라 키가 없을 수 있다
-   · 잡알리오: 공공데이터포털 **자동승인**이라 키가 이미 있다. 대신 **공공기관 공고만** 담는다
+   · 고용24  : 공개 화면을 **하루 한 번** 받아 둔 캐시(work24-crawl.js). 민간·공공이
+               같이 들어오고 대기업 공채도 잡힌다. 대신 **어제 값**이고 대졸·신입으로 좁혔다
+   · 잡알리오: 공공데이터포털 **자동승인**. **공공기관 공고만** 담지만 그 안에서는 최신이다
    · 워크넷  : 발급 키가 개인회원이면 목록 API 자체가 막힌다(10-7). 열리면 보조로 산다
 
-   민간 회사를 넣으면 잡알리오는 당연히 0건인데, 그게 "채용을 안 한다"로 읽히면 안 된다.
-   그래서 사유를 합쳐 내려보내고 화면이 그대로 보여준다(alio-jobs.js 머리주석). */
+   ── 왜 고용24 를 잡알리오보다 위에 두나 ──
+   커버리지가 넓어서다. 다만 **공공기관 하나만 놓고 보면 잡알리오가 낫다** — 고용24 는
+   대졸·신입으로 좁혀 받아 두어 그 밖의 공고가 빠져 있고, 잡알리오는 접수 중 전량이다.
+   그래서 고용24 가 **0건이면 그대로 잡알리오로 내려간다**(아래 for 문이 그렇게 돈다).
+
+   회사를 넣었는데 어느 소스에서도 안 나오는 일이 흔하다. 그게 "채용을 안 한다"로
+   읽히면 안 되므로 사유를 합쳐 내려보내고 화면이 그대로 보여준다(alio-jobs.js 머리주석). */
 const SOURCES = [
   ['사람인', 'saramin', SARAMIN],
+  ['고용24', 'work24', WORK24],
   ['공공기관(잡알리오)', 'alio', ALIO],
   ['워크넷', 'worknet', WORKNET],
 ];
+
+/* 소스 id → 화면에 적을 이름. **SOURCES 에서 만든다** — 이름표를 따로 손으로 두면
+   소스를 하나 더 붙였을 때 한쪽만 고쳐지고, 그건 '워크넷 기준' 처럼 조용히 틀린
+   문구로 나간다(실제로 그랬다). */
+const SOURCE_LABEL = Object.fromEntries(SOURCES.map(([label, id]) => [id, label]));
 
 async function fetchJobs(name) {
   const tried = [];
@@ -215,6 +232,32 @@ router.get('/business', async (req, res) => {
   }
 });
 
+/* GET /api/company/logo?name=<회사명>
+   공고 카드에 붙일 회사 로고. **주소가 아니라 회사명을 받는다** — 화면이 주소를
+   고르게 하면 우리 서버가 남의 주소를 대신 여는 통로가 된다(company-logo.js 머리주석).
+   주소는 리포트를 그릴 때 DART 회사개황에서 받아 서버가 적어 둔 것을 쓴다.
+
+   못 찾으면 **204**. 빈 이미지나 기본 아이콘을 주지 않는다 — 화면이 그 회사
+   이니셜로 카드를 그린다. 깨진 이미지 아이콘이 뜨면 학생은 고장으로 읽는다. */
+router.get('/logo', async (req, res) => {
+  const name = String(req.query.name || '').trim();
+  if (!name) return res.status(400).json({ error: '회사명을 입력해 주세요.' });
+
+  const host = LOGO.hostFor(name);
+  if (!host) return res.status(204).end();       // 홈페이지를 모르는 회사
+
+  let file = LOGO.cached(host);
+  if (!file) {
+    try { file = await LOGO.fetchLogo(host); } catch { file = null; }
+  }
+  if (!file) return res.status(204).end();
+
+  /* 로고는 자주 안 바뀐다. 하루 캐시로 두면 같은 학생이 목록을 오갈 때 다시 안 받는다. */
+  res.set('Cache-Control', 'public, max-age=86400');
+  res.type(file.type);
+  res.sendFile(file.path);
+});
+
 router.get('/analysis', async (req, res) => {
   const name = String(req.query.name || '').trim();
   if (!name) return res.status(400).json({ error: '회사명을 입력해 주세요.' });
@@ -243,6 +286,12 @@ router.get('/analysis', async (req, res) => {
         : reason?.message,
     });
   }
+
+  /* 홈페이지를 알아냈으면 회사명과 짝지어 적어 둔다. 로고 라우트가 그것만 본다 —
+     화면이 주소를 고르지 못하게 하려고 이렇게 나눴다(company-logo.js 머리주석). */
+  const logoUrl = dart?.profile?.homepage && LOGO.remember(name, dart.profile.homepage)
+    ? `/api/company/logo?name=${encodeURIComponent(name)}`
+    : null;
 
   res.json({
     company: name,
@@ -283,6 +332,12 @@ router.get('/analysis', async (req, res) => {
     /* 회사별 채용공고(워크넷). 대기업 공채는 자사 사이트로만 올라오는 일이 많아
        0건이 정상인 경우가 있다 — 그래서 사유(reason)도 같이 내려보낸다. */
     jobs,
+
+    /* 공고 카드에 붙일 로고 주소. 홈페이지를 아는 회사만 준다 — 모르면 null 이고
+       화면이 이니셜 카드를 그린다. 주소를 그대로 내려보내지 않고 **우리 주소**를
+       주는 이유는 company-logo.js 머리주석에 있다(누가 어느 회사를 보는지 그 회사
+       서버에 남기지 않는다). */
+    logo: logoUrl,
 
     /* 자사 채용페이지 링크. 없으면 null 이고 화면은 검색 링크로 물러난다.
        바로 위 jobs 의 '0건이 정상' 인 경우에 특히 이게 답이다 — 공채가 여기 있다. */
