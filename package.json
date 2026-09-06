@@ -13,15 +13,18 @@
     "build 는 깃에 넣지 않는 원본 자료를 배포 때마다 받는 단계다(.gitignore 참고).",
     "  - DART 기업 색인 6MB — 없으면 기업분석의 개요·재무·경쟁사 칸이 빈다",
     "  - 공공기관 채용공고(잡알리오) — 없으면 회사 리포트의 채용공고 칸이 빈다",
-    "둘 다 --if-possible 이라 키가 없거나 API 가 죽어 있으면 건너뛰고 배포는 계속된다.",
-    "**배포 주기가 곧 이 자료들의 갱신 주기다.** 따로 도는 스케줄러는 없다."
+    "  - 고용24 채용공고(공개 화면 크롤링) — 민간 공고가 여기서 들어온다",
+    "  - 공모전·대외활동(위비티) — 없으면 스펙업이 온통청년 결과만 보여준다",
+    "셋 다 --if-possible 이라 키가 없거나 소스가 죽어 있으면 건너뛰고 배포는 계속된다.",
+    "여기는 **새로 뜬 인스턴스가 첫날부터 자료를 갖고 시작하게** 하는 자리다.",
+    "그 뒤의 갱신은 서버 안 daily-refresh.js 가 하루 한 번 맡는다 (2026-09-06)."
   ],
   "workspaces": [
     "backend"
   ],
   "scripts": {
     "start": "node backend/src/server.js",
-    "build": "node backend/scripts/fetch-dart-corps.js --if-possible && node backend/scripts/fetch-alio-jobs.js --if-possible",
+    "build": "node backend/scripts/fetch-dart-corps.js --if-possible && node backend/scripts/fetch-alio-jobs.js --if-possible && node backend/scripts/fetch-work24-jobs.js --if-possible && node backend/scripts/fetch-wevity.js --if-possible",
     "dev": "npm --workspace backend run dev",
     "preview": "node backend/scripts/preview-frontend.js",
     "test": "for f in test/*.test.js; do node \"$f\" | tail -1; done"

@@ -546,12 +546,47 @@ async function youthActivities({ topic = 'contest' } = {}) {
 }
 
 /* 받아 둔 전체에서 한 탭만 떼어 준다. 응답 모양은 예전과 같다 — 화면을 안 고쳐도 된다. */
+/* ── 두 소스를 합쳐 한 탭으로 준다 (2026-09-06, 사용자 지시) ──────────────
+   온통청년만으로는 **기업 공모전이 한 건도 안 들어온다**(22-6). 그래서 위비티를
+   하루 한 번 받아 둔 캐시(src/wevity.js)를 여기서 얹는다. 실측 38건 → 200건대.
+
+   **한쪽을 다른 쪽으로 번역하지 않는다.** 항목마다 `source` 가 붙어 있고, 화면은
+   출처를 밝혀서 보여준다 — 위비티가 모은 것을 우리가 모은 것처럼 보이면 안 된다.
+
+   위비티가 없어도(캐시 없음·수집 실패) **이 함수는 그대로 돈다.** 온통청년 결과만
+   나가고 화면은 예전과 같다 — 새 소스 하나 때문에 기능이 통째로 죽으면 안 된다
+   (43장에서 Gemini 로 겪은 것과 같은 규칙). */
 function sliceTopic(rows, t) {
+  const mine = rows.filter(a => a.topic === t);
+
+  let extra = { items: [], fetchedAt: null, sourceName: null, sourceUrl: null };
+  try {
+    extra = require('./wevity').activities({ topic: t });
+  } catch (e) {
+    console.warn('[specup] 공모전 캐시를 읽지 못했습니다 —', e.message);
+  }
+
+  /* 겹치면 온통청년 것을 남긴다 — 지역이 붙어 있어 카드가 더 쓸모 있다. */
+  const items = extra.items.length
+    ? require('./wevity').merge(mine.map(a => ({ ...a, source: 'youth' })), extra.items)
+    : mine.map(a => ({ ...a, source: 'youth' }));
+
+  const sources = ['온통청년 청년정책(한국고용정보원)'];
+  if (extra.items.length) sources.push(extra.sourceName || '위비티(Wevity)');
+
   return {
     topic: t,
     label: ACTIVITY_TOPICS[t].label,
-    items: rows.filter(a => a.topic === t),
-    source: '온통청년 청년정책(한국고용정보원)',
+    items,
+    /* 화면 아래 '출처' 한 줄에 그대로 쓰인다. 둘 다 살아 있으면 둘 다 적는다. */
+    source: sources.join(' · '),
+    sources: [
+      { id: 'youth', name: '온통청년 청년정책(한국고용정보원)', count: mine.length, url: 'https://www.youthcenter.go.kr' },
+      ...(extra.items.length
+        ? [{ id: 'wevity', name: extra.sourceName || '위비티(Wevity)', count: extra.items.length,
+             url: extra.sourceUrl, fetchedAt: extra.fetchedAt }]
+        : []),
+    ],
   };
 }
 

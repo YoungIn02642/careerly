@@ -1060,10 +1060,15 @@ window.CompanyCover = (() => {
     }
     if (key === 'recruit') {
       const n = analysis.jobs?.items?.length || 0;
-      if (!n) return `<div class="co-card-none">워크넷에 열린 공고 없음<br>채용 사이트에서 직접 찾으세요</div>`;
+      /* 여기에 '워크넷' 이 박혀 있었다. 소스가 넷(사람인·고용24·잡알리오·워크넷)인데
+         타일만 늘 워크넷이라고 말해서, 고용24 에서 온 공고를 워크넷 것으로 읽게 했다.
+         **어디서 온 값인지는 데이터가 말한다** — 박아 두면 소스를 하나 더 붙일 때마다
+         조용히 틀린다(cas.js 배점 상수를 한 곳에 둔 것과 같은 이유). */
+      if (!n) return `<div class="co-card-none">열린 공고 없음<br>채용 사이트에서 직접 찾으세요</div>`;
       const soon = analysis.jobs.items.filter(j => j.dday !== null).sort((a, b) => a.dday - b.dday)[0];
+      const from = SOURCE_SHORT[analysis.jobs?.source] || '채용 정보';
       return `<div class="co-card-v">${n}<small>건</small></div>
-        <div class="co-card-d co-card-d--flat">${soon ? `가장 이른 마감 D-${soon.dday}` : '워크넷 기준'}</div>`;
+        <div class="co-card-d co-card-d--flat">${soon ? `가장 이른 마감 D-${soon.dday}` : `${esc(from)} 기준`}</div>`;
     }
     if (key === 'financial') {
       const rev = fin?.accounts?.revenue;
@@ -1215,13 +1220,76 @@ window.CompanyCover = (() => {
      그래도 담는 값어치는 있다 — 학생이 **지원할 수 있는 공고인지**(연령·학력·자격증)
      판단하는 정보다. 그러니 있는 그대로 말한다: 자격 정보는 채워지고, 역량까지
      원하면 원문을 이어붙이라고. 되는 것처럼 말해 놓고 안 되면 그게 더 나쁘다. */
-  const SOURCE_LABEL = { saramin: '사람인', worknet: '워크넷', alio: '공공기관 채용정보(잡알리오)' };
+  const SOURCE_LABEL = {
+    saramin: '사람인', worknet: '워크넷', alio: '공공기관 채용정보(잡알리오)',
+    work24: '고용24 채용정보',
+  };
+  /* 요약 타일은 한 줄이 좁다 — 같은 소스를 짧게 부르는 이름을 따로 둔다.
+     두 표가 갈리지 않게 키는 같은 것을 쓴다. */
+  const SOURCE_SHORT = { saramin: '사람인', worknet: '워크넷', alio: '잡알리오', work24: '고용24' };
+
+  /* ── 공고 카드의 회사 이미지 (2026-09-06, 사용자 지시) ──────
+     로고는 서버가 회사 홈페이지에서 받아 우리 주소로 준다(`analysis.logo`).
+     **없는 회사가 많다** — 홈페이지를 공시하지 않았거나(비상장) 로고를 못 찾은
+     경우다. 그때는 회사 이니셜로 같은 크기의 칸을 그린다:
+
+       · 깨진 이미지 아이콘을 띄우지 않는다. 학생은 그걸 고장으로 읽는다
+       · 로고 있는 회사와 **자리·크기가 같아야** 목록의 줄이 흔들리지 않는다
+       · 색을 회사명에서 만들어 같은 회사면 늘 같은 색이다. 무작위로 하면
+         새로고침할 때마다 바뀌어서 딴 회사처럼 보인다
+
+     로고를 못 받으면 서버가 204 를 준다. 몸통이 없으니 브라우저는 디코딩에 실패해
+     `error` 를 쏘지만, **그 한 가지만 믿지 않는다** — 0바이트나 깨진 파일이 200 으로
+     오면 `load` 가 뜨면서 아무것도 안 그려진다. 그래서 둘 다 본다:
+     `error` 면 바로, `load` 면 실제로 픽셀이 있는지(naturalWidth) 확인하고 바꾼다. */
+  function initialColor(name) {
+    let h = 0;
+    for (const ch of String(name)) h = (h * 31 + ch.charCodeAt(0)) % 360;
+    return `hsl(${h} 42% 46%)`;
+  }
+
+  function jobLogo(companyName) {
+    const initial = String(companyName || '?').trim().charAt(0) || '?';
+    const box = `<div class="co-job-logo co-job-logo--txt" style="background:${initialColor(companyName)}">${esc(initial)}</div>`;
+    /* 로고 주소는 우리가 보고 있는 회사 것이다. 공고의 회사명이 다르면(대조가
+       느슨한 소스가 섞일 수 있다) 붙이지 않는다 — 남의 로고를 띄우는 쪽이 나쁘다. */
+    const url = analysis.logo;
+    if (!url || !sameName(companyName, selected.name)) return box;
+    const swap = `this.closest('.co-job-logo').outerHTML=${JSON.stringify(box)}`;
+    return `<div class="co-job-logo"><img src="${esc(url)}" alt=""
+        onerror="${esc(swap)}"
+        onload="if(!this.naturalWidth){${esc(swap)}}"></div>`;
+  }
+
+  /* 회사명이 같은가. 서버의 sameCompany 와 같은 규칙이다(법인격 표기·공백 무시).
+     여기서 느슨하게 잡으면 '삼성전자로지텍' 공고에 삼성전자 로고가 붙는다. */
+  function sameName(a, b) {
+    const norm = x => String(x || '')
+      .replace(/\(주\)|\(유\)|\(재\)|\(사\)|주식회사|유한회사|재단법인|사단법인/g, '')
+      .replace(/\s+/g, '').toLowerCase();
+    return Boolean(norm(a)) && norm(a) === norm(b);
+  }
 
   /* 안내는 **학생이 할 일**만 적는다 — 어디서 받아 오는지, 그 경로가 무엇까지
      주는지는 우리 사정이다(사용자 지시 2026-09-04). */
   function jobsHint(jobs) {
     const label = SOURCE_LABEL[jobs.source] || '채용 정보';
     const withBody = (jobs.items || []).filter(j => j.qualification || j.preference).length;
+
+    /* ── 고용24 만 '언제 받은 것인지' 를 적는다 (2026-09-06) ──
+       다른 소스는 부를 때가 최신이지만, 고용24 는 공개 화면을 **하루 한 번** 받아 둔
+       것이라 값이 하루까지 낡을 수 있다. 공고는 마감이 생명이라 그 차이를 숨기면
+       안 된다 — 25-2 에서 크롤링을 접었던 이유 중 하나가 바로 이 시의성이었고,
+       이제 우리가 그 부담을 졌으니 화면에서 말한다. */
+    if (jobs.source === 'work24') {
+      const h = jobs.ageHours;
+      const when = h == null ? '' : h < 1 ? '방금 받은 자료예요.'
+        : h < 24 ? `${Math.round(h)}시간 전 받은 자료예요.`
+        : `${Math.round(h / 24)}일 전 받은 자료예요.`;
+      return `<p class="jd-hint">${esc(label)} 기준입니다. ${esc(when)}
+        하루에 한 번 새로 받으니 <b>마감일은 공고를 열어 확인하세요</b>.
+        공고를 <b>담으면</b> 자소서 코치로 그대로 넘어가요.</p>`;
+    }
 
     if (withBody) {
       return `<p class="jd-hint">${esc(label)} 기준입니다. 지원자격·우대사항이 함께 담겨 있어요.
@@ -1250,11 +1318,13 @@ window.CompanyCover = (() => {
         ${jobs.items.map(j => {
           const id = `job-${j.id || j.title}`;
           return `<div class="co-job">
+            ${jobLogo(j.company || selected.name)}
             <div class="co-job-t">
               ${j.url
                 ? `<a href="${esc(j.url)}" target="_blank" rel="noopener noreferrer">${esc(j.title)}</a>`
                 : `<b>${esc(j.title)}</b>`}
-              <small>${[j.company, j.region, j.career, j.edu].filter(Boolean).map(esc).join(' · ')}</small>
+              <small>${[j.company, ...(j.labels || []), j.region, j.career, j.edu]
+                .filter(Boolean).map(esc).join(' · ')}</small>
             </div>
             ${j.dday !== null
               ? `<span class="wf-badge ${j.dday <= 7 ? 'wf-badge--error' : 'wf-badge--mute'}">D-${j.dday}</span>`
