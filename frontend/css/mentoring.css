@@ -954,6 +954,31 @@ a.sup-card:hover {
   display: flex; align-items: center; justify-content: center;
 }
 .sup-cover-emoji { font-size: 40px; filter: drop-shadow(0 2px 6px rgba(0,0,0,.15)); }
+
+/* 모집 포스터 (2026-09-07, 사용자 지시 "여백없게 화면 맞춰서").
+   표지를 통째로 덮는다. `cover` 라야 세로로 긴 포스터가 가로 카드에 여백 없이 찬다
+   (`contain` 이면 양옆에 흰 띠가 생긴다). 표지 비율은 16:10 로 고정돼 있어서
+   포스터가 세로로 길면 가운데가 잘리는데, 카드는 '무슨 공고인지 알아보는' 자리이고
+   전문은 눌러서 원문으로 간다 — 제목이 대개 위쪽에 있어 `center top` 으로 맞춘다. */
+.sup-cover-img {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; object-position: center top;
+  z-index: 2;
+}
+/* 태그는 포스터 위에 남아야 읽힌다. */
+.sup-cover-tag { z-index: 3; }
+
+/* 주관기관 로고 (2026-09-06). 흰 판 위에 얹는다 — 로고는 대개 흰 배경을 전제로
+   만들어져서, 색 그라데이션 위에 바로 놓으면 글자가 안 읽히는 것이 나온다.
+   `contain` 이라야 가로로 긴 로고가 잘리지 않고, 작게 온 파일을 늘리지도 않는다. */
+.sup-cover-logo {
+  position: relative; z-index: 1;
+  width: 62%; max-width: 150px; height: 54%;
+  display: flex; align-items: center; justify-content: center;
+  padding: 8px 12px; border-radius: 10px;
+  background: rgba(255,255,255,.92); box-shadow: 0 2px 8px rgba(0,0,0,.08);
+}
+.sup-cover-logo img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .sup-cover-tag {
   position: absolute; left: 10px; bottom: 10px;
   padding: 3px 9px; border-radius: 6px;

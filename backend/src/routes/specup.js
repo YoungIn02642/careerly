@@ -9,6 +9,9 @@
    `payload` 를 그대로 내려보낸다. */
 const express = require('express');
 const specup = require('../specup');
+const LOGO = require('../company-logo');
+const path = require('path');
+const WEVITY = require('../wevity');
 
 const router = express.Router();
 
@@ -50,6 +53,63 @@ router.get('/activities', ah(async (req, res) => {
   } catch (err) {
     fail(res, err);
   }
+}));
+
+/* GET /api/specup/logo?name=<주관기관>
+   공모전 카드 표지의 주관기관 로고(사용자 결정 2026-09-06).
+
+   회사 리포트의 `/api/company/logo` 와 **같은 모듈**을 쓰지만 주소를 따로 둔다 —
+   여기 오는 이름은 회사가 아니라 주최 기관('과학기술정보통신부'·'연암대학교')이고,
+   주소가 나뉘어 있어야 어느 화면이 무엇을 부르는지 로그에서 갈린다.
+
+   **주소가 아니라 이름을 받는다.** 화면이 주소를 고를 수 있으면 우리 서버를 남의
+   주소로 조종하는 통로가 된다(company-logo.js 머리주석).
+   못 찾으면 204 — 화면이 이모지 표지로 물러난다. */
+router.get('/logo', ah(async (req, res) => {
+  const name = String(req.query.name || '').trim();
+  if (!name) return res.status(400).json({ error: '기관명을 입력해 주세요.' });
+
+  const host = LOGO.hostFor(name);
+  if (!host) return res.status(204).end();
+
+  let file = LOGO.cached(host);
+  if (!file) {
+    try { file = await LOGO.fetchLogo(host); } catch { file = null; }
+  }
+  if (!file) return res.status(204).end();
+
+  res.set('Cache-Control', 'public, max-age=86400');
+  res.type(file.type);
+  res.sendFile(file.path);
+}));
+
+/* GET /api/specup/poster?id=wv-<번호>
+   공모전 카드 표지의 **모집 포스터**(사용자 지시 2026-09-07).
+
+   **주소가 아니라 id 를 받는다.** 주소를 받으면 우리 서버가 남의 주소를 대신 여는
+   통로가 된다(company-logo.js 머리주석). 원본 주소는 서버가 캐시에서 찾는다.
+
+   받아 두는 이유는 세 가지다 — ① 학생 브라우저가 원문 사이트를 직접 부르면 누가
+   무엇을 보는지 그쪽 로그에 남고 ② 그쪽 대역폭을 쓰며 ③ 리퍼러 검사에 막히면
+   카드가 통째로 깨진다.
+
+   못 찾으면 204 — 화면이 주관기관 로고, 그것도 없으면 이모지로 물러난다. */
+const POSTER_DIR = path.join(__dirname, '..', '..', 'data', 'posters');
+
+router.get('/poster', ah(async (req, res) => {
+  const id = String(req.query.id || '').trim();
+  if (!id) return res.status(400).json({ error: '공고 id 가 필요합니다.' });
+
+  const url = WEVITY.posterUrlOf(id);
+  if (!url) return res.status(204).end();
+
+  /* 포스터는 로고보다 크다(세로로 긴 이미지가 많다). 상한을 따로 준다. */
+  const file = await LOGO.cacheImage(url, POSTER_DIR, id, { maxBytes: 3 * 1024 * 1024 });
+  if (!file) return res.status(204).end();
+
+  res.set('Cache-Control', 'public, max-age=86400');
+  res.type(file.type);
+  res.sendFile(file.path);
 }));
 
 module.exports = router;
