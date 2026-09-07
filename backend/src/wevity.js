@@ -141,10 +141,23 @@ function isPlatform(host) {
   return PLATFORM_HOSTS.some(p => h === p || h.endsWith(`.${p}`));
 }
 
+/* ── 포스터는 허락을 받기 전까지 끈다 (2026-09-07) ──────────
+   목록의 사실(제목·주최·마감)을 인용하는 것과, **주최사의 저작물인 포스터를 받아
+   우리 서버에서 다시 내보내는 것**은 무게가 다르다. 위비티 이용약관 제7조 2항도
+   '제3자의 저작권을 침해하지 않아야 한다' 고 적고 있다.
+
+   위비티에 인용 허락을 문의해 둔 상태라, **답이 오기 전에는 기본값이 꺼짐**이다.
+   허락이 오면 `.env` 에 `WEVITY_POSTER=on` 한 줄이면 그대로 켜진다 — 기능을
+   지우지 않고 스위치만 둔 이유다.
+
+   꺼져 있으면 카드는 **주관기관 로고 → 이모지**로 물러난다. 화면 코드는 이미
+   그렇게 되어 있어서 손댈 것이 없다(specup.js coverArt). */
+const POSTER_ON = String(process.env.WEVITY_POSTER || '').toLowerCase() === 'on';
+
 function withLogo(a) {
   /* 포스터 주소도 **id 로만** 준다. 화면이 남의 주소를 직접 부르지 않게 하려는 것이고
      (company-logo.js 머리주석), 서버가 캐시에서 그 id 의 주소를 찾아 받아 둔다. */
-  const poster = a.hasPoster ? `/api/specup/poster?id=${encodeURIComponent(a.id)}` : null;
+  const poster = (POSTER_ON && a.hasPoster) ? `/api/specup/poster?id=${encodeURIComponent(a.id)}` : null;
 
   if (!a.org || !a.homepage) return { ...a, poster, logo: null };
   const LOGO = require('./company-logo');
@@ -154,8 +167,11 @@ function withLogo(a) {
   return { ...a, poster, logo: `/api/specup/logo?name=${encodeURIComponent(a.org)}` };
 }
 
-/* id(`wv-110452`) → 그 공고의 포스터 원본 주소. **라우트가 이걸로만 받는다.** */
+/* id(`wv-110452`) → 그 공고의 포스터 원본 주소. **라우트가 이걸로만 받는다.**
+   꺼져 있으면 주소를 내주지 않는다 — 라우트가 이것 하나만 보므로 여기서 막으면
+   받아 오는 경로 자체가 닫힌다. */
 function posterUrlOf(id) {
+  if (!POSTER_ON) return null;
   const data = load();
   if (!data) return null;
   const raw = String(id || '').replace(/^wv-/, '');
@@ -207,5 +223,6 @@ function merge(keep, add) {
 
 module.exports = {
   activities, merge, toActivity, ddayOf, isConfigured, load, isPlatform, withLogo, posterUrlOf,
+  POSTER_ON,
   CACHE_PATH: CACHE, PLATFORM_HOSTS, _norm: norm,
 };
