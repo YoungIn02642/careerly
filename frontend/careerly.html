@@ -1093,6 +1093,16 @@
         </div>
         <div class="jd-block-peek" data-peek></div>
         <div class="jd-block-body">
+          <!-- 직무기술서를 어디서도 못 구하는 게 보통이라(공고에는 "모집분야" 한 줄뿐),
+               고용24가 공개한 '직무별 자소서 작성가이드'에서 찾아 채운다. 회사가 적어
+               낸 주요업무·필요역량·우대사항이 그대로 들어 있다(사용자 지시). -->
+          <div class="jd-url">
+            <input id="jd-w24-q" type="search" class="jd-url-input"
+              placeholder="고용24 직무별 자소서 작성가이드에서 찾기 — 기업명 또는 직무명" />
+            <button type="button" id="jd-w24-go" class="wf-btn wf-btn--sm">찾기</button>
+          </div>
+          <div id="jd-w24-msg" class="jd-url-msg" hidden></div>
+          <div id="jd-w24-list" class="jd-w24-list" hidden></div>
           <textarea id="jd-jd" class="jd-text" data-grow
             placeholder="[주요업무] · [자격요건] · [우대사항] 처럼 직무 자체를 설명하는 문서가 따로 있으면 붙여넣어 주세요.&#10;공고와 함께 읽고 역량을 뽑습니다."></textarea>
           <div class="jd-block-foot">

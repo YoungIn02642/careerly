@@ -223,13 +223,17 @@ const ymd = d => {
     ok('홈페이지를 아는 기관은 로고 주소를 준다',
       a1?.logo === `/api/specup/logo?name=${encodeURIComponent('가기관')}`, `→ ${a1?.logo}`);
     ok('모르는 기관은 null (화면이 이모지로 물러난다)', a2?.logo === null);
-    /* 포스터도 **주소가 아니라 id 로** 준다 — 화면이 남의 주소를 직접 부르지 않게. */
-    ok('포스터가 있으면 우리 주소를 준다', a1?.poster === '/api/specup/poster?id=wv-1', `→ ${a1?.poster}`);
-    ok('  원본 주소를 화면에 그대로 주지 않는다', !/wevity\.com/.test(a1?.poster || ''));
-    ok('포스터가 없으면 null', a2?.poster === null);
-    ok('id 로 원본 주소를 되찾는다',
-      W.posterUrlOf('wv-1') === 'https://www.wevity.com/upload/contest/p1.jpg', `→ ${W.posterUrlOf('wv-1')}`);
-    ok('  모르는 id 는 null', W.posterUrlOf('wv-없음') === null);
+    /* ── 포스터는 기본이 꺼짐이다 (2026-09-07) ──────────────
+       주최사 저작물을 받아 우리 서버에서 다시 내보내는 일이라, 위비티에 인용
+       허락을 문의해 두고 답이 오기 전까지 끈다. 이 검사가 뒤집히면 허락 없이
+       다시 나가기 시작한다는 뜻이다. */
+    ok('기본값은 꺼짐 — 포스터 주소를 주지 않는다', W.POSTER_ON === false && a1?.poster === null,
+      `→ POSTER_ON=${W.POSTER_ON} poster=${a1?.poster}`);
+    ok('  꺼져 있으면 원본 주소도 내주지 않는다 (받아 오는 경로가 닫힌다)',
+      W.posterUrlOf('wv-1') === null);
+    ok('  캐시에는 그대로 있다 (허락이 오면 켜기만 하면 된다)',
+      W.load().items.find(x => x.id === '1')?.detail?.poster === 'https://www.wevity.com/upload/contest/p1.jpg');
+    ok('포스터가 없는 항목도 null', a2?.poster === null);
 
     /* 상세의 '홈페이지' 칸은 접수처 주소인 경우가 많다. 실측 190건 중
        wevity.com 25 · instagram 8 · blog.naver 8 · cafe.daum 8 · sotong.go.kr 7.

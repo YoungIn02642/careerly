@@ -343,6 +343,21 @@ window.DB = (() => {
     return api('POST', '/api/jd/posting', { url });
   }
 
+  /* ── 고용24 직무별 자소서 작성가이드 ─────────────────────────
+     직무기술서 칸을 채우는 재료다. 검색은 기업명 또는 직무명 하나로 받는다 —
+     고용24 검색칸이 그렇게 생겼고, 두 칸으로 나누면 어느 쪽에 넣을지 사용자가
+     고민해야 한다. 상세는 목록 행이 들고 온 번호(epa·rcit·guid)로 부른다. */
+  async function jdGuideSearch(q, { year = '', page = 1 } = {}) {
+    const p = new URLSearchParams({ q: q || '' });
+    if (year) p.set('year', year);
+    if (page > 1) p.set('page', String(page));
+    return api('GET', `/api/jd/work24/guides?${p}`);
+  }
+  async function jdGuide({ epa, rcit = '1', guid = '1' }) {
+    const p = new URLSearchParams({ epa, rcit, guid });
+    return api('GET', `/api/jd/work24/guide?${p}`);
+  }
+
   /* ── 자소서 기증(동의 기반 합격 코퍼스) ────────────────────────
      저장되는 본문은 서버가 다시 익명화한 것이다(routes/donations.js). 화면은 보내기
      전에 같은 규칙(anonymize.js)으로 미리 보여줄 뿐이다. */
@@ -406,11 +421,18 @@ window.DB = (() => {
     return api('GET', '/api/insights/' + encodeURIComponent(id));
   }
   /* isNotice 는 관리자만 의미가 있다 — 서버가 권한을 확인하고, 아니면 조용히 무시한다. */
-  async function createInsight({ category, title, body, isNotice = false }) {
-    return api('POST', '/api/insights', { category, title, body, isNotice });
+  /* promptText 는 'AI 프롬프트' 카테고리에서만 뜻이 있다 — 서버가 다른 카테고리면
+     버린다(insight-prompt.js normalizePrompt). */
+  async function createInsight({ category, title, body, isNotice = false, promptText }) {
+    return api('POST', '/api/insights', { category, title, body, isNotice, promptText });
   }
-  async function updateInsight(id, { title, body, isNotice }) {
-    return api('PUT', '/api/insights/' + encodeURIComponent(id), { title, body, isNotice });
+  async function updateInsight(id, { title, body, isNotice, promptText }) {
+    return api('PUT', '/api/insights/' + encodeURIComponent(id), { title, body, isNotice, promptText });
+  }
+  /* '내 프롬프트로 담기' — 실제 담기는 브라우저(JdCoach.addPrompt)가 하고,
+     서버는 '가져간 사람 수'만 센다. 같은 사람이 다시 담아도 한 번이다. */
+  async function copyInsightPrompt(id) {
+    return api('POST', '/api/insights/' + encodeURIComponent(id) + '/copy');
   }
   async function deleteInsight(id) {
     return api('DELETE', '/api/insights/' + encodeURIComponent(id));
@@ -557,10 +579,11 @@ window.DB = (() => {
     createUser, login, logout, withdraw, changePassword, completeOnboarding, confirmPayment, updateUser, requestRoleChange, upsertSpec, saveActivityStar, getProfile, updateProfile,
     classifyCompany, suggestCompanies, suggestCerts, recommendCerts, suggestMajors, suggestUniversities, classifyMajor, jobCatalog,
     mentors,
-    analyzeCas, casFit, specFingerprint, coachJd, draftJd, motiveJd, guideJd, jdPromptTemplate, companyAnalysis, companyBusiness, companyIndustryTree, jdPosting,
+    analyzeCas, casFit, specFingerprint, coachJd, draftJd, motiveJd, guideJd, jdPromptTemplate, companyAnalysis, companyBusiness, companyIndustryTree, jdPosting, jdGuideSearch, jdGuide,
     donationMeta, donate, donationStats, donationsMine,
     specupExams, specupActivities,
     insightCategories, insightFeatured, listInsights, getInsight, createInsight, updateInsight, deleteInsight,
+    copyInsightPrompt,
     addInsightComment, deleteInsightComment,
     seedDemo, seedRandom, clearAll, deleteUser,
   };
